@@ -1239,7 +1239,7 @@ fn run_pep723_script_lock() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 3 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    error: The lockfile at `main.py.lock` needs to be updated, but `--locked` was provided.
       cause: Requirements changed from `iniconfig` to `anyio`
 
     hint: To update the lockfile, run `uv lock`.

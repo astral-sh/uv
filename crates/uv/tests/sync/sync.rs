@@ -14184,7 +14184,7 @@ fn sync_locked_script() -> Result<()> {
     ----- stderr -----
     Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    error: The lockfile at `script.py.lock` needs to be updated, but `--locked` was provided.
       cause: Requirements differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
@@ -14284,7 +14284,7 @@ fn sync_locked_script() -> Result<()> {
     Updating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    error: The lockfile at `script.py.lock` needs to be updated, but `--locked` was provided.
       cause: Locked forks do not cover the required Python versions
 
     hint: To update the lockfile, run `uv lock`.

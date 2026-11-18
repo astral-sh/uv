@@ -40447,7 +40447,7 @@ fn lock_script() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 4 packages in [TIME]
-    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+    error: The lockfile at `script.py.lock` needs to be updated, but `--locked` was provided.
       cause: Requirements differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.

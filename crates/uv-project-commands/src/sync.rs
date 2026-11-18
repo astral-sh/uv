@@ -476,12 +476,18 @@ pub async fn sync(
                 Ok(result) => Outcome::Success(result),
                 Err(LockError::Resolve(err)) => return Err(UvError::from(*err).into()),
                 // A dry run continues with the new resolution but exits unsuccessfully.
-                Err(LockError::LockMismatch(prev, cur, lock_source, reason))
-                    if dry_run.enabled() =>
-                {
-                    Outcome::LockMismatch(prev, cur, lock_source, reason)
-                }
-                Err(err @ (LockError::LockFormat(..) | LockError::LockMismatch(..))) => {
+                Err(LockError::LockMismatch {
+                    filename,
+                    lock_source,
+                    resolved: Some(resolved),
+                    reason,
+                }) if dry_run.enabled() => Outcome::LockMismatch {
+                    filename,
+                    lock_source,
+                    resolved,
+                    reason,
+                },
+                Err(err @ (LockError::LockFormat(..) | LockError::LockMismatch { .. })) => {
                     return Err(UvError::user(err).into());
                 }
                 Err(err) => return Err(UvError::from(err).into()),
@@ -574,9 +580,18 @@ pub async fn sync(
 
     match outcome {
         Outcome::Success(..) | Outcome::Frozen(..) => Ok(ExitStatus::Success),
-        Outcome::LockMismatch(prev, cur, lock_source, reason) => {
-            Err(UvError::user(LockError::LockMismatch(prev, cur, lock_source, reason)).into())
-        }
+        Outcome::LockMismatch {
+            filename,
+            lock_source,
+            resolved,
+            reason,
+        } => Err(UvError::user(LockError::LockMismatch {
+            filename,
+            lock_source,
+            resolved: Some(resolved),
+            reason,
+        })
+        .into()),
     }
 }
 
@@ -589,12 +604,12 @@ enum Outcome<'a> {
     /// A frozen lockfile was discovered without a lock operation.
     Frozen(&'a Lock),
     /// The `lock` operation successfully resolved, but failed due to a mismatch (e.g., with `--locked`).
-    LockMismatch(
-        Option<Box<Lock>>,
-        Box<Lock>,
-        LockedSource,
-        Option<Box<LockMismatchReason>>,
-    ),
+    LockMismatch {
+        filename: PathBuf,
+        lock_source: LockedSource,
+        resolved: Box<Lock>,
+        reason: Option<Box<LockMismatchReason>>,
+    },
 }
 
 impl Outcome<'_> {
@@ -606,7 +621,7 @@ impl Outcome<'_> {
                 LockResult::Unchanged(lock) => lock,
             },
             Self::Frozen(lock) => lock,
-            Self::LockMismatch(_, cur, ..) => cur,
+            Self::LockMismatch { resolved, .. } => resolved,
         }
     }
 }
@@ -1046,7 +1061,7 @@ impl From<(&LockTarget<'_>, &LockMode<'_>, &Outcome<'_>)> for LockReport {
                 }
                 Outcome::Frozen(_) => LockAction::Use,
                 // TODO(zanieb): We don't have a way to report the outcome of the lock yet
-                Outcome::LockMismatch(..) => LockAction::Check,
+                Outcome::LockMismatch { .. } => LockAction::Check,
             },
             dry_run: matches!(mode, LockMode::DryRun(_)),
         }
