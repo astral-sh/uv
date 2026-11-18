@@ -12,6 +12,14 @@ new third-party packages were added, and repacks the tarball.
 See: https://github.com/astral-sh/uv/issues/18824
 """
 
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
+# ///
+
 import argparse
 import os
 import subprocess
