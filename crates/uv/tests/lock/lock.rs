@@ -38233,6 +38233,312 @@ fn lock_x86() -> Result<()> {
     Ok(())
 }
 
+/// Environments limited to CPython omit PyPy wheels from the lockfile, and platform markers
+/// continue to omit other platforms.
+///
+/// A universal `py3` wheel stays, and installing on CPython selects the CPython wheel.
+/// See <https://github.com/astral-sh/uv/issues/23270>.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_environments_omit_pypy_wheels() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "cpython-environments-omit-pypy-wheels"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.demo.versions."1.0.0"]
+        sdist = false
+        wheel_tags = [
+            "cp312-cp312-macosx_11_0_arm64",
+            "cp312-cp312-macosx_10_9_x86_64",
+            "cp312-cp312-manylinux_2_17_x86_64",
+            "cp312-cp312-win_amd64",
+            "pp312-pypy312_pp73-macosx_11_0_arm64",
+            "pp312-pypy312_pp73-manylinux_2_17_x86_64",
+            "py3-none-any",
+        ]
+    "#})?;
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        environments = [
+            "implementation_name == 'cpython' and sys_platform == 'darwin' and platform_machine == 'arm64'",
+            "implementation_name == 'cpython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
+            "implementation_name == 'cpython' and sys_platform == 'win32' and platform_machine == 'AMD64'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "implementation_name == 'cpython' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "implementation_name == 'cpython' and platform_machine == 'AMD64' and sys_platform == 'win32'",
+        ]
+        supported-markers = [
+            "implementation_name == 'cpython' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+            "implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "implementation_name == 'cpython' and platform_machine == 'AMD64' and sys_platform == 'win32'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:[SHA256:demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:[SHA256:demo-1.0.0-cp312-cp312-win_amd64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--python-platform", "x86_64-manylinux_2_31"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + demo==1.0.0
+    ");
+    let wheel_metadata = context.site_packages().join("demo-1.0.0.dist-info/WHEEL");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read(&wheel_metadata), @"
+        Wheel-Version: 1.0
+        Generator: uv-test
+        Root-Is-Purelib: true
+        Tag: cp312-cp312-manylinux_2_17_x86_64
+        ");
+    });
+
+    Ok(())
+}
+
+/// Each environment split applies the interpreter tag together with the platform tag.
+///
+/// CPython-on-Linux or PyPy-on-macOS keeps those two wheels and omits the crossed combinations.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_environments_implementation_splits() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "implementation-environment-splits"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.demo.versions."1.0.0"]
+        sdist = false
+        wheel_tags = [
+            "cp312-cp312-manylinux_2_17_x86_64",
+            "cp312-cp312-macosx_11_0_arm64",
+            "pp312-pypy312_pp73-manylinux_2_17_x86_64",
+            "pp312-pypy312_pp73-macosx_11_0_arm64",
+            "py3-none-any",
+        ]
+    "#})?;
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        environments = [
+            "implementation_name == 'cpython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
+            "implementation_name == 'pypy' and sys_platform == 'darwin' and platform_machine == 'arm64'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "implementation_name == 'pypy' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+        ]
+        supported-markers = [
+            "implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'",
+            "implementation_name == 'pypy' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-pp312-pypy312_pp73-macosx_11_0_arm64.whl", hash = "sha256:[SHA256:demo-1.0.0-pp312-pypy312_pp73-macosx_11_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
+        "#);
+    });
+
+    Ok(())
+}
+
+/// `platform_python_implementation` selects the same interpreter as `implementation_name`
+/// when filtering locked wheels.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_environments_platform_python_implementation() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "platform-python-implementation-environments"
+
+        [root]
+
+        [expected]
+        satisfiable = true
+
+        [packages.demo.versions."1.0.0"]
+        sdist = false
+        wheel_tags = [
+            "cp312-cp312-manylinux_2_17_x86_64",
+            "cp312-cp312-macosx_11_0_arm64",
+            "pp312-pypy312_pp73-manylinux_2_17_x86_64",
+            "pp312-pypy312_pp73-macosx_11_0_arm64",
+            "py3-none-any",
+        ]
+    "#})?;
+    let context = uv_test::test_context!("3.12").with_filters(
+        server
+            .files()
+            .map(|(filename, hash)| (hash.to_owned(), format!("[SHA256:{filename}]"))),
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        environments = [
+            "platform_python_implementation == 'CPython'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "platform_python_implementation == 'CPython'",
+        ]
+        supported-markers = [
+            "platform_python_implementation == 'CPython'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:[SHA256:demo-1.0.0-cp312-cp312-macosx_11_0_arm64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl", hash = "sha256:[SHA256:demo-1.0.0-cp312-cp312-manylinux_2_17_x86_64.whl]", upload-time = "2024-03-24T00:00:00Z" },
+            { url = "http://[LOCALHOST]/files/demo-1.0.0-py3-none-any.whl", hash = "sha256:[SHA256:demo-1.0.0-py3-none-any.whl]", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "demo" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "demo" }]
+        "#);
+    });
+
+    Ok(())
+}
+
 #[cfg(feature = "test-universal")]
 #[test]
 fn lock_script() -> Result<()> {

@@ -86,6 +86,8 @@ use self::requirements::{RequirementNormalizer, normalize_collection, normalize_
 mod deserialize;
 pub(crate) mod export;
 mod hash_error;
+#[cfg(test)]
+mod implementation_tests;
 mod inputs;
 mod installable;
 mod map;
@@ -297,6 +299,39 @@ static ANDROID_X86_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
     let mut marker = *ANDROID_MARKERS;
     marker.and(*X86_MARKERS);
     marker
+});
+/// `cp*` wheels run on CPython. Environments name that fact as either
+/// `implementation_name` or `platform_python_implementation`.
+static CPYTHON_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
+        "implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
+    )
+    .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+/// `pp*` wheels run on PyPy.
+static PYPY_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
+        "implementation_name == 'pypy' and platform_python_implementation == 'PyPy'",
+    )
+    .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+/// `graalpy*` wheels run on GraalPy, which reports `platform_python_implementation == 'GraalVM'`.
+static GRAALPY_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str(
+        "implementation_name == 'graalpy' and platform_python_implementation == 'GraalVM'",
+    )
+    .unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
+});
+/// `pyston*` wheels run when `implementation_name == 'pyston'`.
+///
+/// Pyston does not define its own `platform_python_implementation` value (it reports `CPython`),
+/// so that marker is not a reachability constraint for these wheels.
+static PYSTON_MARKERS: LazyLock<UniversalMarker> = LazyLock::new(|| {
+    let pep508 = MarkerTree::from_str("implementation_name == 'pyston'").unwrap();
+    UniversalMarker::new(pep508, ConflictMarker::TRUE)
 });
 
 /// A distribution with its associated hash.
@@ -10761,10 +10796,32 @@ fn canonical_marker_trees(
         .collect()
 }
 
+/// Marker for the interpreters that can install this wheel, when the language tags say so.
+///
+/// `py*` and `none` tags are implementation-agnostic. A wheel with several specific tags (for
+/// example `cp312.pp312`) is reachable on any of those interpreters. Unknown or generic tags
+/// produce `None`, which leaves the wheel eligible.
+fn wheel_implementation_markers(filename: &WheelFilename) -> Option<UniversalMarker> {
+    let mut combined = UniversalMarker::FALSE;
+    let mut matched = false;
+    for tag in filename.python_tags() {
+        let marker = match tag {
+            LanguageTag::None | LanguageTag::Python { .. } => return None,
+            LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => *CPYTHON_MARKERS,
+            LanguageTag::PyPy { .. } => *PYPY_MARKERS,
+            LanguageTag::GraalPy { .. } => *GRAALPY_MARKERS,
+            LanguageTag::Pyston { .. } => *PYSTON_MARKERS,
+        };
+        combined.or(marker);
+        matched = true;
+    }
+    matched.then_some(combined)
+}
+
 /// Filter out wheels that can't be selected for installation due to environment markers.
 ///
 /// For example, a package included under `sys_platform == 'win32'` does not need Linux
-/// wheels.
+/// wheels, and `implementation_name == 'cpython'` does not need PyPy wheels.
 ///
 /// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
 /// including if the wheel tag isn't recognized.
@@ -10788,14 +10845,27 @@ fn is_wheel_unreachable_for_marker(
         return true;
     }
 
-    // Filter by platform tags.
-
+    // Filter by platform tags and, when the wheel's language tags name an interpreter, by
+    // `implementation_name` / `platform_python_implementation`.
+    //
     // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
     // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
     // own sufficient to exclude linux wheels), but due to
     // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
     // a single disjointness check with the intersection is sufficient, so we have one
     // constant per platform.
+    //
+    // Interpreter tags are intersected into the same marker before those checks. A wheel is
+    // retained when any environment split can install it, so a list of CPython-on-Linux or
+    // PyPy-on-macOS must reject a PyPy Linux wheel even though each fact appears somewhere in
+    // the union.
+    let mut marker = *marker;
+    if let Some(implementation) = wheel_implementation_markers(filename) {
+        marker.and(implementation);
+        if marker.is_false() {
+            return true;
+        }
+    }
     let platform_tags = filename.platform_tags();
 
     if platform_tags.iter().all(PlatformTag::is_any) {
