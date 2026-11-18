@@ -1279,12 +1279,22 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("CPython"),
                 }));
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::ImplementationName,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("cpython"),
+                }));
             }
             LanguageTag::PyPy { .. } => {
                 tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("PyPy"),
+                }));
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::ImplementationName,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("pypy"),
                 }));
             }
             LanguageTag::GraalPy { .. } => {
@@ -1293,12 +1303,22 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("GraalPy"),
                 }));
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::ImplementationName,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("graalpy"),
+                }));
             }
             LanguageTag::Pyston { .. } => {
                 tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
                     value: arcstr::literal!("Pyston"),
+                }));
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::ImplementationName,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("pyston"),
                 }));
             }
         }
@@ -1411,27 +1431,27 @@ mod tests {
 
         assert_python_markers(
             "example-1.0-cp310-cp310-any.whl",
-            "python_full_version == '3.10.*' and platform_python_implementation == 'CPython'",
+            "python_full_version == '3.10.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-cp311-cp311-any.whl",
-            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython'",
+            "python_full_version == '3.11.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-cp312-cp312-any.whl",
-            "python_full_version == '3.12.*' and platform_python_implementation == 'CPython'",
+            "python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-cp313-cp313-any.whl",
-            "python_full_version == '3.13.*' and platform_python_implementation == 'CPython'",
+            "python_full_version == '3.13.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-cp313-cp313t-any.whl",
-            "python_full_version == '3.13.*' and platform_python_implementation == 'CPython'",
+            "python_full_version == '3.13.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-pp310-pypy310_pp73-any.whl",
-            "python_full_version == '3.10.*' and platform_python_implementation == 'PyPy'",
+            "python_full_version == '3.10.*' and implementation_name == 'pypy' and platform_python_implementation == 'PyPy'",
         );
         assert_python_markers(
             "example-1.0-py310-none-any.whl",
@@ -1449,19 +1469,19 @@ mod tests {
         // abi3 wheels: the python tag represents a minimum version, not an exact version.
         assert_python_markers(
             "example-1.0-cp39-abi3-any.whl",
-            "python_full_version >= '3.9' and platform_python_implementation == 'CPython'",
+            "python_full_version >= '3.9' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-cp312-abi3-any.whl",
-            "python_full_version >= '3.12' and platform_python_implementation == 'CPython'",
+            "python_full_version >= '3.12' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-cp315-abi3t-any.whl",
-            "python_full_version >= '3.15' and platform_python_implementation == 'CPython'",
+            "python_full_version >= '3.15' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
         assert_python_markers(
             "example-1.0-cp3-abi3-any.whl",
-            "python_full_version >= '3' and platform_python_implementation == 'CPython'",
+            "python_full_version >= '3' and implementation_name == 'cpython' and platform_python_implementation == 'CPython'",
         );
     }
 
@@ -1510,19 +1530,19 @@ mod tests {
     fn test_implied_markers() {
         assert_implied_markers(
             "numpy-1.0-cp310-cp310-win32.whl",
-            "python_full_version == '3.10.*' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'x86'",
+            "python_full_version == '3.10.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'x86'",
         );
         assert_implied_markers(
             "pywin32-311-cp314-cp314-win_arm64.whl",
-            "python_full_version == '3.14.*' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'ARM64'",
+            "python_full_version == '3.14.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython' and sys_platform == 'win32' and platform_machine == 'ARM64'",
         );
         assert_implied_markers(
             "numpy-1.0-cp311-cp311-macosx_10_9_x86_64.whl",
-            "python_full_version == '3.11.*' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '13.0.0'",
+            "python_full_version == '3.11.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython' and sys_platform == 'darwin' and platform_machine == 'x86_64' and platform_release >= '13.0.0'",
         );
         assert_implied_markers(
             "numpy-1.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
-            "python_full_version == '3.12.*' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'aarch64'",
+            "python_full_version == '3.12.*' and implementation_name == 'cpython' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'aarch64'",
         );
         assert_implied_markers(
             "example-1.0-py3-none-any.whl",
@@ -1532,11 +1552,18 @@ mod tests {
         // abi3 wheel: cp39-abi3 means CPython >= 3.9, combined with platform markers.
         assert_implied_markers(
             "example-1.0-cp39-abi3-manylinux_2_28_x86_64.whl",
-            "python_full_version >= '3.9' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
+            "python_full_version >= '3.9' and implementation_name == 'cpython' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
         );
         assert_implied_markers(
             "example-1.0-cp315-abi3t-manylinux_2_28_x86_64.whl",
-            "python_full_version >= '3.15' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
+            "python_full_version >= '3.15' and implementation_name == 'cpython' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
         );
+
+        let pypy_wheel =
+            WheelFilename::from_str("numpy-1.0-pp311-pypy311_pp73-linux_x86_64.whl").unwrap();
+        let cpython_environment = "implementation_name == 'cpython'"
+            .parse::<MarkerTree>()
+            .unwrap();
+        assert!(implied_markers(&pypy_wheel, None).is_disjoint(cpython_environment));
     }
 }
