@@ -1,0 +1,111 @@
+version = 1
+revision = 5
+requires-python = ">=3.11"
+
+[options]
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer-span = "P7D"
+
+[options.exclude-newer-package]
+astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
+
+[manifest]
+requirements = [
+    { name = "astral-dev-toolchain-hyperfine", specifier = "==2.0.0" },
+    { name = "benchmark", editable = "." },
+    { name = "pipx" },
+]
+
+[[package]]
+name = "argcomplete"
+version = "3.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/33/a3d23a2e9ac78f9eaf1fce7490fee430d43ca7d42c65adabbb36a2b28ff6/argcomplete-3.5.0.tar.gz", hash = "sha256:4349400469dccfb7950bb60334a680c58d88699bff6159df61251878dc6bf74b", size = 82237, upload-time = "2024-08-06T15:37:49.12Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/41/e8/ba56bcc0d48170c0fc5a7f389488eddce47f98ed976a24ae62db402f33ae/argcomplete-3.5.0-py3-none-any.whl", hash = "sha256:d4bcf3ff544f51e16e54228a7ac7f486ed70ebf2ecfe49a63a91171c76bf029b", size = 43475, upload-time = "2024-08-06T15:37:46.45Z" },
+]
+
+[[package]]
+name = "astral-dev-toolchain-hyperfine"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/84/3b/25e80ed9a04eae4c9ac5d1b9dcedcb96a8ec3478aeca7506945bb3eb3bcc/astral_dev_toolchain_hyperfine-2.0.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:4fd3f4cff5e9413275bdde45d29cc1081c4ee260f293fa4b893887e53dbf6b28", size = 655687, upload-time = "2026-10-08T08:10:08.235Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/28/8152c563ddcd8a631541b43951fab09fc116a541c3e1264acbfbf5129af9/astral_dev_toolchain_hyperfine-2.0.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:8f24a90d6df228b7052af92591af84d381f50f17b49b5a738b281d4ee5f603f1", size = 617771, upload-time = "2026-10-08T08:10:09.895Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/9d/71cb2a4efece9a45a75f25dd86d031b0f0fddf9b7627bd916912dae10f42/astral_dev_toolchain_hyperfine-2.0.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bd976277bb45cf9395e54fdf2b5569ded300188324bc898679514cc5b4f7a988", size = 656479, upload-time = "2026-10-08T08:10:11.477Z" },
+    { url = "https://files.pythonhosted.org/packages/50/5e/b1318e8fd7b66d5c47ca79cf4b9ea9e24e135f6c03dd4387c3e65ee5dbc9/astral_dev_toolchain_hyperfine-2.0.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ca06019e2064799b1c69f756ec2666d63a3e3a5f6c1277c29097f508a74d2eed", size = 700573, upload-time = "2026-10-08T08:10:13.062Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/5f/163ad1062456a66821b10e5507a5c2e7bc46a22d6da9311b25b648d904c5/astral_dev_toolchain_hyperfine-2.0.0-py3-none-win_amd64.whl", hash = "sha256:b9e5af78f045aa6e73a1a1cec2cc681c28531b56e4b4e90ada6ff124a23b207b", size = 646496, upload-time = "2026-10-08T08:10:14.509Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/24/dfb55c4cec42e777ba1327cfecffdf09cf1da245735a5ee8f0e933d8428d/astral_dev_toolchain_hyperfine-2.0.0-py3-none-win_arm64.whl", hash = "sha256:77db7b13877b8d3820a32c71bcca56e4068ba11f820ab99caa8ae84ac838dfd8", size = 603453, upload-time = "2026-10-08T08:10:16.179Z" },
+]
+
+[[package]]
+name = "benchmark"
+version = "0.0.1"
+source = { editable = "." }
+
+[[package]]
+name = "click"
+version = "8.3.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bb/63/f9e1ea081ce35720d8b92acde70daaedace594dc93b693c869e0d5910718/click-8.3.3.tar.gz", hash = "sha256:398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2", size = 328061, upload-time = "2026-04-22T15:11:27.506Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ae/44/c1221527f6a71a01ec6fbad7fa78f1d50dfa02217385cf0fa3eec7087d59/click-8.3.3-py3-none-any.whl", hash = "sha256:a2bf429bb3033c89fa4936ffb35d5cb471e3719e1f3c8a7c3fff0b8314305613", size = 110502, upload-time = "2026-04-22T15:11:25.044Z" },
+]
+
+[[package]]
+name = "colorama"
+version = "0.4.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697, upload-time = "2022-10-25T02:36:22.414Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335, upload-time = "2022-10-25T02:36:20.889Z" },
+]
+
+[[package]]
+name = "packaging"
+version = "26.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
+]
+
+[[package]]
+name = "pipx"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "argcomplete" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "packaging" },
+    { name = "platformdirs" },
+    { name = "userpath" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2d/f3/c04c5cd0a5795fe6bb09d56c4892384e53cb75813fc08e5cbfa4d080664a/pipx-1.6.0.tar.gz", hash = "sha256:840610e00103e3d49ae24b6b51804b60988851a5dd65468adb71e5a97e2699b2", size = 307321, upload-time = "2024-06-02T07:27:13.58Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/2f/ec2454e6784168837dfe0ffad5080c1c2bdf37ee052999cabfd849a56338/pipx-1.6.0-py3-none-any.whl", hash = "sha256:760889dc3aeed7bf4024973bf22ca0c2a891003f52389159ab5cb0c57d9ebff4", size = 77756, upload-time = "2024-06-02T07:27:11.349Z" },
+]
+
+[[package]]
+name = "platformdirs"
+version = "4.11.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/0a/062135c9a98dac804265073cc3afdbec5ae1aa37980bb354f461bafe81b4/platformdirs-4.11.1.tar.gz", hash = "sha256:bb1af68078f25e2f3e111e2d43b8d536df41b73c8a684b40bb018223b66fae27", size = 32396, upload-time = "2026-08-07T23:06:48.516Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/85/9b31b44296cfa3bb56cddb35e6a0f6578bab0b490c0806c0245e32c6110c/platformdirs-4.11.1-py3-none-any.whl", hash = "sha256:2efd27d363e8dd2e661639ffb398865a5e0a46442a11d266bf375a0e0c10e386", size = 23261, upload-time = "2026-08-07T23:06:47.219Z" },
+]
+
+[[package]]
+name = "userpath"
+version = "1.9.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/b7/30753098208505d7ff9be5b3a32112fb8a4cb3ddfccbbb7ba9973f2e29ff/userpath-1.9.2.tar.gz", hash = "sha256:6c52288dab069257cc831846d15d48133522455d4677ee69a9781f11dbefd815", size = 11140, upload-time = "2024-02-29T21:39:08.742Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/99/3ec6335ded5b88c2f7ed25c56ffd952546f7ed007ffb1e1539dc3b57015a/userpath-1.9.2-py3-none-any.whl", hash = "sha256:2cbf01a23d655a1ff8fc166dfb78da1b641d1ceabf0fe5f970767d380b14e89d", size = 9065, upload-time = "2024-02-29T21:39:07.551Z" },
+]

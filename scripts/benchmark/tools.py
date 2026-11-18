@@ -1,9 +1,29 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "astral-dev-toolchain-hyperfine==2.0.0",
+#   "benchmark",
+#   "pipx",
+# ]
+#
+# [tool.uv]
+# no-build = true
+# require-build-hashes = true
+# preview-features = ["build-dependency-hashes", "missing-exclude-newer-package-lock"]
+# exclude-newer = "P7D"
+#
+# [tool.uv.exclude-newer-package]
+# astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
+#
+# [tool.uv.sources]
+# benchmark = { path = ".", editable = true }
+# ///
 """Benchmark the uv `tool` interface against other packaging tools.
 
 For example, to benchmark uv against pipx, run the following from the
 `scripts/benchmark` directory:
 
-    uv run tools --uv --pipx
+    uv run tools.py --uv --pipx
 """
 
 import abc
@@ -13,7 +33,7 @@ import logging
 import os.path
 import tempfile
 
-from benchmark import Command, Hyperfine
+from benchmark import DEFAULT_UV_PATH, Command, Hyperfine
 
 TOOL = "flask"
 
@@ -149,21 +169,10 @@ class Pipx(Suite):
 
 
 class Uv(Suite):
-    def __init__(self, *, path: str | None = None) -> Command | None:
+    def __init__(self, *, path: str | None = None) -> None:
         """Initialize a uv benchmark."""
         self.name = path or "uv"
-        self.path = path or os.path.join(
-            os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(
-                        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    )
-                )
-            ),
-            "target",
-            "release",
-            "uv",
-        )
+        self.path = path or DEFAULT_UV_PATH
 
     def install_cold(self, *, cwd: str) -> Command | None:
         bin_dir = os.path.join(cwd, "bin")

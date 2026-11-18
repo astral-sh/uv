@@ -258,12 +258,11 @@ You can use `scripts/benchmark` to benchmark predefined workloads between uv ver
 tools, e.g., from the `scripts/benchmark` directory:
 
 ```shell
-uv run resolver \
+uv run resolver.py \
     --uv-pip \
     --poetry \
-    --benchmark \
-    resolve-cold \
-    ../test/requirements/trio.in
+    --benchmark resolve-cold \
+    ../../test/requirements/trio.in
 ```
 
 ### CI benchmarks

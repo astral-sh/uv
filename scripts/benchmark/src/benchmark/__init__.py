@@ -1,6 +1,11 @@
 import shlex
 import subprocess
 import typing
+from pathlib import Path
+
+DEFAULT_UV_PATH = str(
+    Path(__file__).absolute().parents[4] / "target" / "release" / "uv"
+)
 
 
 class Command(typing.NamedTuple):

@@ -1,9 +1,38 @@
+# /// script
+# # Keep the resolver on Python versions with wheels for its locked dependencies.
+# requires-python = ">=3.11,<3.13"
+# dependencies = [
+#   "astral-dev-toolchain-hyperfine==2.0.0",
+#   "benchmark",
+#   "packaging",
+#   "pdm",
+#   "pip-tools",
+#   "poetry",
+#   "tomli",
+#   "tomli-w",
+#   "virtualenv",
+# ]
+#
+# [tool.uv]
+# no-build = true
+# require-build-hashes = true
+# preview-features = ["build-dependency-hashes", "missing-exclude-newer-package-lock"]
+# exclude-newer = "P7D"
+#
+# [tool.uv.exclude-newer-package]
+# astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
+# certifi = "2026-10-20T02:24:17Z"
+# pip = "2026-10-20T16:36:30Z"
+#
+# [tool.uv.sources]
+# benchmark = { path = ".", editable = true }
+# ///
 """Benchmark uv against other packaging tools.
 
 For example, to benchmark uv's `pip compile` command against `pip-tools`, run the
 following from the `scripts/benchmark` directory:
 
-    uv run resolver --uv-pip --pip-compile ../requirements/trio.in
+    uv run resolver.py --uv-pip --pip-compile ../../test/requirements/trio.in
 
 It's most common to benchmark multiple uv versions against one another by building
 from multiple branches and specifying the path to each binary, as in:
@@ -19,34 +48,34 @@ from multiple branches and specifying the path to each binary, as in:
 
     # Run the benchmark.
     cd scripts/benchmark
-    uv run resolver \
+    uv run resolver.py \
         --uv-pip-path ../../target/release/uv \
         --uv-pip-path ../../target/release/baseline \
-        ../requirements/trio.in
+        ../../test/requirements/trio.in
 
 By default, the script will run the resolution benchmarks when a `requirements.in` file
 is provided, and the installation benchmarks when a `requirements.txt` file is provided:
 
     # Run the resolution benchmarks against the Trio project.
-    uv run resolver \
-        --uv-path ../../target/release/uv \
-        --uv-path ../../target/release/baseline \
-        ../requirements/trio.in
+    uv run resolver.py \
+        --uv-pip-path ../../target/release/uv \
+        --uv-pip-path ../../target/release/baseline \
+        ../../test/requirements/trio.in
 
     # Run the installation benchmarks against the Trio project.
-    uv run resolver \
-        --uv-path ../../target/release/uv \
-        --uv-path ../../target/release/baseline \
-        ../requirements/compiled/trio.txt
+    uv run resolver.py \
+        --uv-pip-path ../../target/release/uv \
+        --uv-pip-path ../../target/release/baseline \
+        ../../test/requirements/compiled/trio.txt
 
 You can also specify the benchmark to run explicitly:
 
     # Run the "uncached install" benchmark against the Trio project.
-    uv run resolver \
-        --uv-path ../../target/release/uv \
-        --uv-path ../../target/release/baseline \
+    uv run resolver.py \
+        --uv-pip-path ../../target/release/uv \
+        --uv-pip-path ../../target/release/baseline \
         --benchmark install-cold \
-        ../requirements/compiled/trio.txt
+        ../../test/requirements/compiled/trio.txt
 """
 
 import abc
@@ -58,7 +87,7 @@ import shutil
 import subprocess
 import tempfile
 
-from benchmark import Command, Hyperfine
+from benchmark import DEFAULT_UV_PATH, Command, Hyperfine
 
 logger = logging.getLogger(__name__)
 
@@ -854,18 +883,7 @@ class UvPip(Suite):
         """Initialize a uv benchmark."""
         self.python = python
         self.name = path or "uv pip"
-        self.path = path or os.path.join(
-            os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(
-                        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    )
-                )
-            ),
-            "target",
-            "release",
-            "uv",
-        )
+        self.path = path or DEFAULT_UV_PATH
 
     def resolve_cold(self, requirements_file: str, *, cwd: str) -> Command | None:
         cache_dir = os.path.join(cwd, ".cache")
@@ -1019,18 +1037,7 @@ class UvProject(Suite):
         """Initialize a uv benchmark."""
         self.python = python
         self.name = path or "uv"
-        self.path = path or os.path.join(
-            os.path.dirname(
-                os.path.dirname(
-                    os.path.dirname(
-                        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                    )
-                )
-            ),
-            "target",
-            "release",
-            "uv",
-        )
+        self.path = path or DEFAULT_UV_PATH
 
     def setup(self, requirements_file: str, *, cwd: str) -> None:
         """Initialize a uv project from a requirements file."""

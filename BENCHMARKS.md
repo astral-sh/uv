@@ -49,11 +49,11 @@ across runs).
 
 ## Reproduction
 
-All benchmarks were generated using the `scripts/benchmark` package, which wraps
+All benchmarks were generated using the scripts in `scripts/benchmark`, which wrap
 [`hyperfine`](https://github.com/sharkdp/hyperfine) to facilitate benchmarking uv against a variety
 of other tools.
 
-The benchmark script itself has a several requirements:
+The benchmark commands require:
 
 - A local uv release build (`cargo build --release`).
 - An installation of the production `uv` binary in your path.
@@ -61,27 +61,27 @@ The benchmark script itself has a several requirements:
 To benchmark resolution against pip-compile, Poetry, and PDM:
 
 ```shell
-uv run resolver \
+uv run resolver.py \
     --uv-project \
     --poetry \
     --pdm \
     --pip-compile \
     --benchmark resolve-warm --benchmark resolve-cold \
     --json \
-    ../requirements/trio.in
+    ../../test/requirements/trio.in
 ```
 
 To benchmark installation against pip-sync, Poetry, and PDM:
 
 ```shell
-uv run resolver \
+uv run resolver.py \
     --uv-project \
     --poetry \
     --pdm \
     --pip-sync \
     --benchmark install-warm --benchmark install-cold \
     --json \
-    ../requirements/compiled/trio.txt
+    ../../test/requirements/compiled/trio.txt
 ```
 
 Both commands should be run from the `scripts/benchmark` directory.
