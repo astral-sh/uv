@@ -29,7 +29,6 @@ impl PythonRequirement {
         exact: Version,
         installed: RequiresPython,
         target: RequiresPython,
-        declared_marker: Option<MarkerTree>,
     ) -> Self {
         let target_marker = target.to_marker_tree();
         Self {
@@ -38,7 +37,7 @@ impl PythonRequirement {
             installed,
             target,
             target_marker,
-            declared_marker,
+            declared_marker: None,
         }
     }
 
@@ -60,7 +59,6 @@ impl PythonRequirement {
             exact,
             RequiresPython::greater_than_equal_version(&installed),
             RequiresPython::greater_than_equal_version(&target),
-            None,
         )
     }
 
@@ -90,7 +88,6 @@ impl PythonRequirement {
             exact,
             RequiresPython::greater_than_equal_version(&installed),
             RequiresPython::greater_than_equal_version(&installed),
-            None,
         )
     }
 
@@ -119,7 +116,6 @@ impl PythonRequirement {
             exact,
             RequiresPython::greater_than_equal_version(&installed),
             requires_python,
-            None,
         )
     }
 
@@ -134,18 +130,25 @@ impl PythonRequirement {
         self
     }
 
+    /// Set the target for a fork while retaining the project's original declarations.
+    fn with_target(&self, target: RequiresPython) -> Self {
+        Self {
+            declared_marker: self.declared_marker,
+            ..Self::new(
+                self.source,
+                self.exact.clone(),
+                self.installed.clone(),
+                target,
+            )
+        }
+    }
+
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
     ///
     /// Returns `None` if the given range is not narrower than the current range.
     pub(crate) fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
-        Some(Self::new(
-            self.source,
-            self.exact.clone(),
-            self.installed.clone(),
-            self.target.narrow(target)?,
-            self.declared_marker,
-        ))
+        Some(self.with_target(self.target.narrow(target)?))
     }
 
     /// Split the [`PythonRequirement`] at the given version.
@@ -154,22 +157,7 @@ impl PythonRequirement {
     /// the result will be `>=3.10 and <3.11` and `>=3.11`.
     pub(crate) fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
         let (lower, upper) = self.target.split(at)?;
-        Some((
-            Self::new(
-                self.source,
-                self.exact.clone(),
-                self.installed.clone(),
-                lower,
-                self.declared_marker,
-            ),
-            Self::new(
-                self.source,
-                self.exact.clone(),
-                self.installed.clone(),
-                upper,
-                self.declared_marker,
-            ),
-        ))
+        Some((self.with_target(lower), self.with_target(upper)))
     }
 
     /// Returns `true` if the minimum version of Python required by the target is greater than the
@@ -223,7 +211,8 @@ impl PythonRequirement {
     }
 }
 
-fn declarations_marker<'a>(
+/// Intersect `Requires-Python` declarations as markers, including any excluded versions.
+pub(crate) fn declarations_marker<'a>(
     declarations: impl IntoIterator<Item = &'a VersionSpecifiers>,
 ) -> MarkerTree {
     let mut marker = MarkerTree::TRUE;

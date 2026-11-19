@@ -21,6 +21,7 @@ use uv_lock::{GroupMetadata, Lock, ResolverManifest};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, SupportedEnvironments};
+use uv_python_discovery::PythonRequirementSource;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{ExtrasResolver, script_extra_build_requires};
 use uv_resolve_operations::Error as ResolveError;
@@ -558,7 +559,7 @@ async fn do_lock(
 
     // Determine the supported Python range. If no range is defined, and warn and default to the
     // current minor version.
-    let requires_python = target.requires_python()?;
+    let (requires_python, python_source) = target.requires_python_with_source()?;
 
     let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
@@ -604,12 +605,10 @@ async fn do_lock(
     // Determine the Python requirement.
     let mut python_requirement =
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
-    if minimum_libc_version.is_some() {
-        python_requirement = python_requirement.with_declared_specifiers(
-            packages
-                .values()
-                .filter_map(|member| member.project().requires_python.as_ref()),
-        );
+    if let Some(PythonRequirementSource::Workspace { sources, .. }) = python_source
+        && minimum_libc_version.is_some()
+    {
+        python_requirement = python_requirement.with_declared_specifiers(sources.values());
     }
 
     // Initialize the client.

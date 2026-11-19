@@ -12,12 +12,15 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
+use uv_pep508::{
+    CanonicalMarkerValueString, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
+};
 use uv_platform_tags::{
     AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
+use crate::python_requirement::declarations_marker;
 use crate::resolved::ResolvedDistRef;
 
 /// A collection of distributions that have been filtered by relevance.
@@ -163,13 +166,15 @@ impl<'a> CompatibleDist<'a> {
         }
     }
 
-    /// Return the wheel filenames that contribute to the distribution's marker coverage.
-    pub(crate) fn compatible_wheels(&self) -> impl Iterator<Item = &WheelFilename> {
+    /// Return the filenames and Python requirements of wheels contributing to marker coverage.
+    pub(crate) fn compatible_wheels(
+        &self,
+    ) -> impl Iterator<Item = (&WheelFilename, Option<&VersionSpecifiers>)> {
         self.prioritized()
             .into_iter()
             .flat_map(|prioritized| &prioritized.0.wheels)
             .filter(|(_, compatibility)| compatibility.is_compatible())
-            .map(|(wheel, _)| &wheel.filename)
+            .map(|(wheel, _)| (&wheel.filename, wheel.file.requires_python.as_deref()))
     }
 
     /// Return the set of supported platforms for the distribution, in terms of their markers.
@@ -987,19 +992,30 @@ pub(crate) fn implied_markers(
 
 /// The oldest libc releases advertised by wheel tags that match the given markers.
 pub(crate) fn available_libc_versions<'a>(
-    filenames: impl IntoIterator<Item = &'a WheelFilename>,
+    wheels: impl IntoIterator<Item = (&'a WheelFilename, Option<&'a VersionSpecifiers>)>,
     markers: MarkerTree,
 ) -> MinimumLibcVersion {
     // Filter each tag separately, since a wheel can target multiple architectures with
     // different libc requirements.
+    let markers = markers.specialize_strings(&[
+        (CanonicalMarkerValueString::SysPlatform, "linux"),
+        (CanonicalMarkerValueString::PlatformSystem, "Linux"),
+        (CanonicalMarkerValueString::OsName, "posix"),
+    ]);
     let mut available = MinimumLibcVersion::default();
-    for filename in filenames {
-        let markers = markers.and(implied_python_markers(filename, MarkerPurpose::Diagnostic));
+    for (filename, requires_python) in wheels {
+        let markers = markers.and(declarations_marker(requires_python));
+        let markers = implied_python_markers(filename, MarkerPurpose::Diagnostic(markers));
         for tag in filename.platform_tags() {
-            if let Some(minimum) = MinimumLibcVersion::from_platform_tag(tag)
-                && !markers.is_disjoint(implied_platform_markers([tag]))
+            if let Some((arch, libc)) = tag.linux_libc()
+                && !markers
+                    .specialize_strings(&[(
+                        CanonicalMarkerValueString::PlatformMachine,
+                        arch.name(),
+                    )])
+                    .is_false()
             {
-                available = available.union(minimum);
+                available.include(libc);
             }
         }
     }
@@ -1194,7 +1210,7 @@ enum MarkerPurpose {
     /// Determine coverage and the markers used to fork the resolution.
     Coverage,
     /// Identify matching wheel tags within an existing fork.
-    Diagnostic,
+    Diagnostic(MarkerTree),
 }
 
 /// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
@@ -1211,11 +1227,8 @@ fn implied_python_markers(filename: &WheelFilename, purpose: MarkerPurpose) -> M
 
     for python_tag in filename.python_tags() {
         // First, construct the version marker based on the tag
-        let mut tree = match python_tag {
-            LanguageTag::None => {
-                // No Python tag means no Python version requirement.
-                return MarkerTree::TRUE;
-            }
+        let tree = match python_tag {
+            LanguageTag::None => MarkerTree::TRUE,
             LanguageTag::Python { major, minor: None } | LanguageTag::CPythonMajor { major } => {
                 if is_abi3 {
                     MarkerTree::expression(MarkerExpression::Version {
@@ -1297,24 +1310,27 @@ fn implied_python_markers(filename: &WheelFilename, purpose: MarkerPurpose) -> M
                 Some((arcstr::literal!("Pyston"), arcstr::literal!("pyston")))
             }
         };
-        if let Some((platform, name)) = implementation {
-            tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                key: MarkerValueString::PlatformPythonImplementation,
-                operator: MarkerOperator::Equal,
-                value: platform,
-            }));
-            // Match either spelling in the target without introducing another marker
-            // variable into resolution forks.
-            if let MarkerPurpose::Diagnostic = purpose {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::ImplementationName,
+        let implementation = match (purpose, implementation) {
+            (MarkerPurpose::Coverage, None) => MarkerTree::TRUE,
+            (MarkerPurpose::Coverage, Some((platform, _))) => {
+                MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
-                    value: name,
-                }));
+                    value: platform,
+                })
             }
-        }
+            (MarkerPurpose::Diagnostic(target), None) => target,
+            (MarkerPurpose::Diagnostic(target), Some((platform, name))) => target
+                .specialize_strings(&[
+                    (
+                        CanonicalMarkerValueString::PlatformPythonImplementation,
+                        &platform,
+                    ),
+                    (CanonicalMarkerValueString::ImplementationName, &name),
+                ]),
+        };
 
-        marker = marker.or(tree);
+        marker = marker.or(tree.and(implementation));
     }
 
     marker

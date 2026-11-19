@@ -242,8 +242,10 @@ impl Display for MissingPlatform {
         if self.available_libc == MinimumLibcVersion::default() {
             return Ok(());
         }
-        let (family, required, minimum) = match (self.required_libc.glibc, self.required_libc.musl)
-        {
+        let (family, tag, required, minimum) = match (
+            self.required_libc.glibc,
+            self.required_libc.musl,
+        ) {
             // The oldest glibc and musl tags can come from different package releases
             // or target disjoint Python versions within a release.
             (Some(glibc), Some(musl)) => {
@@ -252,8 +254,8 @@ impl Display for MissingPlatform {
                     " that satisfy `minimum-libc-version` for both glibc {glibc} and musl {musl}"
                 );
             }
-            (Some(glibc), None) => ("glibc", glibc, self.available_libc.glibc),
-            (None, Some(musl)) => ("musl", musl, self.available_libc.musl),
+            (Some(glibc), None) => ("glibc", "manylinux", glibc, self.available_libc.glibc),
+            (None, Some(musl)) => ("musl", "musllinux", musl, self.available_libc.musl),
             (None, None) => return Ok(()),
         };
         write!(
@@ -263,7 +265,10 @@ impl Display for MissingPlatform {
         if let Some(minimum) = minimum
             && minimum > required
         {
-            write!(f, " (the minimum supported is {family} {minimum})")?;
+            write!(
+                f,
+                " (matching {tag} tags require {family} {minimum} or newer)"
+            )?;
         }
         Ok(())
     }

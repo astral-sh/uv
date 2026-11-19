@@ -1309,6 +1309,45 @@ impl MarkerTree {
         Self::from_operation(|interner| interner.restrict(self.0, assumption.0))
     }
 
+    /// Partially evaluate string comparisons and membership predicates for known marker values.
+    ///
+    /// For example, given `platform_machine = "i686"`, this simplifies
+    /// `platform_machine in 'x86_64,aarch64'` to false. The result is valid for environments
+    /// with the supplied values. Version comparisons are left symbolic.
+    #[must_use]
+    pub fn specialize_strings(self, values: &[(CanonicalMarkerValueString, &str)]) -> Self {
+        let known = |key: &CanonicalMarkerValueString| {
+            values
+                .iter()
+                .find_map(|(k, value)| (k == key).then_some(*value))
+        };
+        Self::from_operation(|interner| {
+            interner.restrict_nodes(self.0, &|node| match (&node.var, &node.children) {
+                (Variable::String(key), Edges::String { edges }) => {
+                    let value = known(key)?;
+                    edges
+                        .iter()
+                        .find_map(|(range, node)| range.contains(value).then_some(*node))
+                }
+                (Variable::In { key, value }, Edges::Boolean { high, low }) => {
+                    Some(if value.contains(known(key)?) {
+                        *high
+                    } else {
+                        *low
+                    })
+                }
+                (Variable::Contains { key, value }, Edges::Boolean { high, low }) => {
+                    Some(if known(key)?.contains(value.as_str()) {
+                        *high
+                    } else {
+                        *low
+                    })
+                }
+                _ => None,
+            })
+        })
+    }
+
     /// Remove the extras from a marker, returning `None` if the marker tree evaluates to `true`.
     ///
     /// Any `extra` markers that are always `true` given the provided extras will be removed.

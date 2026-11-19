@@ -254,7 +254,7 @@ pub fn find_requires_python(
 /// Compute the workspace's Python requirement together with its contributing declarations.
 ///
 /// Retain the declarations so incompatibility diagnostics use the same inputs as the requirement.
-fn find_workspace_python_requirement(
+pub fn find_workspace_python_requirement(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<ProjectPythonRequirement>, PythonSelectionError> {

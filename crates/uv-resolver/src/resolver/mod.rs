@@ -1270,22 +1270,6 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if let Dist::Built(dist) = &dist {
             let filename = dist.wheel_filename();
 
-            // If the wheel does not cover a required environment, it is incompatible.
-            if let Some(fork_markers) = env.fork_markers()
-                && !self.options.artifact_environments.is_empty()
-                && let Some((marker, target)) = self.uncovered_environment(
-                    implied_markers(filename, self.options.minimum_libc_version),
-                    fork_markers,
-                    id,
-                    pubgrub,
-                )
-            {
-                return Ok(Some(ResolverVersion::Unavailable(
-                    version.clone(),
-                    self.missing_platform(marker, target, [filename]),
-                )));
-            }
-
             let incompatible_tag = if filename.variant().is_some()
                 && (!uv_preview::is_enabled(PreviewFeature::WheelVariants)
                     || env.marker_environment().is_none())
@@ -1327,6 +1311,27 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     )),
                 )));
             }
+        }
+
+        // Check whether the wheel covers every required environment in this fork.
+        if let Dist::Built(wheel) = &dist
+            && let Some(fork_markers) = env.fork_markers()
+            && !self.options.artifact_environments.is_empty()
+            && let Some((marker, target)) = self.uncovered_environment(
+                implied_markers(wheel.wheel_filename(), self.options.minimum_libc_version),
+                fork_markers,
+                id,
+                pubgrub,
+            )
+        {
+            return Ok(Some(ResolverVersion::Unavailable(
+                version.clone(),
+                self.missing_platform(
+                    marker,
+                    target,
+                    [(wheel.wheel_filename(), metadata.requires_python.as_ref())],
+                ),
+            )));
         }
 
         if let Dist::Built(wheel) = dist
@@ -1656,14 +1661,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         &self,
         marker: MarkerTree,
         target: MarkerTree,
-        filenames: impl IntoIterator<Item = &'a WheelFilename>,
+        wheels: impl IntoIterator<Item = (&'a WheelFilename, Option<&'a VersionSpecifiers>)>,
     ) -> UnavailableVersion {
         let required_libc = self.options.minimum_libc_version.unwrap_or_default();
         let available_libc = if required_libc == MinimumLibcVersion::default() {
             MinimumLibcVersion::default()
         } else {
             available_libc_versions(
-                filenames,
+                wheels,
                 target.and(self.python_requirement.diagnostic_marker()),
             )
         };
