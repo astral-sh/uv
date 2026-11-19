@@ -60,7 +60,7 @@ jobs:
           ROOSTER_NO_CACHE: "1"
           INPUT_BUMP: ${{ inputs.bump }}
 
-      - uses: astral-sh/github-actions/rewrite-changelog@80122cd13e7f72414472f35e033fba4e90f48614
+      - uses: astral-sh/github-actions/rewrite-changelog@8c3ce27226508d88b41427ca740b0e29adb39d9d
         with:
           prompt-file: agents/prompts/editorialize-changelog.md
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
