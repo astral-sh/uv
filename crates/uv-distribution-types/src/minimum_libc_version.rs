@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use uv_platform_tags::{LibcTag, LibcVersion, PlatformTag};
+use uv_platform_tags::{Arch, LibcVersion, PlatformTag};
 
 /// The oldest required release of each Linux libc.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -16,40 +16,63 @@ pub struct MinimumLibcVersion {
 }
 
 impl MinimumLibcVersion {
-    /// Include a wheel tag when finding the oldest available version of each libc.
-    pub fn include(&mut self, tag: LibcTag) {
-        let (minimum, version) = match tag {
-            LibcTag::Glibc(version) => (&mut self.glibc, version),
-            LibcTag::Musl(version) => (&mut self.musl, version),
-        };
-        *minimum = Some(minimum.map_or(version, |current| current.min(version)));
-    }
-
-    /// Combine the libc versions advertised by two sets of wheels, taking the oldest
-    /// release of each family for which either set has a wheel.
-    #[must_use]
-    pub fn union(self, other: Self) -> Self {
-        Self {
-            glibc: self.glibc.into_iter().chain(other.glibc).min(),
-            musl: self.musl.into_iter().chain(other.musl).min(),
-        }
-    }
-
     /// Whether a platform tag covers the glibc and musl baselines, respectively.
     ///
     /// Unconfigured baselines accept any platform. Generic Linux tags do not constrain libc,
     /// matching installation behavior. Non-Linux tags are unaffected.
     pub fn platform_coverage(self, platform: &PlatformTag) -> [bool; 2] {
-        match platform.linux_libc() {
-            Some((_, LibcTag::Glibc(minimum))) => [
+        match LibcTag::from_platform_tag(platform) {
+            Some(LibcTag::Glibc(_, minimum)) => [
                 self.glibc.is_none_or(|baseline| minimum <= baseline),
                 self.musl.is_none(),
             ],
-            Some((_, LibcTag::Musl(minimum))) => [
+            Some(LibcTag::Musl(_, minimum)) => [
                 self.glibc.is_none(),
                 self.musl.is_none_or(|baseline| minimum <= baseline),
             ],
             None => [true; 2],
+        }
+    }
+}
+
+/// The architecture and minimum libc version advertised by a Linux wheel tag.
+#[derive(Debug, Clone, Copy)]
+pub enum LibcTag {
+    Glibc(Arch, LibcVersion),
+    Musl(Arch, LibcVersion),
+}
+
+impl LibcTag {
+    /// Extract the libc requirement of a manylinux or musllinux tag.
+    pub fn from_platform_tag(platform: &PlatformTag) -> Option<Self> {
+        match *platform {
+            PlatformTag::Manylinux { major, minor, arch } => {
+                Some(Self::Glibc(arch, LibcVersion::new(major, minor)))
+            }
+            PlatformTag::Manylinux1 { arch } => Some(Self::Glibc(arch, LibcVersion::new(2, 5))),
+            PlatformTag::Manylinux2010 { arch } => Some(Self::Glibc(arch, LibcVersion::new(2, 12))),
+            PlatformTag::Manylinux2014 { arch } => Some(Self::Glibc(arch, LibcVersion::new(2, 17))),
+            PlatformTag::Musllinux { major, minor, arch } => {
+                Some(Self::Musl(arch, LibcVersion::new(major, minor)))
+            }
+            PlatformTag::Linux { .. }
+            | PlatformTag::Any
+            | PlatformTag::Macos { .. }
+            | PlatformTag::Win32
+            | PlatformTag::WinAmd64
+            | PlatformTag::WinArm64
+            | PlatformTag::WinIa64
+            | PlatformTag::Android { .. }
+            | PlatformTag::FreeBsd { .. }
+            | PlatformTag::NetBsd { .. }
+            | PlatformTag::OpenBsd { .. }
+            | PlatformTag::Dragonfly { .. }
+            | PlatformTag::Haiku { .. }
+            | PlatformTag::Illumos { .. }
+            | PlatformTag::Solaris { .. }
+            | PlatformTag::Pyodide { .. }
+            | PlatformTag::PyEmscripten { .. }
+            | PlatformTag::Ios { .. } => None,
         }
     }
 }

@@ -32,7 +32,7 @@ mod windows_registry;
 pub use project::{
     CompatibleProjectPython, ProjectPythonRequest, ProjectPythonRequirement, PythonRequestSource,
     PythonRequirementConflicts, PythonRequirementSource, find_requires_python,
-    find_workspace_python_requirement, format_requires_python_sources,
+    format_requires_python_sources,
 };
 pub use reporter::{PythonDownloadReporter, report_interpreter};
 pub use script::{

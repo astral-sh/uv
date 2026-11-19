@@ -33,7 +33,7 @@ use uv_resolver::{
 use uv_settings::{LockedSource, ResolverSettings};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
-use uv_workspace::{RequiresPythonSources, WorkspaceCache};
+use uv_workspace::WorkspaceCache;
 
 use crate::lock_target::find_lock_format_error;
 use crate::{
@@ -556,10 +556,11 @@ async fn do_lock(
         );
     }
 
-    // Without a declared Python range, default to the interpreter's minor version.
-    let (requires_python, declarations) = if let Some((requires_python, declarations)) =
-        target.requires_python_with_sources()?
-    {
+    // Determine the supported Python range. If no range is defined, and warn and default to the
+    // current minor version.
+    let requires_python = target.requires_python()?;
+
+    let requires_python = if let Some(requires_python) = requires_python {
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
@@ -571,14 +572,14 @@ async fn do_lock(
                 "The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?"
             );
         }
-        (requires_python, declarations)
+        requires_python
     } else {
         let default =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
         warn_user_once!(
             "No `requires-python` value found in the workspace. Defaulting to `{default}`."
         );
-        (default, RequiresPythonSources::new())
+        default
     };
 
     // If any of the forks are incompatible with the Python requirement, error.
@@ -601,11 +602,8 @@ async fn do_lock(
     }
 
     // Determine the Python requirement.
-    let mut python_requirement =
+    let python_requirement =
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
-    if minimum_libc_version.is_some() && !declarations.is_empty() {
-        python_requirement = python_requirement.with_declared_specifiers(declarations.values());
-    }
 
     // Initialize the client.
     let client_builder = client_builder.clone().keyring(*keyring_provider);

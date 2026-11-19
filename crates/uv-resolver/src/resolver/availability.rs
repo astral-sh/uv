@@ -6,17 +6,15 @@ use std::sync::Arc;
 use reqwest::StatusCode;
 
 use uv_distribution::Error as DistributionError;
-use uv_distribution_types::{MinimumLibcVersion, Requirement, RequirementSource};
+use uv_distribution_types::{Requirement, RequirementSource};
 use uv_metadata::Error as WheelMetadataError;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::MarkerTree;
 use uv_platform_tags::{AbiTag, Tags};
 use uv_pypi_types::MetadataError;
 use uv_resolver_types::VariantsJsonMetadataError;
 
-use crate::known_platform::KnownPlatform;
-use crate::prioritized_distribution::IncompatibleDist;
+use crate::prioritized_distribution::{IncompatibleDist, MissingPlatform};
 use crate::pubgrub::Range;
 use crate::resolver::{MetadataUnavailable, VersionFork};
 
@@ -30,23 +28,15 @@ pub enum UnavailableReason {
 }
 
 impl UnavailableReason {
-    /// Return a reason that describes both sets of unavailable versions, if possible.
+    /// Return a common explanation for two sets of unavailable versions.
     pub(crate) fn merge(&self, other: &Self) -> Option<Self> {
-        // Releases can fail the same requirement with different wheel tags. Report the oldest
-        // advertised libc version across the range that PubGrub displays.
         if let (
             Self::Version(UnavailableVersion::MissingPlatform(left)),
             Self::Version(UnavailableVersion::MissingPlatform(right)),
         ) = (self, other)
-            && left.marker == right.marker
-            && left.required_libc == right.required_libc
         {
-            return Some(Self::Version(UnavailableVersion::MissingPlatform(
-                MissingPlatform {
-                    available_libc: left.available_libc.union(right.available_libc),
-                    ..*left
-                },
-            )));
+            let platform = left.merge(right)?;
+            return Some(Self::Version(UnavailableVersion::MissingPlatform(platform)));
         }
         (self == other).then(|| self.clone())
     }
@@ -217,60 +207,6 @@ impl UnavailableVersion {
 impl Display for UnavailableVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.message().as_ref())
-    }
-}
-
-/// A required environment that the available wheels do not cover.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct MissingPlatform {
-    pub(super) marker: MarkerTree,
-    pub(super) required_libc: MinimumLibcVersion,
-    /// The oldest release of each libc advertised by otherwise matching wheels.
-    pub(super) available_libc: MinimumLibcVersion,
-}
-
-impl Display for MissingPlatform {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(platform) = KnownPlatform::from_marker(self.marker) {
-            write!(f, "no {platform}-compatible wheels")?;
-        } else if let Some(marker) = self.marker.try_to_string() {
-            write!(f, "no `{marker}`-compatible wheels")?;
-        } else {
-            f.write_str("no compatible wheels")?;
-        }
-
-        if self.available_libc == MinimumLibcVersion::default() {
-            return Ok(());
-        }
-        let (family, tag, required, minimum) = match (
-            self.required_libc.glibc,
-            self.required_libc.musl,
-        ) {
-            // The oldest glibc and musl tags can come from different package releases
-            // or target disjoint Python versions within a release.
-            (Some(glibc), Some(musl)) => {
-                return write!(
-                    f,
-                    " that satisfy `minimum-libc-version` for both glibc {glibc} and musl {musl}"
-                );
-            }
-            (Some(glibc), None) => ("glibc", "manylinux", glibc, self.available_libc.glibc),
-            (None, Some(musl)) => ("musl", "musllinux", musl, self.available_libc.musl),
-            (None, None) => return Ok(()),
-        };
-        write!(
-            f,
-            " that satisfy `minimum-libc-version` for {family} {required}"
-        )?;
-        if let Some(minimum) = minimum
-            && minimum > required
-        {
-            write!(
-                f,
-                " (matching {tag} tags require {family} {minimum} or newer)"
-            )?;
-        }
-        Ok(())
     }
 }
 
