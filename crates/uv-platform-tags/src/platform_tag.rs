@@ -1019,7 +1019,7 @@ mod tests {
     };
     use crate::tags::AndroidAbi;
     use crate::tags::IosMultiarch;
-    use crate::{Arch, BinaryFormat, LibcTag, LibcVersion};
+    use crate::{Arch, BinaryFormat};
 
     #[test]
     fn any_platform() {
