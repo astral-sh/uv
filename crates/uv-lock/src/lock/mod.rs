@@ -34,9 +34,9 @@ use uv_distribution_filename::{
     BuildTag, DistExtension, ExtensionError, SourceDistExtension, WheelFilename,
 };
 use uv_distribution_types::{
-    ArchiveHashPolicy, BuiltDist, CanonicalFileLocation, DependencyMetadata, DirectUrlBuiltDist,
-    DirectUrlSourceDist, DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan,
-    ExcludeNewerValue, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
+    BuiltDist, CanonicalFileLocation, DependencyMetadata, DirectUrlBuiltDist, DirectUrlSourceDist,
+    DirectorySourceDist, Dist, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue,
+    ExpectedHashes, FirstParty, GitDirectorySourceDist, GitPathBuiltDist, GitPathSourceDist,
     HashValidation, Identifier, IndexLocations, IndexMetadata, IndexUrl, MetadataHashPolicy,
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
@@ -5959,7 +5959,7 @@ impl Lock {
                 None
             }
         }) && locked_hashes.is_none_or(|validation| {
-            ArchiveHashPolicy::from(validation).matches(archive.hashes.as_slice())
+            ExpectedHashes::from(validation).matches(archive.hashes.as_slice())
         }) {
             return Ok(archive.metadata.clone());
         }
@@ -10777,17 +10777,14 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
             .expect("valid URL");
         assert_eq!(hasher.output(), HashOutput::None);
         assert_eq!(
-            hasher.archive_policy_for_url(&remote),
-            ArchiveHashPolicy::All(slice::from_ref(&digest))
+            hasher.expected_for_url(&remote),
+            ExpectedHashes::all(slice::from_ref(&digest))
         );
         assert_eq!(
-            hasher.archive_policy_for_url(&local),
-            ArchiveHashPolicy::All(slice::from_ref(&digest))
+            hasher.expected_for_url(&local),
+            ExpectedHashes::all(slice::from_ref(&digest))
         );
-        assert_eq!(
-            hasher.archive_policy_for_url(&unknown),
-            ArchiveHashPolicy::None
-        );
+        assert_eq!(hasher.expected_for_url(&unknown), ExpectedHashes::none());
     }
 
     #[test]

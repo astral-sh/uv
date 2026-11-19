@@ -15,14 +15,14 @@ use uv_static::TarBackend;
 
 use super::source_index_hashes;
 use crate::error::Error;
-use crate::hash::ArtifactHashPolicy;
+use crate::hash::ArtifactHashes;
 
 /// The checks required before an extracted source archive can be persisted to the cache.
 pub(super) struct ArchiveValidation<'a> {
     /// Additional hashes to generate beyond those required for validation.
     pub(super) extra_algorithms: &'a [HashAlgorithm],
     /// Hash requirements for the caller and cache.
-    pub(super) hash_policy: ArtifactHashPolicy<'a>,
+    pub(super) hash_policy: ArtifactHashes,
     /// Every digest from a cache revision being repaired must remain unchanged.
     pub(super) existing_hashes: &'a [HashDigest],
     pub(super) expected_size: Option<u64>,
@@ -154,17 +154,19 @@ mod tests {
     use futures::TryStreamExt;
     use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-    use uv_distribution_types::{ArchiveHashPolicy, DirectSourceUrl, SourceUrl};
+    use uv_distribution_types::{DirectSourceUrl, ExpectedHashes, SourceUrl};
     use uv_redacted::SafeUrl;
 
     use super::*;
 
-    const NO_VALIDATION: ArchiveValidation<'static> = ArchiveValidation {
-        extra_algorithms: &[],
-        hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::None),
-        existing_hashes: &[],
-        expected_size: None,
-    };
+    fn no_validation() -> ArchiveValidation<'static> {
+        ArchiveValidation {
+            extra_algorithms: &[],
+            hash_policy: ArtifactHashes::required(ExpectedHashes::none()),
+            existing_hashes: &[],
+            expected_size: None,
+        }
+    }
 
     fn cache() -> Result<Cache> {
         let cache = Cache::temp()?;
@@ -213,28 +215,28 @@ mod tests {
         )?;
         let cache = cache()?;
         let trailing_read = Cell::new(false);
-        extract(&cache, reader(&bytes, &trailing_read), NO_VALIDATION).await?;
+        extract(&cache, reader(&bytes, &trailing_read), no_validation()).await?;
         assert!(!trailing_read.get());
 
         let digest = HashDigest::from(Hasher::from(HashAlgorithm::Sha256));
         for validation in [
             ArchiveValidation {
                 extra_algorithms: &[HashAlgorithm::Sha256],
-                ..NO_VALIDATION
+                ..no_validation()
             },
             ArchiveValidation {
-                hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::All(slice::from_ref(
+                hash_policy: ArtifactHashes::required(ExpectedHashes::all(slice::from_ref(
                     &digest,
                 ))),
-                ..NO_VALIDATION
+                ..no_validation()
             },
             ArchiveValidation {
                 existing_hashes: slice::from_ref(&digest),
-                ..NO_VALIDATION
+                ..no_validation()
             },
             ArchiveValidation {
                 expected_size: Some(bytes.len() as u64),
-                ..NO_VALIDATION
+                ..no_validation()
             },
         ] {
             assert!(matches!(
@@ -258,7 +260,7 @@ mod tests {
                 ArchiveValidation {
                     extra_algorithms: &[HashAlgorithm::Sha256],
                     expected_size: Some(1),
-                    ..NO_VALIDATION
+                    ..no_validation()
                 },
             )
             .await,
@@ -281,8 +283,8 @@ mod tests {
             &cache,
             &bytes[..],
             ArchiveValidation {
-                hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::All(&[wrong_hash])),
-                ..NO_VALIDATION
+                hash_policy: ArtifactHashes::required(ExpectedHashes::all(&[wrong_hash])),
+                ..no_validation()
             },
         )
         .await;
@@ -302,7 +304,7 @@ mod tests {
             &bytes[..],
             ArchiveValidation {
                 existing_hashes: slice::from_ref(&existing_hash),
-                ..NO_VALIDATION
+                ..no_validation()
             },
         )
         .await?;
@@ -313,7 +315,7 @@ mod tests {
         drop(archive);
         assert!(!staging_dir.exists());
 
-        let archive = extract(&cache, &bytes[..], NO_VALIDATION).await?;
+        let archive = extract(&cache, &bytes[..], no_validation()).await?;
         let staging_dir = archive.staging_dir.path().to_path_buf();
         // A file in place of the parent directory makes cache creation fail on every platform.
         let parent = cache.root().join("not-a-directory");

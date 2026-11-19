@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use uv_distribution_types::{ArchiveHashPolicy, Hashed};
+use uv_distribution_types::{ExpectedHashes, Hashed};
 use uv_pypi_types::{HashAlgorithm, HashDigest};
 
 use crate::Error;
@@ -9,89 +9,94 @@ use crate::Error;
 pub(crate) const HTTP_DEFAULT_HASH_ALGORITHMS: [HashAlgorithm; 1] = [HashAlgorithm::Sha256];
 
 /// Hash requirements for downloading and caching a wheel or source distribution.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ArtifactHashPolicy<'a> {
-    /// The caller's hash policy for the returned artifact.
-    required: ArchiveHashPolicy<'a>,
+#[derive(Debug, Clone)]
+pub(crate) struct ArtifactHashes {
+    /// Hash checks requested by the caller.
+    required: ExpectedHashes,
     /// Additional hash checks for admitting or reusing an archive in the cache.
-    cache: ArchiveHashPolicy<'a>,
+    cache: ExpectedHashes,
 }
 
-impl<'a> ArtifactHashPolicy<'a> {
-    const fn new(required: ArchiveHashPolicy<'a>, cache: ArchiveHashPolicy<'a>) -> Self {
+impl ArtifactHashes {
+    fn new(required: ExpectedHashes, cache: ExpectedHashes) -> Self {
         Self { required, cache }
     }
 
-    /// Use the caller's policy with the standard index hash fallback.
-    pub(crate) const fn required(required: ArchiveHashPolicy<'a>) -> Self {
-        Self::new(required, ArchiveHashPolicy::None)
+    /// Use the caller's checks with the standard index hash fallback.
+    pub(crate) fn required(required: ExpectedHashes) -> Self {
+        Self::new(required, ExpectedHashes::none())
     }
 
     /// Proxy downloads must match the selected index file as well as the caller's hashes.
     pub(crate) fn for_registry(
-        required: ArchiveHashPolicy<'a>,
+        required: ExpectedHashes,
         is_proxy: bool,
-        index_hashes: &'a [HashDigest],
+        index_hashes: &[HashDigest],
     ) -> Self {
         let cache = if is_proxy {
             if index_hashes.is_empty() {
-                required
+                required.clone()
             } else {
-                ArchiveHashPolicy::None.with_index_hashes(index_hashes)
+                ExpectedHashes::all(index_hashes)
             }
         } else {
-            ArchiveHashPolicy::None
+            ExpectedHashes::none()
         };
         Self::new(required, cache)
     }
 
     /// A cache hit must match the applicable index and cache hashes and record the caller's algorithms.
-    pub(crate) fn can_reuse(self, artifact: &impl Hashed, index_hashes: &'a [HashDigest]) -> bool {
-        artifact.satisfies(self.index_fallback(index_hashes))
-            && artifact.satisfies(self.cache)
-            && artifact.has_digests(self.required)
+    pub(crate) fn can_reuse(&self, artifact: &impl Hashed, index_hashes: &[HashDigest]) -> bool {
+        self.index_fallback(index_hashes).matches(artifact.hashes())
+            && self.cache.matches(artifact.hashes())
+            && self.required.has_algorithms(artifact.hashes())
     }
 
     /// Check the caller's required hashes before using a cached artifact.
     pub(crate) fn verify_required(
-        self,
+        &self,
         artifact: impl Display,
         hashes: &[HashDigest],
     ) -> Result<(), Error> {
-        verify_hashes(self.required, &artifact, hashes)
+        verify_hashes(&self.required, &artifact, hashes)
     }
 
-    pub(crate) fn for_download(self, index_hashes: &'a [HashDigest]) -> DownloadHashVerifier<'a> {
+    pub(crate) fn for_download(&self, index_hashes: &[HashDigest]) -> DownloadHashVerifier {
         DownloadHashVerifier {
-            checks: [self.index_fallback(index_hashes), self.cache, self.required],
+            checks: [
+                self.index_fallback(index_hashes),
+                self.cache.clone(),
+                self.required.clone(),
+            ],
         }
     }
 
-    /// Use the selected index file's hashes when neither policy specifies digests.
-    fn index_fallback(self, index_hashes: &'a [HashDigest]) -> ArchiveHashPolicy<'a> {
-        if self.cache.requires_validation() || self.required.requires_validation() {
-            ArchiveHashPolicy::None
+    /// Index hashes are a fallback unless the caller or proxy supplies its own check.
+    fn index_fallback(&self, index_hashes: &[HashDigest]) -> ExpectedHashes {
+        if !self.cache.is_empty() || !self.required.is_empty() {
+            ExpectedHashes::none()
         } else {
-            ArchiveHashPolicy::None.with_index_hashes(index_hashes)
+            ExpectedHashes::none().with_index_hashes(index_hashes)
         }
     }
 }
 
-/// Hash checks for newly read archive bytes, including any applicable index hashes.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct DownloadHashVerifier<'a> {
-    checks: [ArchiveHashPolicy<'a>; 3],
+/// Independently check the applicable index, cache, and caller hashes.
+#[derive(Debug, Clone)]
+pub(crate) struct DownloadHashVerifier {
+    checks: [ExpectedHashes; 3],
 }
 
-impl DownloadHashVerifier<'_> {
+impl DownloadHashVerifier {
     pub(crate) fn algorithms(
-        self,
+        &self,
         extra: impl IntoIterator<Item = HashAlgorithm>,
     ) -> Vec<HashAlgorithm> {
         let mut algorithms: Vec<_> = self
             .checks
             .iter()
-            .flat_map(ArchiveHashPolicy::algorithms)
+            .flat_map(ExpectedHashes::iter)
+            .map(HashDigest::algorithm)
             .chain(extra)
             .collect();
         algorithms.sort_unstable();
@@ -99,25 +104,25 @@ impl DownloadHashVerifier<'_> {
         algorithms
     }
 
-    pub(crate) fn verify(self, artifact: impl Display, hashes: &[HashDigest]) -> Result<(), Error> {
-        for policy in self.checks {
-            verify_hashes(policy, &artifact, hashes)?;
+    pub(crate) fn verify(
+        &self,
+        artifact: impl Display,
+        hashes: &[HashDigest],
+    ) -> Result<(), Error> {
+        for request in &self.checks {
+            verify_hashes(request, &artifact, hashes)?;
         }
         Ok(())
     }
 }
 
-fn verify_hashes(
-    policy: ArchiveHashPolicy<'_>,
-    artifact: &impl Display,
+pub(crate) fn verify_hashes(
+    expected: &ExpectedHashes,
+    artifact: impl Display,
     hashes: &[HashDigest],
 ) -> Result<(), Error> {
-    if !policy.matches(hashes) {
-        return Err(Error::hash_mismatch(
-            artifact.to_string(),
-            policy.digests(),
-            hashes,
-        ));
+    if let Some(expected) = expected.first_mismatch(hashes) {
+        return Err(Error::hash_mismatch(artifact.to_string(), expected, hashes));
     }
     Ok(())
 }
@@ -132,22 +137,22 @@ mod tests {
     fn cache_reuse_checks_index_hashes_unless_explicit_hashes_take_precedence() {
         let advertised = [HashDigest::Sha256(Digest::from_bytes([0xaa; 32]))];
         let cached_hashes = vec![HashDigest::Sha256(Digest::from_bytes([0xbb; 32]))];
-        let direct = ArtifactHashPolicy::required(ArchiveHashPolicy::None);
+        let direct = ArtifactHashes::required(ExpectedHashes::none());
         assert!(direct.can_reuse(&cached_hashes, &cached_hashes));
         assert!(!direct.can_reuse(&cached_hashes, &advertised));
         assert!(!direct.can_reuse(&Vec::new(), &advertised));
 
-        let caller = ArtifactHashPolicy::required(ArchiveHashPolicy::Any(&advertised));
+        let caller = ArtifactHashes::required(ExpectedHashes::one_of(&advertised));
         assert!(caller.can_reuse(&cached_hashes, &advertised));
         assert!(caller.verify_required("archive", &cached_hashes).is_err());
 
-        let cache = ArtifactHashPolicy::new(
-            ArchiveHashPolicy::None,
-            ArchiveHashPolicy::Any(&cached_hashes),
+        let cache = ArtifactHashes::new(
+            ExpectedHashes::none(),
+            ExpectedHashes::one_of(&cached_hashes),
         );
         assert!(cache.can_reuse(&cached_hashes, &advertised));
         let cache =
-            ArtifactHashPolicy::new(ArchiveHashPolicy::None, ArchiveHashPolicy::Any(&advertised));
+            ArtifactHashes::new(ExpectedHashes::none(), ExpectedHashes::one_of(&advertised));
         assert!(!cache.can_reuse(&cached_hashes, &cached_hashes));
     }
 
@@ -157,8 +162,8 @@ mod tests {
         let sha512 = HashDigest::Sha512(Digest::from_bytes([0xbb; 64]));
         let file_hashes = [sha256.clone(), sha512];
         let incomplete = [sha256];
-        let caller = ArchiveHashPolicy::Any(&incomplete);
-        let proxy = ArtifactHashPolicy::for_registry(caller, true, &file_hashes);
+        let caller = ExpectedHashes::one_of(&incomplete);
+        let proxy = ArtifactHashes::for_registry(caller, true, &file_hashes);
         assert!(!proxy.can_reuse(&incomplete.as_slice(), &file_hashes));
         assert!(
             proxy
@@ -178,11 +183,9 @@ mod tests {
     fn download_verifier_requires_both_caller_and_cache_hashes() {
         let caller = [HashDigest::Sha256(Digest::from_bytes([0xaa; 32]))];
         let cache = [HashDigest::Sha512(Digest::from_bytes([0xbb; 64]))];
-        let verifier = ArtifactHashPolicy::new(
-            ArchiveHashPolicy::All(&caller),
-            ArchiveHashPolicy::Any(&cache),
-        )
-        .for_download(&[]);
+        let verifier =
+            ArtifactHashes::new(ExpectedHashes::all(&caller), ExpectedHashes::one_of(&cache))
+                .for_download(&[]);
         assert_eq!(
             verifier.algorithms(HTTP_DEFAULT_HASH_ALGORITHMS),
             vec![HashAlgorithm::Sha256, HashAlgorithm::Sha512]

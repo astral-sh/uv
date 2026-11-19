@@ -361,7 +361,7 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         self.fetcher
             .get_wheel_variant_metadata(
                 wheel,
-                self.hasher.archive_policy(wheel),
+                self.hasher.expected_for(wheel),
                 self.hasher.output(),
             )
             .await

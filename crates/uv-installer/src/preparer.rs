@@ -171,25 +171,24 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                 Err(err) => Err(Error::Thread(err.to_owned())),
             }
         } else {
-            let policy = self.hashes.archive_policy(&dist);
+            let expected = self.hashes.expected_for(&dist);
 
             let result = self
                 .database
-                .get_or_build_wheel(&dist, self.tags, policy)
+                .get_or_build_wheel(&dist, self.tags, expected.clone())
                 .boxed_local()
                 .map_err(|err| Error::from_dist(dist.clone(), err, resolution))
                 .await
                 .and_then(|wheel: LocalWheel| {
-                    if wheel.satisfies(policy) {
-                        Ok(wheel)
-                    } else {
+                    if let Some(digests) = expected.first_mismatch(wheel.hashes()) {
                         let err = uv_distribution::Error::hash_mismatch(
                             dist.to_string(),
-                            policy.digests(),
+                            digests,
                             wheel.hashes(),
                         );
-                        Err(Error::from_dist(dist, err, resolution))
+                        return Err(Error::from_dist(dist, err, resolution));
                     }
+                    Ok(wheel)
                 })
                 .map(CachedDist::from);
             match result {

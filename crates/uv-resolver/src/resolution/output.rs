@@ -375,9 +375,9 @@ fn get_hashes(
     // 2. Preserve trusted hashes for this URL or path. Wheel metadata lookup does not always
     // hash the archive, so installation still needs the original hashes to verify its contents.
     if let Some(url) = url {
-        let policy = hasher.archive_policy_for_url(&url.verbatim);
-        if !policy.digests().is_empty() {
-            return HashDigests::from(policy.digests());
+        let digests = hasher.expected_for_url(&url.verbatim).digests();
+        if !digests.is_empty() {
+            return HashDigests::from(digests);
         }
     }
 
@@ -385,9 +385,7 @@ fn get_hashes(
     if let Some(url) = url
         && let ParsedUrl::Archive(_) = &url.parsed_url
         && hasher.output() != HashOutput::None
-        && !hasher
-            .archive_policy_for_url(&url.verbatim)
-            .requires_validation()
+        && hasher.expected_for_url(&url.verbatim).is_empty()
         && let Some(hashes) = parse_url_hashes(&url.verbatim)
     {
         return hashes;

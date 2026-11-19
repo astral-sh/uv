@@ -18,7 +18,7 @@ use uv_platform_tags::Tags;
 use uv_types::HashStrategy;
 
 use crate::download::check_wheel_variant_compatibility;
-use crate::hash::ArtifactHashPolicy;
+use crate::hash::ArtifactHashes;
 use crate::index::cached_wheel::{CachedWheel, ResolvedWheel};
 use crate::source::{HTTP_REVISION, HttpRevisionPointer, LOCAL_REVISION, LocalRevisionPointer};
 
@@ -122,9 +122,9 @@ impl<'a> RegistryWheelIndex<'a> {
     ) -> Option<&CachedRegistryDist> {
         let wheel = distribution.best_wheel();
         let is_proxy = self.index_locations.proxy_route_for(&wheel.index).is_some();
-        let hash_policy = self
+        let expected = self
             .hasher
-            .archive_policy_for_package(&wheel.filename.name, &wheel.filename.version);
+            .expected_for_package(&wheel.filename.name, &wheel.filename.version);
         self.matching(&wheel.filename.name, |entry| {
             if !entry.matches_wheel(&wheel.index, &wheel.filename, no_build, no_binary) {
                 return false;
@@ -149,7 +149,7 @@ impl<'a> RegistryWheelIndex<'a> {
                 let source_hashes = source.map_or(&[][..], |source| source.file.hashes.as_slice());
                 if source_hashes.is_empty()
                     && !wheel.file.hashes.is_empty()
-                    && !hash_policy.requires_validation()
+                    && expected.is_empty()
                 {
                     return false;
                 }
@@ -157,7 +157,7 @@ impl<'a> RegistryWheelIndex<'a> {
             } else {
                 wheel.file.hashes.as_slice()
             };
-            ArtifactHashPolicy::for_registry(hash_policy, is_proxy, index_hashes)
+            ArtifactHashes::for_registry(expected.clone(), is_proxy, index_hashes)
                 .can_reuse(&entry.dist, index_hashes)
         })
         .next()
@@ -183,8 +183,8 @@ impl<'a> RegistryWheelIndex<'a> {
             .is_some();
         let required = self
             .hasher
-            .archive_policy_for_package(&source.name, &source.version);
-        let hashes = ArtifactHashPolicy::for_registry(required, is_proxy, index_hashes);
+            .expected_for_package(&source.name, &source.version);
+        let hashes = ArtifactHashes::for_registry(required, is_proxy, index_hashes);
         self.matching(&source.name, |entry| {
             if !entry.matches_source(source) {
                 return false;
@@ -297,7 +297,7 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.tag_compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_package(
+                                    if wheel.satisfies(&hasher.expected_for_package(
                                         &wheel.filename.name,
                                         &wheel.filename.version,
                                     )) {
@@ -323,7 +323,7 @@ impl<'a> RegistryWheelIndex<'a> {
                             {
                                 if wheel.filename.tag_compatibility(tags).is_compatible() {
                                     // Enforce hash-checking based on the built distribution.
-                                    if wheel.satisfies(hasher.archive_policy_for_package(
+                                    if wheel.satisfies(&hasher.expected_for_package(
                                         &wheel.filename.name,
                                         &wheel.filename.version,
                                     )) {
@@ -409,7 +409,7 @@ impl<'a> RegistryWheelIndex<'a> {
                         if let Some(wheel) = ResolvedWheel::from_built_source(wheel_dir, cache) {
                             if wheel.filename.compatibility(tags).is_compatible() {
                                 // Enforce hash-checking based on the source distribution.
-                                if revision.satisfies(hasher.archive_policy_for_package(
+                                if revision.satisfies(&hasher.expected_for_package(
                                     &wheel.filename.name,
                                     &wheel.filename.version,
                                 )) {
