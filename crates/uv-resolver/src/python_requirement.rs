@@ -1,8 +1,8 @@
 use std::collections::Bound;
 
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
-use uv_pep440::Version;
-use uv_pep508::{MarkerEnvironment, MarkerTree};
+use uv_pep440::{Version, VersionSpecifiers};
+use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
 use uv_python_interpreter::Interpreter;
 use uv_python_types::PythonVersion;
 
@@ -19,6 +19,8 @@ pub struct PythonRequirement {
     target: RequiresPython,
     /// The canonical marker representation of the target Python requirement.
     target_marker: MarkerTree,
+    /// Original workspace constraints for diagnostics that depend on excluded Python versions.
+    declared_marker: Option<MarkerTree>,
 }
 
 impl PythonRequirement {
@@ -27,6 +29,7 @@ impl PythonRequirement {
         exact: Version,
         installed: RequiresPython,
         target: RequiresPython,
+        declared_marker: Option<MarkerTree>,
     ) -> Self {
         let target_marker = target.to_marker_tree();
         Self {
@@ -35,6 +38,7 @@ impl PythonRequirement {
             installed,
             target,
             target_marker,
+            declared_marker,
         }
     }
 
@@ -56,6 +60,7 @@ impl PythonRequirement {
             exact,
             RequiresPython::greater_than_equal_version(&installed),
             RequiresPython::greater_than_equal_version(&target),
+            None,
         )
     }
 
@@ -85,6 +90,7 @@ impl PythonRequirement {
             exact,
             RequiresPython::greater_than_equal_version(&installed),
             RequiresPython::greater_than_equal_version(&installed),
+            None,
         )
     }
 
@@ -113,7 +119,19 @@ impl PythonRequirement {
             exact,
             RequiresPython::greater_than_equal_version(&installed),
             requires_python,
+            None,
         )
+    }
+
+    /// Retain the original workspace declarations for diagnostics. Normalizing their
+    /// intersection into a single `requires-python` can discard gaps between supported versions.
+    #[must_use]
+    pub fn with_declared_specifiers<'a>(
+        mut self,
+        declarations: impl IntoIterator<Item = &'a VersionSpecifiers>,
+    ) -> Self {
+        self.declared_marker = Some(declarations_marker(declarations));
+        self
     }
 
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
@@ -126,6 +144,7 @@ impl PythonRequirement {
             self.exact.clone(),
             self.installed.clone(),
             self.target.narrow(target)?,
+            self.declared_marker,
         ))
     }
 
@@ -141,12 +160,14 @@ impl PythonRequirement {
                 self.exact.clone(),
                 self.installed.clone(),
                 lower,
+                self.declared_marker,
             ),
             Self::new(
                 self.source,
                 self.exact.clone(),
                 self.installed.clone(),
                 upper,
+                self.declared_marker,
             ),
         ))
     }
@@ -192,6 +213,29 @@ impl PythonRequirement {
     pub(crate) fn to_marker_tree(&self) -> MarkerTree {
         self.target_marker
     }
+
+    /// Return the target range restricted to the Python versions allowed by its declarations.
+    pub(crate) fn diagnostic_marker(&self) -> MarkerTree {
+        let declared = self
+            .declared_marker
+            .unwrap_or_else(|| declarations_marker([self.target.specifiers()]));
+        self.target_marker.and(declared)
+    }
+}
+
+fn declarations_marker<'a>(
+    declarations: impl IntoIterator<Item = &'a VersionSpecifiers>,
+) -> MarkerTree {
+    let mut marker = MarkerTree::TRUE;
+    for specifiers in declarations {
+        for specifier in specifiers.iter() {
+            marker = marker.and(MarkerTree::expression(MarkerExpression::Version {
+                key: MarkerValueVersion::PythonFullVersion,
+                specifier: specifier.clone(),
+            }));
+        }
+    }
+    marker
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]

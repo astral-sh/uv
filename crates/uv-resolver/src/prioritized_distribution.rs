@@ -501,7 +501,7 @@ impl PrioritizedDist {
             && (!self.0.python_markers.is_true()
                 || !self.0.markers.iter().all(|markers| markers.is_true()))
         {
-            let python = implied_python_markers(&dist.filename);
+            let python = implied_python_markers(&dist.filename, MarkerPurpose::Coverage);
             self.0.python_markers = self.0.python_markers.or(python);
             for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
                 &dist.filename,
@@ -980,7 +980,7 @@ pub(crate) fn implied_markers(
     filename: &WheelFilename,
     minimum_libc_version: Option<MinimumLibcVersion>,
 ) -> MarkerTree {
-    let python = implied_python_markers(filename);
+    let python = implied_python_markers(filename, MarkerPurpose::Coverage);
     let [glibc, musl] = implied_libc_markers(filename, python, minimum_libc_version);
     glibc.and(musl)
 }
@@ -994,7 +994,7 @@ pub(crate) fn available_libc_versions<'a>(
     // different libc requirements.
     let mut available = MinimumLibcVersion::default();
     for filename in filenames {
-        let markers = markers.and(implied_python_markers(filename));
+        let markers = markers.and(implied_python_markers(filename, MarkerPurpose::Diagnostic));
         for tag in filename.platform_tags() {
             if let Some(minimum) = MinimumLibcVersion::from_platform_tag(tag)
                 && !markers.is_disjoint(implied_platform_markers([tag]))
@@ -1189,11 +1189,19 @@ fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
     Some(Version::new(release))
 }
 
+#[derive(Clone, Copy)]
+enum MarkerPurpose {
+    /// Determine coverage and the markers used to fork the resolution.
+    Coverage,
+    /// Identify matching wheel tags within an existing fork.
+    Diagnostic,
+}
+
 /// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
 ///
 /// This is roughly the inverse of Python tag generation: given a tag, we want to infer the
 /// supported Python version (rather than generating the supported tags from a given Python version).
-fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
+fn implied_python_markers(filename: &WheelFilename, purpose: MarkerPurpose) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
 
     // If any ABI tag is a stable ABI (`abi3` or `abi3t`), the python tag represents a minimum
@@ -1276,37 +1284,32 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
             }
         };
 
-        // Then, add implementation markers for implementation-specific tags
-        match python_tag {
-            LanguageTag::None | LanguageTag::Python { .. } => {
-                // No implementation marker needed
-            }
+        let implementation = match python_tag {
+            LanguageTag::None | LanguageTag::Python { .. } => None,
             LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("CPython"),
-                }));
+                Some((arcstr::literal!("CPython"), arcstr::literal!("cpython")))
             }
-            LanguageTag::PyPy { .. } => {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("PyPy"),
-                }));
-            }
+            LanguageTag::PyPy { .. } => Some((arcstr::literal!("PyPy"), arcstr::literal!("pypy"))),
             LanguageTag::GraalPy { .. } => {
-                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
-                    operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("GraalPy"),
-                }));
+                Some((arcstr::literal!("GraalPy"), arcstr::literal!("graalpy")))
             }
             LanguageTag::Pyston { .. } => {
+                Some((arcstr::literal!("Pyston"), arcstr::literal!("pyston")))
+            }
+        };
+        if let Some((platform, name)) = implementation {
+            tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                key: MarkerValueString::PlatformPythonImplementation,
+                operator: MarkerOperator::Equal,
+                value: platform,
+            }));
+            // Match either spelling in the target without introducing another marker
+            // variable into resolution forks.
+            if let MarkerPurpose::Diagnostic = purpose {
                 tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
+                    key: MarkerValueString::ImplementationName,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("Pyston"),
+                    value: name,
                 }));
             }
         }
@@ -1336,7 +1339,7 @@ mod tests {
     fn assert_python_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_python_markers(&filename),
+            implied_python_markers(&filename, MarkerPurpose::Coverage),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1415,7 +1418,10 @@ mod tests {
     #[test]
     fn test_implied_python_markers() {
         let filename = WheelFilename::from_str("example-1.0-none-none-any.whl").unwrap();
-        assert_eq!(implied_python_markers(&filename), MarkerTree::TRUE);
+        assert_eq!(
+            implied_python_markers(&filename, MarkerPurpose::Coverage),
+            MarkerTree::TRUE
+        );
 
         assert_python_markers(
             "example-1.0-cp310-cp310-any.whl",
