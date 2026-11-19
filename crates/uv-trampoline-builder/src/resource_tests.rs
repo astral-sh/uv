@@ -7,7 +7,7 @@ use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::PathChild;
 use editpe::{Image, ResourceEntry, ResourceEntryName};
 use fs_err::File;
-use goblin::pe::PE;
+use goblin::pe::{PE, options::ParseOptions, utils::find_offset};
 use windows::Win32::System::LibraryLoader::{
     BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
 };
@@ -159,6 +159,75 @@ fn assert_other_resources_unchanged(
         }
     }
 
+    Ok(())
+}
+
+/// A PE resource size is untrusted even when the Windows loader accepts the image.
+#[test]
+fn oversized_resource_is_rejected() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let python_path = b"C:/Python312/python.exe";
+    let mut launcher = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_PYTHON_PATH, python_path),
+        ],
+    )?;
+    fs_err::write(path.path(), &launcher)?;
+    assert_eq!(
+        Launcher::try_from_path(path.path())?
+            .context("Missing launcher metadata")?
+            .python_path,
+        Path::new("C:/Python312/python.exe"),
+    );
+
+    let image = PE::parse(&launcher)?;
+    let header = image
+        .header
+        .optional_header
+        .context("Missing PE optional header")?;
+    let directory = header
+        .data_directories
+        .get_resource_table()
+        .context("Missing PE resource directory")?;
+    let resource_offset = find_offset(
+        usize::try_from(directory.virtual_address)?,
+        &image.sections,
+        header.windows_fields.file_alignment,
+        &ParseOptions::default(),
+    )
+    .context("Missing resource file offset")?;
+    let resources = &launcher[resource_offset..];
+    let rcdata = image
+        .resource_data
+        .context("Missing resource data")?
+        .entries()
+        .find_by_id(u16::try_from(RT_RCDATA)?)?
+        .context("Missing RCDATA entry")?;
+    // The resource writer orders names lexically, so the path precedes the kind.
+    let name = rcdata
+        .next_depth(resources)?
+        .context("Missing named resource")?;
+    let language = name
+        .next_depth(resources)?
+        .context("Missing resource language")?;
+    let entry_offset = resource_offset
+        + usize::try_from(
+            language
+                .offset_to_data()
+                .context("Missing resource data entry")?,
+        )?;
+    let size_offset = entry_offset + 4;
+    assert_eq!(
+        u32::from_le_bytes(launcher[size_offset..size_offset + 4].try_into()?) as usize,
+        python_path.len(),
+    );
+    launcher[size_offset..size_offset + 4].copy_from_slice(&0x10_0000_u32.to_le_bytes());
+    fs_err::write(path.path(), &launcher)?;
+
+    assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
 }
 
