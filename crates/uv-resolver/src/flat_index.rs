@@ -211,19 +211,10 @@ impl FlatDistributions {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
         }
 
-        // Check if hashes line up
-        let expected = hasher.hashes_for_package(&filename.name, &filename.version);
-        let hash = if let Some(expected) = expected {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hashes.iter().any(|hash| expected.contains(hash)) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        } else {
-            HashComparison::Matched
-        };
+        let hash = HashComparison::compare(
+            hasher.hashes_for_package(&filename.name, &filename.version),
+            hashes,
+        );
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -256,19 +247,10 @@ impl FlatDistributions {
             None => None,
         };
 
-        // Check if hashes line up.
-        let expected = hasher.hashes_for_package(&filename.name, &filename.version);
-        let hash = if let Some(expected) = expected {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hashes.iter().any(|hash| expected.contains(hash)) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        } else {
-            HashComparison::Matched
-        };
+        let hash = HashComparison::compare(
+            hasher.hashes_for_package(&filename.name, &filename.version),
+            hashes,
+        );
 
         WheelCompatibility::from_tag_priority(filename, hash, priority)
     }

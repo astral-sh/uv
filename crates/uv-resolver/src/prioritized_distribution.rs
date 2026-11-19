@@ -416,6 +416,19 @@ pub enum HashComparison {
     Matched,
 }
 
+impl HashComparison {
+    pub(crate) fn compare(expected: Option<&[HashDigest]>, advertised: &[HashDigest]) -> Self {
+        match expected {
+            None => Self::Matched,
+            Some(_) if advertised.is_empty() => Self::Missing,
+            Some(expected) if advertised.iter().any(|hash| expected.contains(hash)) => {
+                Self::Matched
+            }
+            Some(_) => Self::Mismatched,
+        }
+    }
+}
+
 impl PrioritizedDist {
     pub(crate) fn insert_variants_json(&mut self, variants_json: RegistryVariantsJson) {
         // A flat index can list the same metadata link more than once.

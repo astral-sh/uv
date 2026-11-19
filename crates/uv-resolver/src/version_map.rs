@@ -859,22 +859,12 @@ impl VersionMapLazy {
             return SourceDistCompatibility::Incompatible(IncompatibleSource::NotPep625Filename);
         }
 
-        // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let expected = self
-            .hasher
-            .hashes_for_package(&filename.name, &filename.version)
-            .filter(|hashes| !hashes.is_empty());
-        let hash = if let Some(expected) = expected {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hashes.iter().any(|hash| expected.contains(hash)) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        } else {
-            HashComparison::Matched
-        };
+        let hash = HashComparison::compare(
+            self.hasher
+                .hashes_for_package(&filename.name, &filename.version)
+                .filter(|hashes| !hashes.is_empty()),
+            hashes,
+        );
 
         SourceDistCompatibility::Compatible(hash)
     }
@@ -931,22 +921,12 @@ impl VersionMapLazy {
             None
         };
 
-        // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let expected = self
-            .hasher
-            .hashes_for_package(name, version)
-            .filter(|hashes| !hashes.is_empty());
-        let hash = if let Some(expected) = expected {
-            if hashes.is_empty() {
-                HashComparison::Missing
-            } else if hashes.iter().any(|hash| expected.contains(hash)) {
-                HashComparison::Matched
-            } else {
-                HashComparison::Mismatched
-            }
-        } else {
-            HashComparison::Matched
-        };
+        let hash = HashComparison::compare(
+            self.hasher
+                .hashes_for_package(name, version)
+                .filter(|hashes| !hashes.is_empty()),
+            hashes,
+        );
 
         WheelCompatibility::from_tag_priority(filename, hash, priority)
     }
