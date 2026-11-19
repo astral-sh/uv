@@ -18,7 +18,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: zizmorcore/zizmor-action@v0.8.0
+      - uses: zizmorcore/zizmor-action@v0.8.1
         env:
           PYTHONSAFEPATH: "1"
         with:
