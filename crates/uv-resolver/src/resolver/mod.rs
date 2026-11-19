@@ -166,6 +166,13 @@ struct ResolverState<InstalledPackages: InstalledPackagesProvider> {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
+/// A configured environment without wheel coverage and the part of it that needs this package.
+#[derive(Debug, Clone, Copy)]
+struct UncoveredEnvironment {
+    configured: MarkerTree,
+    required_in_fork: MarkerTree,
+}
+
 /// The result of checking a candidate version's wheel variants.
 #[derive(Default)]
 struct WheelVariantSelection<'a> {
@@ -1317,7 +1324,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         if let Dist::Built(wheel) = &dist
             && let Some(fork_markers) = env.fork_markers()
             && !self.options.artifact_environments.is_empty()
-            && let Some((marker, target)) = self.uncovered_environment(
+            && let Some(uncovered) = self.uncovered_environment(
                 implied_markers(wheel.wheel_filename(), self.options.minimum_libc_version),
                 fork_markers,
                 id,
@@ -1327,8 +1334,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(Some(ResolverVersion::Unavailable(
                 version.clone(),
                 self.missing_platform(
-                    marker,
-                    target,
+                    uncovered,
                     [(wheel.wheel_filename(), metadata.requires_python.as_ref())],
                 ),
             )));
@@ -1634,14 +1640,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     }
 
     /// Find the first configured environment that lacks artifact coverage in this fork.
-    /// Return its marker and the subset of the fork where the package is required.
     fn uncovered_environment(
         &self,
         artifact_markers: MarkerTree,
         fork_markers: MarkerTree,
         id: Id<PubGrubPackage>,
         pubgrub: &State<UvDependencyProvider>,
-    ) -> Option<(MarkerTree, MarkerTree)> {
+    ) -> Option<UncoveredEnvironment> {
         for marker in self.options.artifact_environments.iter().copied() {
             if fork_markers.is_disjoint(marker)
                 || !fork_markers.is_disjoint(artifact_markers.and(marker))
@@ -1650,7 +1655,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             }
             let required = find_environments(id, pubgrub).and(marker);
             if !fork_markers.is_disjoint(required) {
-                return Some((marker, required.and(fork_markers)));
+                return Some(UncoveredEnvironment {
+                    configured: marker,
+                    required_in_fork: required.and(fork_markers),
+                });
             }
         }
         None
@@ -1659,8 +1667,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
     /// Explain a coverage failure using wheels that match the required environment in this fork.
     fn missing_platform<'a>(
         &self,
-        marker: MarkerTree,
-        target: MarkerTree,
+        uncovered: UncoveredEnvironment,
         wheels: impl IntoIterator<Item = (&'a WheelFilename, Option<&'a VersionSpecifiers>)>,
     ) -> UnavailableVersion {
         let required_libc = self.options.minimum_libc_version.unwrap_or_default();
@@ -1669,11 +1676,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             available_libc_versions(
                 wheels,
-                target.and(self.python_requirement.diagnostic_marker()),
+                uncovered
+                    .required_in_fork
+                    .and(self.python_requirement.diagnostic_marker()),
             )
         };
         UnavailableVersion::MissingPlatform(MissingPlatform {
-            marker,
+            marker: uncovered.configured,
             required_libc,
             available_libc,
         })
@@ -1717,7 +1726,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        if let Some((marker, target)) =
+        if let Some(uncovered) =
             self.uncovered_environment(artifact_markers, fork_markers, id, pubgrub)
         {
             // Separate the required environment from the candidate's wheel coverage in
@@ -1725,11 +1734,12 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // For example, Darwin == 24 becomes Darwin < 25 when the wheels require
             // Darwin >= 25. This avoids introducing forks for unrelated wheel tags.
             let coverage = artifact_markers.and(fork_markers);
+            let marker = uncovered.configured;
             let split = marker.restrict(marker.or(coverage));
             let Some((left, right)) = fork_version_by_marker(env, split) else {
                 return Ok(Some(ResolverVersion::Unavailable(
                     candidate.version().clone(),
-                    self.missing_platform(marker, target, dist.compatible_wheels()),
+                    self.missing_platform(uncovered, dist.compatible_wheels()),
                 )));
             };
 
