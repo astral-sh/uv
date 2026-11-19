@@ -30,7 +30,7 @@ pub struct LibcVersion {
 }
 
 impl LibcVersion {
-    pub const fn new(major: u16, minor: u16) -> Self {
+    pub(crate) const fn new(major: u16, minor: u16) -> Self {
         Self { major, minor }
     }
 }
