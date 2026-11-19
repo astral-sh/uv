@@ -19,7 +19,7 @@ use std::{env, iter};
 use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
 use serde::{Deserialize, Deserializer};
 use tempfile::TempDir;
@@ -687,16 +687,27 @@ impl SourceBuild {
         }
 
         let document = toml_edit::Document::from_str(contents)?;
-        if document
+        let source_names: FxHashSet<_> = document
             .get("tool")
             .and_then(|tool| tool.get("uv"))
             .and_then(|uv| uv.get("sources"))
-            .is_some()
-        {
-            return Ok(None);
-        }
+            .and_then(toml_edit::Item::as_table_like)
+            .into_iter()
+            .flat_map(|sources| sources.iter())
+            .filter_map(|(name, _)| PackageName::from_str(name).ok())
+            .collect();
         let declaration = Declaration::deserialize(document.into_deserializer())?;
         match declaration.build_system {
+            // Published archives need not contain the entire development workspace. Only
+            // discover it when a build requirement itself uses one of the source mappings.
+            Some(system)
+                if system
+                    .requires
+                    .iter()
+                    .any(|req| source_names.contains(&req.name)) =>
+            {
+                Ok(None)
+            }
             Some(system) => Ok(Some((
                 system
                     .build_backend
@@ -1508,5 +1519,28 @@ mod tests {
         assert_eq!(backend, "flit_core.buildapi");
         assert_eq!(requires.len(), 1);
         assert_eq!(requires[0].name.as_str(), "flit-core");
+    }
+
+    #[test]
+    fn only_discover_archive_workspace_for_mapped_build_requirements() {
+        let project = r#"
+            [build-system]
+            requires = ["flit-core"]
+
+            [tool.uv.sources]
+            runtime-client = { workspace = true }
+
+            [tool.uv.workspace]
+            members = ["packages/runtime-client"]
+        "#;
+        assert!(matches!(
+            SourceBuild::archive_build_system(project),
+            Ok(Some(_))
+        ));
+        let mapped_backend = project.replace("runtime-client =", "Flit_Core =");
+        assert!(matches!(
+            SourceBuild::archive_build_system(&mapped_backend),
+            Ok(None)
+        ));
     }
 }
