@@ -4066,6 +4066,7 @@ fn preview_features() {
     +            WheelVariants,
     +            Http2KeepAlive,
     +            ProxyIndex,
+    +            LockBuildDependencies,
     +        ],
          },
          python_preference: Managed,

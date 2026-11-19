@@ -96,32 +96,32 @@ hashes. uv also does not recheck already-installed packages or previously built 
 
 ## Locking build dependencies
 
-Run `uv lock --preview-features lock-build-dependencies` to include build dependencies in
-`uv.lock`. Review the resulting diff just as you would for a runtime dependency update. Subsequent
-syncs recognize the setting in the lockfile, even without the preview flag. Use a version of uv
-that supports this preview on every machine that installs from the lockfile. Review build-only
-packages directly in the diff: `uv audit` follows the runtime dependency graph.
+Run `uv lock --preview-features lock-build-dependencies` to include build dependencies in `uv.lock`.
+Review the resulting diff just as you would for a runtime dependency update. Subsequent syncs
+recognize the setting in the lockfile, even without the preview flag. Use a version of uv that
+supports this preview on every machine that installs from the lockfile. Review build-only packages
+directly in the diff: `uv audit` follows the runtime dependency graph.
 
 When uv needs to build a package, it follows the locked dependencies for that package's isolated
 build environment. For example, a project can run with version 1 of a library while its build
-backend uses version 2. Both versions are recorded, but syncing the project doesn't install the build
-backend into the project environment. A `build-dependencies-universe` entry selects which set of
-edges to follow when the **same** backend version has different transitive dependencies.
+backend uses version 2. Both versions are recorded, but syncing the project doesn't install the
+build backend into the project environment. A `build-dependencies-universe` entry selects which set
+of edges to follow when the **same** backend version has different transitive dependencies.
 
 If a package is used only on Python 3.12 and later, its backend only needs to resolve for those
-Python versions, even through another build dependency. uv keeps these Python version markers
-when grouping builds. Other markers, such as
-`sys_platform`, don't affect grouping, but still apply when selecting packages for a build. If
-the group can't share a resolution, uv retries the builds separately.
+Python versions, even through another build dependency. uv keeps these Python version markers when
+grouping builds. Other markers, such as `sys_platform`, don't affect grouping, but still apply when
+selecting packages for a build. If the group can't share a resolution, uv retries the builds
+separately.
 
 uv includes the requirements in `build-system.requires` and any configured
 [`extra-build-dependencies`](./config.md#augmenting-build-dependencies). If the backend requests a
 package outside its locked environment, the build fails. Add a known requirement to
 `extra-build-dependencies` and update the lock before retrying.
 
-Locking can take longer: uv may need the source archive even for a package normally installed from
-a wheel. Generating or updating a lock can still execute build backends to obtain package metadata.
-A locked build is not a sandbox: a backend can run arbitrary code. uv can also reuse a cached wheel
+Locking can take longer: uv may need the source archive even for a package normally installed from a
+wheel. Generating or updating a lock can still execute build backends to obtain package metadata. A
+locked build is not a sandbox: a backend can run arbitrary code. uv can also reuse a cached wheel
 built with different build dependencies, and does not manage packages in a non-isolated build
 environment.
 
