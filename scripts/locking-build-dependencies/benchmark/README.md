@@ -38,3 +38,7 @@ The inventory runner shares each side's cache across parallel pairs (8 by defaul
 one pair at a time. Contention affects individual timings; compare distributions across equivalent
 runs, not individual timings across different concurrency settings. Interrupted runs can be rendered
 with `python report.py path/to/data`; the page reports how many inputs actually completed.
+
+For named runs, each successful lock is followed immediately by `uv lock --check --offline`
+against the same cache. Its elapsed time, exit status, and any diagnostic are recorded separately
+in the `offline_check` field and shown alongside the ordinary lock timings in the report.

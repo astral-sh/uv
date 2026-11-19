@@ -46,6 +46,34 @@ def histogram(values, title, unit):
       <small>One bar per band; band widths differ. Tallest bar: {max(bins):,} pairs.</small></figure>"""
 
 
+def offline_checks(rows):
+    def cell(check):
+        if check is None:
+            return "not run"
+        milliseconds = check["seconds"] * 1000
+        if check["exit"] != 0:
+            error = check.get("error") or f"Process exited with status {check['exit']}"
+            return f"<details><summary>failed, {milliseconds:.0f} ms</summary><pre>{escape(error)}</pre></details>"
+        return f"OK, {milliseconds:.0f} ms"
+
+    checks = []
+    for row in sorted(rows, key=lambda r: r["name"]):
+        values = [row[side].get("offline_check") for side in ("baseline", "candidate")]
+        if any(values):
+            checks.append(
+                f"<tr><th>{escape(row['name'])}</th><td>{cell(values[0])}</td><td>{cell(values[1])}</td></tr>"
+            )
+    if not checks:
+        return ""
+    return f"""
+    <h2>Rechecking an unchanged lock without the network</h2>
+    <p>Immediately after each successful lock, the same binary ran
+    <code>uv lock --check --offline</code> on its own lockfile with its cache still populated.
+    These checks are timed separately and excluded from the resolution chart above.</p>
+    <div class="scroll"><table><thead><tr><th>Workload</th><th>Baseline</th><th>Candidate</th></tr></thead>
+    <tbody>{"".join(checks)}</tbody></table></div>"""
+
+
 def render(directory):
     meta = json.loads((directory / "method.json").read_text())
     with (directory / "results.jsonl").open() as stream:
@@ -111,7 +139,7 @@ summary{{cursor:pointer}} details{{margin:.5rem 0}}
 <h1>What build dependency locking costs</h1>
 <p><b>{len(pairs):,} of {len(rows):,}</b> measured workloads locked successfully with both binaries
 ({meta["inputs"]:,} scheduled; {meta["jobs"]} concurrent pairs).
-{summary} These single-run wall times include network traffic. No source distributions were built.</p>
+{summary} These single-run wall times include network traffic. {"Source builds were disabled." if meta["no_build"] else "Source builds were permitted only in isolated, unprivileged containers."}</p>
 <div class="charts">{histogram(deltas, "Added lock time", "seconds")}{histogram(relative, "Relative change", "%")}</div>
 {"<p><b>Run in progress.</b> Shorter locks can finish first; these partial distributions need not represent all scheduled workloads.</p>" if len(rows) < meta["inputs"] else ""}
 <h2>Where the lock changed</h2>
@@ -121,6 +149,7 @@ entries, so implicit, unambiguous build requirements do not inflate that number.
 <div class="scroll"><table><thead><tr><th>Workload</th><th>Seconds, base → build lock</th><th>Δ s</th><th>Δ %</th>
 <th>Lockfile bytes</th><th>Packages +/−</th><th>Edges</th></tr></thead>
 <tbody>{"".join(table_row(r) for r in shown)}</tbody></table></div>
+{offline_checks(rows)}
 <h2>Unpaired results ({len(failed):,})</h2>
 <p>Only baseline succeeded: {len(failed) - baseline_failed:,}.
 Only candidate succeeded: {len(failed) - candidate_failed:,}.

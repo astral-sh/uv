@@ -80,35 +80,50 @@ def measure(binary, python, requirements, cache, cutoff, candidate, keep, timeou
         env.update(
             UV_CONCURRENT_DOWNLOADS="4", RAYON_NUM_THREADS="1", TOKIO_WORKER_THREADS="1"
         )
-        start = time.perf_counter()
-        try:
-            proc = subprocess.run(
-                command, cwd=root, env=env, capture_output=True, timeout=timeout
-            )
-        except subprocess.TimeoutExpired:
-            return {"error": f"timed out after {timeout} seconds"}, set()
-        elapsed = time.perf_counter() - start
-        if proc.returncode:
-            message = (
-                proc.stderr.decode(errors="replace")
-                .replace(tmp, "[project]")
-                .replace(str(cache), "[cache]")
-                .replace(str(python), "[python]")
-            )
-            # No machine-specific Python paths in the report.
-            message = "\n".join(
-                line for line in message.splitlines() if not line.startswith("Using ")
-            )
-            return {"seconds": elapsed, "error": message[-1000:]}, set()
+
+        def timed_lock(*flags):
+            start = time.perf_counter()
+            try:
+                proc = subprocess.run(
+                    [*command, *flags],
+                    cwd=root,
+                    env=env,
+                    capture_output=True,
+                    timeout=timeout,
+                )
+            except subprocess.TimeoutExpired:
+                return {
+                    "seconds": time.perf_counter() - start,
+                    "exit": None,
+                    "error": f"timed out after {timeout} seconds",
+                }
+            result = {"seconds": time.perf_counter() - start, "exit": proc.returncode}
+            if proc.returncode:
+                message = (
+                    proc.stderr.decode(errors="replace")
+                    .replace(tmp, "[project]")
+                    .replace(str(cache), "[cache]")
+                    .replace(str(python), "[python]")
+                )
+                result["error"] = "\n".join(
+                    line
+                    for line in message.splitlines()
+                    if not line.startswith("Using ")
+                )[-1000:]
+            return result
+
+        result = timed_lock()
+        if "error" in result:
+            return result, set()
         data = (root / "uv.lock").read_bytes()
         lock = tomllib.loads(data.decode())
         if bool(lock.get("lock-build-dependencies")) != candidate:
             raise RuntimeError("Binary did not write the expected lock mode")
         if keep:
             keep.write_bytes(data)
+            result["offline_check"] = timed_lock("--check", "--offline")
         packages = package_ids(lock)
-        return {
-            "seconds": elapsed,
+        return result | {
             "bytes": len(data),
             "packages": len(packages),
             "nodes": len(lock["package"]),
