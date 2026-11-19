@@ -66,6 +66,7 @@ Ok(
                         ),
                     ),
                 },
+                build: None,
                 sdist: None,
                 wheels: [
                     Wheel {
@@ -112,6 +113,7 @@ Ok(
                 },
             },
         ],
+        build: None,
         by_id: {
             PackageId {
                 name: PackageName(
