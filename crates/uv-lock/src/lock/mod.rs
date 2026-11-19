@@ -8027,7 +8027,9 @@ impl PackageIdForDependency {
                 source.unwrap_or_else(|| package_id.source.clone()),
             ),
             // An explicit ID needs no inference. Source trees can have dynamic versions.
-            (_, Some(source)) if self.version.is_some() || source.is_source_tree() => {
+            (None | Some(None), Some(source))
+                if self.version.is_some() || source.is_source_tree() =>
+            {
                 (self.version, source)
             }
             (None, _) => {
