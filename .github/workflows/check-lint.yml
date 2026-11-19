@@ -45,16 +45,12 @@ jobs:
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: auto
-      # `uv check` checks the entire repository; keep this scoped to the Python package.
-      - run: uv run --only-group check ty check python/uv
-      - name: "Check scrolls"
-        env:
-          # TODO: Remove once ty infers Python versions from script environments instead of the root project.
-          TY_CONFIG_FILE: /dev/null
-          UV_PREVIEW_FEATURES: check-command,workspace-list-scripts
+      - name: "typecheck"
         run: |
           set -e -o pipefail
-          uv workspace list --scripts |
+          uv check --only-group check
+
+          uv workspace list --scripts --preview-features workspace-list-scripts |
           while IFS= read -r script; do
             printf 'Checking %s\n' "$script" >&2
             uv check --script "$script" --locked
@@ -237,4 +233,4 @@ jobs:
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: auto
-      - run: uv run --only-group check typos
+      - run: uv run --only-group typos typos
