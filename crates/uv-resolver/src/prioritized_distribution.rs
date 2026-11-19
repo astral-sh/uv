@@ -1088,9 +1088,9 @@ impl Display for MissingPlatform {
             f.write_str("no compatible wheels")?;
         }
         let required = self.required_libc.unwrap_or_default();
-        let (family, tag, version) = match (required.glibc, required.musl) {
-            (Some(version), None) => ("glibc", "manylinux", version),
-            (None, Some(version)) => ("musl", "musllinux", version),
+        let (family, tag, other_tag, version) = match (required.glibc, required.musl) {
+            (Some(version), None) => ("glibc", "manylinux", "musllinux", version),
+            (None, Some(version)) => ("musl", "musllinux", "manylinux", version),
             (Some(glibc), Some(musl)) => {
                 return write!(
                     f,
@@ -1103,7 +1103,12 @@ impl Display for MissingPlatform {
             f,
             " that satisfy `minimum-libc-version` for {family} {version}"
         )?;
-        if let Some(minimum) = self.shared_minimum {
+        if !self.family_matches {
+            write!(
+                f,
+                " (uv matched only {other_tag} tags for this environment)"
+            )?;
+        } else if let Some(minimum) = self.shared_minimum {
             write!(
                 f,
                 " (the {tag} wheels are tagged for {family} {minimum} or newer)"
