@@ -789,8 +789,20 @@ impl From<HashDigest> for Hashes {
 
 impl From<HashDigests> for Hashes {
     fn from(value: HashDigests) -> Self {
+        value.into_iter().collect()
+    }
+}
+
+impl From<&HashDigests> for Hashes {
+    fn from(value: &HashDigests) -> Self {
+        value.iter().cloned().collect()
+    }
+}
+
+impl FromIterator<HashDigest> for Hashes {
+    fn from_iter<T: IntoIterator<Item = HashDigest>>(iter: T) -> Self {
         let mut hashes = Self::default();
-        for digest in value {
+        for digest in iter {
             hashes.insert(digest);
         }
         hashes

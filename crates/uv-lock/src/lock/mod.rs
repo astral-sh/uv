@@ -10913,21 +10913,6 @@ fn is_wheel_unreachable_for_marker(
     false
 }
 
-pub(crate) fn is_wheel_unreachable(
-    filename: &WheelFilename,
-    graph: &ResolverOutput,
-    requires_python: &RequiresPython,
-    node_index: NodeIndex,
-    tags: Option<&Tags>,
-) -> bool {
-    is_wheel_unreachable_for_marker(
-        filename,
-        requires_python,
-        graph.graph[node_index].marker(),
-        tags,
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use std::slice;
