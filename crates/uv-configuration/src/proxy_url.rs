@@ -21,8 +21,15 @@ pub enum ProxyUrlKind {
 }
 
 impl ProxyUrl {
+    /// Returns the underlying [`SafeUrl`] for display and diagnostic messages.
+    pub fn to_safe_url(&self) -> SafeUrl {
+        self.0
+            .clone()
+            .with_policy(uv_redacted::policy::Unserializable)
+    }
+
     /// Returns a reference to the underlying URL.
-    fn as_url(&self) -> &SafeUrl<Raw> {
+    pub fn as_url(&self) -> &SafeUrl<Raw> {
         &self.0
     }
 

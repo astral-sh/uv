@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 use async_http_range_reader::AsyncHttpRangeReaderError;
@@ -14,6 +15,7 @@ use crate::base_client::CertificateSource;
 use crate::middleware::OfflineError;
 use crate::{FlatIndexError, html};
 use uv_cache::Error as CacheError;
+use uv_configuration::ProxyUrl;
 use uv_distribution_filename::{WheelFilename, WheelFilenameError};
 use uv_distribution_types::{IndexUrl, ProxyIndexError};
 use uv_errors::{Hinted, Hints};
@@ -22,6 +24,7 @@ use uv_macros::DebugNoInline;
 use uv_normalize::PackageName;
 use uv_pypi_types::HashDigest;
 use uv_redacted::SafeUrl;
+use uv_static::EnvVars;
 
 /// RFC 9457 Problem Details for HTTP APIs
 ///
@@ -250,6 +253,7 @@ impl Error {
         err: reqwest_middleware::Error,
         start: Instant,
         certificate_source: CertificateSource,
+        proxy_url: Option<SafeUrl>,
     ) -> Self {
         if let reqwest_middleware::Error::Middleware(ref underlying) = err {
             if let Some(offline_err) = underlying.downcast_ref::<OfflineError>() {
@@ -262,7 +266,9 @@ impl Error {
                 return Self::new(
                     ErrorKind::WrappedReqwestError(
                         url,
-                        WrappedReqwestError::from(err).with_certificate_source(certificate_source),
+                        WrappedReqwestError::from(err)
+                            .with_certificate_source(certificate_source)
+                            .with_proxy(proxy_url),
                     ),
                     retries,
                     start.elapsed(),
@@ -271,7 +277,9 @@ impl Error {
         }
         Self::from(ErrorKind::WrappedReqwestError(
             url,
-            WrappedReqwestError::from(err).with_certificate_source(certificate_source),
+            WrappedReqwestError::from(err)
+                .with_certificate_source(certificate_source)
+                .with_proxy(proxy_url),
         ))
     }
 
@@ -414,6 +422,14 @@ impl Error {
             ErrorKind::Zip(_, ZipError::FeatureNotSupported(_))
         )
     }
+
+    /// Return whether this error was caused by a failure connecting to or through a proxy.
+    pub fn is_proxy_connect_error(&self) -> bool {
+        matches!(
+            &*self.kind,
+            ErrorKind::WrappedReqwestError(_, err) if err.proxy_connect_error().is_some()
+        )
+    }
 }
 
 impl Hinted for Error {
@@ -423,6 +439,10 @@ impl Hinted for Error {
                 "Consider enabling use of system TLS certificates with the `{}` command-line flag",
                 "--system-certs".green()
             ))
+        } else if self.is_proxy_connect_error() {
+            Hints::from(
+                "Check that your proxy settings (e.g., `HTTP_PROXY`, `HTTPS_PROXY`) are correct and the proxy is reachable",
+            )
         } else {
             Hints::none()
         }
@@ -574,10 +594,13 @@ impl ErrorKind {
         url: SafeUrl,
         error: reqwest::Error,
         certificate_source: CertificateSource,
+        proxy_url: Option<SafeUrl>,
     ) -> Self {
         Self::WrappedReqwestError(
             url,
-            WrappedReqwestError::from(error).with_certificate_source(certificate_source),
+            WrappedReqwestError::from(error)
+                .with_certificate_source(certificate_source)
+                .with_proxy(proxy_url),
         )
     }
 
@@ -586,10 +609,12 @@ impl ErrorKind {
         url: SafeUrl,
         error: reqwest::Error,
         problem_details: Option<ProblemDetails>,
+        proxy_url: Option<SafeUrl>,
     ) -> Self {
         Self::WrappedReqwestError(
             url,
-            WrappedReqwestError::with_problem_details(error.into(), problem_details),
+            WrappedReqwestError::with_problem_details(error.into(), problem_details)
+                .with_proxy(proxy_url),
         )
     }
 }
@@ -602,6 +627,7 @@ impl ErrorKind {
 #[derive(Debug)]
 pub struct WrappedReqwestError {
     error: reqwest_middleware::Error,
+    proxy_url: Option<SafeUrl>,
     context: Option<Box<WrappedReqwestErrorContext>>,
 }
 
@@ -619,6 +645,54 @@ impl WrappedReqwestError {
             .is_some_and(|status| status == reqwest::StatusCode::NOT_FOUND)
     }
 
+    /// Returns the specific proxy tunnel or SOCKS error message if the failure was caused by
+    /// an error connecting to or through a proxy.
+    pub fn proxy_connect_error(&self) -> Option<String> {
+        let reqwest_err = self.inner()?;
+        if !reqwest_err.is_connect() {
+            return None;
+        }
+        let mut curr = std::error::Error::source(reqwest_err);
+        while let Some(err) = curr {
+            let err_str = err.to_string();
+            if let Some(msg) = err_str.strip_prefix("tunnel error: ") {
+                return Some(msg.to_string());
+            }
+            if let Some(msg) = err_str.strip_prefix("SOCKS error: ") {
+                return Some(msg.to_string());
+            }
+            curr = err.source();
+        }
+        None
+    }
+
+    /// Return the proxy URL associated with this error, if known or resolvable from environment.
+    pub fn proxy_url(&self) -> Option<SafeUrl> {
+        if let Some(proxy_url) = &self.proxy_url {
+            return Some(proxy_url.clone());
+        }
+        if self.proxy_connect_error().is_some() {
+            if let Ok(proxy_str) = std::env::var(EnvVars::HTTPS_PROXY)
+                .or_else(|_| std::env::var("https_proxy"))
+                .or_else(|_| std::env::var(EnvVars::HTTP_PROXY))
+                .or_else(|_| std::env::var("http_proxy"))
+                .or_else(|_| std::env::var(EnvVars::ALL_PROXY))
+                .or_else(|_| std::env::var("all_proxy"))
+            {
+                if let Ok(proxy_url) = ProxyUrl::from_str(&proxy_str) {
+                    return Some(proxy_url.to_safe_url());
+                }
+            }
+        }
+        None
+    }
+
+    #[must_use]
+    pub fn with_proxy(mut self, proxy_url: Option<SafeUrl>) -> Self {
+        self.proxy_url = proxy_url;
+        self
+    }
+
     /// Create a new `WrappedReqwestError` with optional problem details
     pub fn with_problem_details(
         error: reqwest_middleware::Error,
@@ -626,6 +700,7 @@ impl WrappedReqwestError {
     ) -> Self {
         Self {
             error: Self::filter_retries_from_error(error),
+            proxy_url: None,
             context: problem_details
                 .map(WrappedReqwestErrorContext::ProblemDetails)
                 .map(Box::new),
@@ -695,6 +770,9 @@ impl WrappedReqwestError {
     /// * dns error: failed to lookup address information: Name or service not known
     /// * failed to lookup address information: Name or service not known
     fn is_likely_offline(&self) -> bool {
+        if self.proxy_connect_error().is_some() {
+            return false;
+        }
         if let Some(reqwest_err) = self.inner() {
             if !reqwest_err.is_connect() {
                 return false;
@@ -738,6 +816,7 @@ impl From<reqwest::Error> for WrappedReqwestError {
         Self {
             // No need to filter retries as this error does not have retries.
             error: error.into(),
+            proxy_url: None,
             context: None,
         }
     }
@@ -747,6 +826,7 @@ impl From<reqwest_middleware::Error> for WrappedReqwestError {
     fn from(error: reqwest_middleware::Error) -> Self {
         Self {
             error: Self::filter_retries_from_error(error),
+            proxy_url: None,
             context: None,
         }
     }
@@ -762,7 +842,13 @@ impl Deref for WrappedReqwestError {
 
 impl Display for WrappedReqwestError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.is_likely_offline() {
+        if let Some(proxy_err) = self.proxy_connect_error() {
+            if let Some(proxy_url) = self.proxy_url() {
+                write!(f, "Failed to connect to proxy `{proxy_url}`: {proxy_err}")
+            } else {
+                write!(f, "Failed to connect to proxy: {proxy_err}")
+            }
+        } else if self.is_likely_offline() {
             // Insert an extra hint, we'll show the wrapped error through `source`
             f.write_str("Could not connect, are you offline?")
         } else if let Some(WrappedReqwestErrorContext::ProblemDetails(problem_details)) =
@@ -782,7 +868,7 @@ impl Display for WrappedReqwestError {
 
 impl std::error::Error for WrappedReqwestError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        if self.is_likely_offline() {
+        if self.proxy_connect_error().is_some() || self.is_likely_offline() {
             // `Display` is inserting an extra message, so we need to show the wrapped error
             Some(&self.error)
         } else if matches!(

@@ -223,7 +223,12 @@ impl<'a> FlatIndexClient<'a> {
             .header("Accept", "text/html")
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                ErrorKind::from_reqwest(
+                    url.clone(),
+                    err,
+                    self.client.certificate_source(),
+                    self.client.proxy_for_url(url),
+                )
             })?;
         let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
@@ -232,7 +237,12 @@ impl<'a> FlatIndexClient<'a> {
                 let url = SafeUrl::from_url(response.url().clone());
 
                 let text = response.text().await.map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    ErrorKind::from_reqwest(
+                        url.clone(),
+                        err,
+                        self.client.certificate_source(),
+                        self.client.proxy_for_url(&url),
+                    )
                 })?;
                 let unarchived = Self::parse_html(&text, &url)
                     .map_err(|err| Error::from_html_err(err, url.clone()))?;

@@ -225,6 +225,10 @@ impl CachedClient {
         &self.0
     }
 
+    pub(crate) fn proxy_for_url(&self, url: &SafeUrl) -> Option<SafeUrl> {
+        self.0.proxy_for_url(url)
+    }
+
     pub(crate) fn certificate_source(&self) -> CertificateSource {
         self.0.certificate_source()
     }
@@ -617,7 +621,13 @@ impl CachedClient {
             .instrument(info_span!("revalidation_request", url = %url))
             .await
             .map_err(|err| {
-                Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+                Error::from_reqwest_middleware(
+                    url.clone(),
+                    err,
+                    start,
+                    self.certificate_source(),
+                    self.proxy_for_url(&url),
+                )
             })?;
         trace!(
             "Received response for revalidation request with status {} for: {}",
@@ -633,8 +643,14 @@ impl CachedClient {
 
         if let Err(status_error) = response.error_for_status_ref() {
             let problem_details = ProblemDetails::try_from_response(response).await;
+            let proxy_url = self.proxy_for_url(&url);
             return Err(Error::new(
-                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                ErrorKind::from_reqwest_with_problem_details(
+                    url,
+                    status_error,
+                    problem_details,
+                    proxy_url,
+                ),
                 retry_count.unwrap_or_default(),
                 start.elapsed(),
             ));
@@ -682,7 +698,13 @@ impl CachedClient {
         let cache_policy_builder = CachePolicyBuilder::new(&req);
         let start = Instant::now();
         let mut response = self.0.execute(req).await.map_err(|err| {
-            Error::from_reqwest_middleware(url.clone(), err, start, self.certificate_source())
+            Error::from_reqwest_middleware(
+                url.clone(),
+                err,
+                start,
+                self.certificate_source(),
+                self.proxy_for_url(&url),
+            )
         })?;
         trace!(
             "Received response for fresh request with status {} for: {}",
@@ -704,8 +726,14 @@ impl CachedClient {
 
         if let Err(status_error) = response.error_for_status_ref() {
             let problem_details = ProblemDetails::try_from_response(response).await;
+            let proxy_url = self.proxy_for_url(&url);
             return Err(Error::new(
-                ErrorKind::from_reqwest_with_problem_details(url, status_error, problem_details),
+                ErrorKind::from_reqwest_with_problem_details(
+                    url,
+                    status_error,
+                    problem_details,
+                    proxy_url,
+                ),
                 retry_count.unwrap_or_default(),
                 start.elapsed(),
             ));

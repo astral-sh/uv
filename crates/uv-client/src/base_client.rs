@@ -14,6 +14,7 @@ use reqwest::{Certificate, Client, ClientBuilder, NoProxy, Proxy, Request, Respo
 use reqwest_middleware::{ClientWithMiddleware, Middleware};
 use reqwest_retry::Jitter;
 use reqwest_retry::policies::ExponentialBackoff;
+use std::str::FromStr;
 use thiserror::Error;
 use tracing::{debug, warn};
 use url::ParseError;
@@ -497,6 +498,42 @@ impl<'a> BaseClientBuilder<'a> {
             );
         }
 
+        if let Some(http_proxy) = &self.http_proxy {
+            debug!("Using HTTP proxy: {http_proxy}");
+        } else if let Ok(proxy_str) =
+            std::env::var(EnvVars::HTTP_PROXY).or_else(|_| std::env::var("http_proxy"))
+        {
+            let display_proxy = ProxyUrl::from_str(&proxy_str)
+                .map_or_else(|_| proxy_str.clone(), |p| p.to_string());
+            debug!("Using HTTP proxy from environment: {display_proxy}");
+        }
+
+        if let Some(https_proxy) = &self.https_proxy {
+            debug!("Using HTTPS proxy: {https_proxy}");
+        } else if let Ok(proxy_str) =
+            std::env::var(EnvVars::HTTPS_PROXY).or_else(|_| std::env::var("https_proxy"))
+        {
+            let display_proxy = ProxyUrl::from_str(&proxy_str)
+                .map_or_else(|_| proxy_str.clone(), |p| p.to_string());
+            debug!("Using HTTPS proxy from environment: {display_proxy}");
+        }
+
+        if let Ok(proxy_str) =
+            std::env::var(EnvVars::ALL_PROXY).or_else(|_| std::env::var("all_proxy"))
+        {
+            let display_proxy = ProxyUrl::from_str(&proxy_str)
+                .map_or_else(|_| proxy_str.clone(), |p| p.to_string());
+            debug!("Using ALL proxy from environment: {display_proxy}");
+        }
+
+        if let Some(no_proxy) = &self.no_proxy {
+            debug!("Using no-proxy: {}", no_proxy.join(","));
+        } else if let Ok(no_proxy_str) =
+            std::env::var(EnvVars::NO_PROXY).or_else(|_| std::env::var("no_proxy"))
+        {
+            debug!("Using no-proxy from environment: {no_proxy_str}");
+        }
+
         // Use the custom client if provided, otherwise create a new one
         let (raw_client, raw_dangerous_client, certificate_source) = match &self.custom_client {
             Some(client) => (client.clone(), client.clone(), CertificateSource::Unknown),
@@ -531,6 +568,9 @@ impl<'a> BaseClientBuilder<'a> {
             credentials_cache: self.credentials_cache.clone(),
             certificate_source,
             cache_read_runtime: self.cache_read_runtime.clone(),
+            http_proxy: self.http_proxy.clone(),
+            https_proxy: self.https_proxy.clone(),
+            no_proxy: self.no_proxy.clone(),
         })
     }
 
@@ -562,6 +602,9 @@ impl<'a> BaseClientBuilder<'a> {
             credentials_cache: existing.credentials_cache.clone(),
             certificate_source: existing.certificate_source,
             cache_read_runtime: self.cache_read_runtime.clone(),
+            http_proxy: existing.http_proxy.clone(),
+            https_proxy: existing.https_proxy.clone(),
+            no_proxy: existing.no_proxy.clone(),
         }
     }
 
@@ -790,6 +833,12 @@ pub struct BaseClient {
     certificate_source: CertificateSource,
     /// A shared, dedicated blocking pool for short-lived cache reads.
     cache_read_runtime: Arc<CacheReadRuntime>,
+    /// Optional HTTP proxy URL configured for this client.
+    http_proxy: Option<ProxyUrl>,
+    /// Optional HTTPS proxy URL configured for this client.
+    https_proxy: Option<ProxyUrl>,
+    /// Optional `NO_PROXY` entries configured for this client.
+    no_proxy: Option<Vec<String>>,
 }
 
 /// The certificate roots used by a [`BaseClient`].
@@ -816,6 +865,64 @@ enum Security {
 impl BaseClient {
     pub(crate) fn cache_read_runtime(&self) -> &tokio::runtime::Runtime {
         self.cache_read_runtime.get()
+    }
+
+    /// Return the proxy URL that applies to the given destination URL, if any.
+    pub fn proxy_for_url(&self, url: &SafeUrl) -> Option<SafeUrl> {
+        let no_proxy_matched = if let Some(no_proxy) = &self.no_proxy {
+            is_no_proxy(no_proxy, url)
+        } else if let Ok(no_proxy_str) =
+            std::env::var(EnvVars::NO_PROXY).or_else(|_| std::env::var("no_proxy"))
+        {
+            let entries = vec![no_proxy_str];
+            is_no_proxy(&entries, url)
+        } else {
+            false
+        };
+
+        if no_proxy_matched {
+            return None;
+        }
+
+        let scheme = url.scheme();
+        if scheme == "https" {
+            if let Some(proxy) = &self.https_proxy {
+                return Some(proxy.to_safe_url());
+            }
+            if let Ok(proxy_str) = std::env::var(EnvVars::HTTPS_PROXY)
+                .or_else(|_| std::env::var("https_proxy"))
+                .or_else(|_| std::env::var(EnvVars::ALL_PROXY))
+                .or_else(|_| std::env::var("all_proxy"))
+            {
+                if let Ok(proxy_url) = ProxyUrl::from_str(&proxy_str) {
+                    return Some(proxy_url.to_safe_url());
+                }
+            }
+            if let Some(proxy) = &self.http_proxy {
+                return Some(proxy.to_safe_url());
+            }
+            if let Ok(proxy_str) =
+                std::env::var(EnvVars::HTTP_PROXY).or_else(|_| std::env::var("http_proxy"))
+            {
+                if let Ok(proxy_url) = ProxyUrl::from_str(&proxy_str) {
+                    return Some(proxy_url.to_safe_url());
+                }
+            }
+        } else if scheme == "http" {
+            if let Some(proxy) = &self.http_proxy {
+                return Some(proxy.to_safe_url());
+            }
+            if let Ok(proxy_str) = std::env::var(EnvVars::HTTP_PROXY)
+                .or_else(|_| std::env::var("http_proxy"))
+                .or_else(|_| std::env::var(EnvVars::ALL_PROXY))
+                .or_else(|_| std::env::var("all_proxy"))
+            {
+                if let Ok(proxy_url) = ProxyUrl::from_str(&proxy_str) {
+                    return Some(proxy_url.to_safe_url());
+                }
+            }
+        }
+        None
     }
 
     /// Selects the appropriate client based on the host's trustworthiness.
@@ -877,6 +984,40 @@ impl BaseClient {
     pub fn raw_client(&self) -> &Client {
         &self.raw_client
     }
+}
+
+/// Returns `true` if the destination URL matches any of the `no_proxy` rules.
+fn is_no_proxy(no_proxy_entries: &[String], url: &SafeUrl) -> bool {
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    let host_lower = host.to_ascii_lowercase();
+    for entry in no_proxy_entries {
+        for pattern in entry.split(',') {
+            let pattern = pattern.trim();
+            if pattern.is_empty() {
+                continue;
+            }
+            if pattern == "*" {
+                return true;
+            }
+            let pattern_lower = pattern.to_ascii_lowercase();
+            let domain_pattern = pattern_lower.strip_prefix('.').unwrap_or(&pattern_lower);
+            if host_lower == domain_pattern {
+                return true;
+            }
+            if host_lower.ends_with(&format!(".{domain_pattern}")) {
+                return true;
+            }
+            if let Some(port) = url.port() {
+                let host_port = format!("{host_lower}:{port}");
+                if host_port == pattern_lower {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Wrapper around [`ClientWithMiddleware`] that manages redirects.

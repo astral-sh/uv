@@ -698,7 +698,12 @@ impl RegistryClient {
             .header("Accept", MediaType::pypi())
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                ErrorKind::from_reqwest(
+                    url.clone(),
+                    err,
+                    self.client.certificate_source(),
+                    self.client.proxy_for_url(url),
+                )
             })?;
         let parse_simple_response = |response: Response, _: &mut RetryState| {
             async {
@@ -729,6 +734,7 @@ impl RegistryClient {
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
+                                self.client.proxy_for_url(&url),
                             )
                         })?;
 
@@ -751,6 +757,7 @@ impl RegistryClient {
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
+                                self.client.proxy_for_url(&url),
                             )
                         })?;
                         self.parse_simple_body(text.len(), move || {
@@ -923,6 +930,7 @@ impl RegistryClient {
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
+                                self.client.proxy_for_url(&url),
                             )
                         })?;
                         let data: PypiSimpleIndex = serde_json::from_slice(bytes.as_ref())
@@ -935,6 +943,7 @@ impl RegistryClient {
                                 url.clone(),
                                 err,
                                 self.client.certificate_source(),
+                                self.client.proxy_for_url(&url),
                             )
                         })?;
                         SimpleIndexMetadata::from_html(&text, &url)?
@@ -952,7 +961,12 @@ impl RegistryClient {
             .header("Accept", MediaType::pypi())
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                ErrorKind::from_reqwest(
+                    url.clone(),
+                    err,
+                    self.client.certificate_source(),
+                    self.client.proxy_for_url(url),
+                )
             })?;
 
         let index = self
@@ -1050,7 +1064,12 @@ impl RegistryClient {
 
         let response_callback = async |response: Response, _: &mut RetryState| {
             let bytes = response.bytes().await.map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                ErrorKind::from_reqwest(
+                    url.clone(),
+                    err,
+                    self.client.certificate_source(),
+                    self.client.proxy_for_url(&url),
+                )
             })?;
             verify_metadata_hashes(&url, &bytes, &file.hashes)?;
             Ok::<Vec<u8>, Error>(bytes.to_vec())
@@ -1060,7 +1079,12 @@ impl RegistryClient {
             .get(url.clone())
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                ErrorKind::from_reqwest(
+                    url.clone(),
+                    err,
+                    self.client.certificate_source(),
+                    self.client.proxy_for_url(&url),
+                )
             })?;
         Ok(self
             .cached_client()
@@ -1228,7 +1252,12 @@ impl RegistryClient {
 
             let response_callback = async |response: Response, _: &mut RetryState| {
                 let bytes = response.bytes().await.map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    ErrorKind::from_reqwest(
+                        url.clone(),
+                        err,
+                        self.client.certificate_source(),
+                        self.client.proxy_for_url(&url),
+                    )
                 })?;
 
                 // Verify the downloaded bytes before parsing or caching the metadata.
@@ -1249,7 +1278,12 @@ impl RegistryClient {
                 .get(url.clone())
                 .build()
                 .map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    ErrorKind::from_reqwest(
+                        url.clone(),
+                        err,
+                        self.client.certificate_source(),
+                        self.client.proxy_for_url(&url),
+                    )
                 })?;
             Ok(self
                 .cached_client()
@@ -1374,7 +1408,12 @@ impl RegistryClient {
                 )
                 .build()
                 .map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                    ErrorKind::from_reqwest(
+                        url.clone(),
+                        err,
+                        self.client.certificate_source(),
+                        self.client.proxy_for_url(url),
+                    )
                 })?;
 
             // Copy authorization headers from the HEAD request to subsequent requests
@@ -1466,7 +1505,12 @@ impl RegistryClient {
             )
             .build()
             .map_err(|err| {
-                ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
+                ErrorKind::from_reqwest(
+                    url.clone(),
+                    err,
+                    self.client.certificate_source(),
+                    self.client.proxy_for_url(url),
+                )
             })?;
 
         // Stream the file, searching for the METADATA.
