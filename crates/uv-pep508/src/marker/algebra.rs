@@ -556,7 +556,11 @@ impl InternerGuard<'_> {
         })
     }
 
-    fn restrict_nodes(&mut self, i: NodeId, select: &impl Fn(&Node) -> Option<NodeId>) -> NodeId {
+    pub(super) fn restrict_nodes(
+        &mut self,
+        i: NodeId,
+        select: &impl Fn(&Node) -> Option<NodeId>,
+    ) -> NodeId {
         self.restrict_by_cached(i, select, &mut None)
     }
 
