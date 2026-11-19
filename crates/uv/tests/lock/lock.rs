@@ -892,6 +892,57 @@ fn lock_sdist_registry() -> Result<()> {
     Ok(())
 }
 
+/// A dependency can match a locked package by name and version but require a different registry.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_mismatched_dependency_registry() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent"]
+    "#})?;
+
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "parent" }]
+
+        [[package]]
+        name = "parent"
+        version = "1.0"
+        source = { registry = "HTTPS://parent-token@a.example/simple" }
+        dependencies = [
+            { name = "child", version = "1.0", source = { registry = "https://user:password@b.example/simple" } },
+        ]
+
+        [[package]]
+        name = "child"
+        version = "1.0"
+        source = { registry = "https://parent-token@a.example/simple" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--check").arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse `uv.lock`
+      cause: No matching package entry for `child==1.0 @ registry+https://user:****@b.example/simple` (required by `parent==1.0 @ registry+https://****@a.example/simple`)
+    ");
+
+    Ok(())
+}
+
 /// Reject a locked Git source when its exact revision differs from the pinned commit.
 #[cfg(all(feature = "test-universal", feature = "test-git"))]
 #[test]

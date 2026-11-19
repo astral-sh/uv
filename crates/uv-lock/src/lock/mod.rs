@@ -7933,16 +7933,7 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| {
-                    let Some(package_id) = package_ids.get(&dep.package_id.name) else {
-                        return Err(LockErrorKind::UnrecognizedDependency {
-                            id: self.id.clone(),
-                            dependency: dep.package_id,
-                        }
-                        .into());
-                    };
-                    dep.unwire(requires_python, environment, default, package_id.as_ref())
-                })
+                .map(|dep| dep.unwire(requires_python, environment, default, &self.id, package_ids))
                 .collect()
         };
 
@@ -8026,32 +8017,32 @@ struct PackageIdForDependency {
 }
 
 impl PackageIdForDependency {
-    fn unwire(self, unambiguous_package_id: Option<&PackageId>) -> Result<PackageId, LockError> {
-        let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
-            let Some(package_id) = unambiguous_package_id else {
-                return Err(LockErrorKind::MissingDependencySource {
-                    name: self.name.clone(),
+    fn unwire(
+        self,
+        parent_id: &PackageId,
+        package_ids: &FxHashMap<PackageName, Option<PackageId>>,
+    ) -> Result<PackageId, LockError> {
+        let (version, source) = match package_ids.get(&self.name) {
+            None => {
+                return Err(LockErrorKind::UnrecognizedDependency {
+                    id: parent_id.clone(),
+                    dependency: self,
                 }
                 .into());
-            };
-            Ok(package_id.source.clone())
-        })?;
-        let version = if let Some(version) = self.version {
-            Some(version)
-        } else {
-            if let Some(package_id) = unambiguous_package_id {
-                package_id.version.clone()
-            } else {
-                // If the package is a source tree, assume that the missing `self.version` field is
-                // indicative of a dynamic version.
-                if source.is_source_tree() {
-                    None
-                } else {
-                    return Err(LockErrorKind::MissingDependencyVersion {
-                        name: self.name.clone(),
-                    }
-                    .into());
+            }
+            Some(Some(package_id)) => (
+                self.version.or_else(|| package_id.version.clone()),
+                self.source.unwrap_or_else(|| package_id.source.clone()),
+            ),
+            Some(None) => {
+                let Some(source) = self.source else {
+                    return Err(LockErrorKind::MissingDependencySource { name: self.name }.into());
+                };
+                // A source tree can omit its version when the version is dynamic.
+                if self.version.is_none() && !source.is_source_tree() {
+                    return Err(LockErrorKind::MissingDependencyVersion { name: self.name }.into());
                 }
+                (self.version, source)
             }
         };
         Ok(PackageId {
@@ -8064,11 +8055,11 @@ impl PackageIdForDependency {
 
 impl Display for PackageIdForDependency {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(version) = &self.version {
-            write!(f, "{}=={version}", self.name)
-        } else {
-            write!(f, "{}", self.name)
+        f.write_str(&package_label(&self.name, self.version.as_ref()))?;
+        if let Some(source) = &self.source {
+            write!(f, " @ {source}")?;
         }
+        Ok(())
     }
 }
 
@@ -8472,17 +8463,31 @@ impl Source {
 
 impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
+        write!(f, "{}+", self.name())?;
+        let url = match self {
             Self::Registry(RegistrySource::Url(url)) | Self::Git(url, _) | Self::Direct(url, _) => {
-                write!(f, "{}+{}", self.name(), url)
+                url.as_ref()
+            }
+            // Registries with unrecognized schemes (including `HTTPS://`) deserialize as paths.
+            Self::Registry(RegistrySource::Path(path))
+                if let Some(url) = path.to_str()
+                    && split_scheme(url).is_some_and(|(scheme, rest)| {
+                        scheme.len() > 1 && rest.starts_with("//")
+                    }) =>
+            {
+                url
             }
             Self::Registry(RegistrySource::Path(path))
             | Self::Path(path)
             | Self::Directory(path)
             | Self::Editable(path)
             | Self::Virtual(path) => {
-                write!(f, "{}+{}", self.name(), PortablePath::from(path))
+                return write!(f, "{}", PortablePath::from(path));
             }
+        };
+        match SafeUrl::parse(url) {
+            Ok(url) => write!(f, "{url}"),
+            Err(_) => f.write_str("<invalid URL>"),
         }
     }
 }
@@ -9729,8 +9734,10 @@ impl DependencyWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_id: Option<&PackageId>,
+        parent_id: &PackageId,
+        package_ids: &FxHashMap<PackageName, Option<PackageId>>,
     ) -> Result<Dependency, LockError> {
+        let package_id = self.package_id.unwire(parent_id, package_ids)?;
         let (simplified_marker, complexified_marker) =
             if self.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
@@ -9742,7 +9749,7 @@ impl DependencyWire {
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id: self.package_id.unwire(unambiguous_package_id)?,
+            package_id,
             index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
