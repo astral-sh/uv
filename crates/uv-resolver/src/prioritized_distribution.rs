@@ -1002,6 +1002,9 @@ pub(crate) fn available_libc_versions<'a>(
         (CanonicalMarkerValueString::PlatformSystem, "Linux"),
         (CanonicalMarkerValueString::OsName, "posix"),
     ]);
+    if markers.is_false() {
+        return MinimumLibcVersion::default();
+    }
     let mut available = MinimumLibcVersion::default();
     for (filename, requires_python) in wheels {
         let markers = markers.and(declarations_marker(requires_python));
@@ -1320,14 +1323,23 @@ fn implied_python_markers(filename: &WheelFilename, purpose: MarkerPurpose) -> M
                 })
             }
             (MarkerPurpose::Diagnostic(target), None) => target,
-            (MarkerPurpose::Diagnostic(target), Some((platform, name))) => target
-                .specialize_strings(&[
+            (MarkerPurpose::Diagnostic(target), Some((platform, name))) => {
+                let target = target.specialize_strings(&[
                     (
                         CanonicalMarkerValueString::PlatformPythonImplementation,
                         &platform,
                     ),
                     (CanonicalMarkerValueString::ImplementationName, &name),
-                ]),
+                ]);
+                if matches!(
+                    python_tag,
+                    LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. }
+                ) {
+                    target.assume_cpython_versions()
+                } else {
+                    target
+                }
+            }
         };
 
         marker = marker.or(tree.and(implementation));

@@ -21,7 +21,6 @@ use uv_lock::{GroupMetadata, Lock, ResolverManifest};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, SupportedEnvironments};
-use uv_python_discovery::PythonRequirementSource;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_requirements::{ExtrasResolver, script_extra_build_requires};
 use uv_resolve_operations::Error as ResolveError;
@@ -34,7 +33,7 @@ use uv_resolver::{
 use uv_settings::{LockedSource, ResolverSettings};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
-use uv_workspace::WorkspaceCache;
+use uv_workspace::{RequiresPythonSources, WorkspaceCache};
 
 use crate::lock_target::find_lock_format_error;
 use crate::{
@@ -557,11 +556,10 @@ async fn do_lock(
         );
     }
 
-    // Determine the supported Python range. If no range is defined, and warn and default to the
-    // current minor version.
-    let (requires_python, python_source) = target.requires_python_with_source()?;
-
-    let requires_python = if let Some(requires_python) = requires_python {
+    // Without a declared Python range, default to the interpreter's minor version.
+    let (requires_python, declarations) = if let Some((requires_python, declarations)) =
+        target.requires_python_with_sources()?
+    {
         if requires_python.is_unbounded() {
             let default =
                 RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
@@ -573,14 +571,14 @@ async fn do_lock(
                 "The workspace `requires-python` value (`{requires_python}`) contains an exact match without a patch version. When omitted, the patch version is implicitly `0` (e.g., `{requires_python}.0`). Did you mean `{requires_python}.*`?"
             );
         }
-        requires_python
+        (requires_python, declarations)
     } else {
         let default =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
         warn_user_once!(
             "No `requires-python` value found in the workspace. Defaulting to `{default}`."
         );
-        default
+        (default, RequiresPythonSources::new())
     };
 
     // If any of the forks are incompatible with the Python requirement, error.
@@ -605,10 +603,8 @@ async fn do_lock(
     // Determine the Python requirement.
     let mut python_requirement =
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
-    if let Some(PythonRequirementSource::Workspace { sources, .. }) = python_source
-        && minimum_libc_version.is_some()
-    {
-        python_requirement = python_requirement.with_declared_specifiers(sources.values());
+    if minimum_libc_version.is_some() && !declarations.is_empty() {
+        python_requirement = python_requirement.with_declared_specifiers(declarations.values());
     }
 
     // Initialize the client.

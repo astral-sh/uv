@@ -96,10 +96,19 @@ impl ProjectPythonRequest {
         project_dir: &Path,
         config_discovery: ConfigDiscovery,
     ) -> Result<Self, PythonSelectionError> {
-        let requirement = workspace
-            .map(|workspace| find_workspace_python_requirement(workspace, groups))
-            .transpose()?
-            .flatten();
+        let requirement = if let Some(workspace) = workspace {
+            find_workspace_python_requirement(workspace, groups)?.map(
+                |(requires_python, sources)| ProjectPythonRequirement {
+                    requires_python,
+                    source: PythonRequirementSource::Workspace {
+                        sources,
+                        multiple_members: workspace.packages().len() > 1,
+                    },
+                },
+            )
+        } else {
+            None
+        };
 
         Self::from_requirements(
             python_request,
@@ -248,7 +257,7 @@ pub fn find_requires_python(
     groups: &DependencyGroupsWithDefaults,
 ) -> Result<Option<RequiresPython>, PythonSelectionError> {
     Ok(find_workspace_python_requirement(workspace, groups)?
-        .map(|requirement| requirement.requires_python))
+        .map(|(requires_python, _)| requires_python))
 }
 
 /// Compute the workspace's Python requirement together with its contributing declarations.
@@ -257,7 +266,7 @@ pub fn find_requires_python(
 pub fn find_workspace_python_requirement(
     workspace: &Workspace,
     groups: &DependencyGroupsWithDefaults,
-) -> Result<Option<ProjectPythonRequirement>, PythonSelectionError> {
+) -> Result<Option<(RequiresPython, RequiresPythonSources)>, PythonSelectionError> {
     let requires_python = workspace.requires_python(groups)?;
     // If there are no `Requires-Python` specifiers in the workspace, return `None`.
     if requires_python.is_empty() {
@@ -283,13 +292,7 @@ pub fn find_workspace_python_requirement(
         }
     }
     match RequiresPython::intersection(requires_python.iter().map(|(.., specifiers)| specifiers)) {
-        Some(intersection) => Ok(Some(ProjectPythonRequirement {
-            requires_python: intersection,
-            source: PythonRequirementSource::Workspace {
-                sources: requires_python,
-                multiple_members: workspace.packages().len() > 1,
-            },
-        })),
+        Some(intersection) => Ok(Some((intersection, requires_python))),
         None => Err(PythonSelectionError::DisjointRequiresPython(
             requires_python,
         )),

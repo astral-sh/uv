@@ -1309,6 +1309,17 @@ impl MarkerTree {
         Self::from_operation(|interner| interner.restrict(self.0, assumption.0))
     }
 
+    /// Interpret `implementation_version` as `python_full_version`, as is valid for CPython.
+    ///
+    /// For example, `implementation_version == '3.12.*'` then excludes a wheel requiring
+    /// Python 3.13, whether that requirement comes from a wheel tag or from its metadata.
+    #[must_use]
+    pub fn assume_cpython_versions(self) -> Self {
+        Self::from_operation(|interner| {
+            interner.assume_cpython_versions(self.0, &mut FxHashMap::default())
+        })
+    }
+
     /// Partially evaluate string comparisons and membership predicates for known marker values.
     ///
     /// For example, given `platform_machine = "i686"`, this simplifies
