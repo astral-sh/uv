@@ -1,5 +1,8 @@
 # Compare lockfiles with and without locked build dependencies
 
+[Read the recorded results](RESULTS.md) for all 15,000 pairs, the follow-up on every new failure,
+and the named projects’ cold and offline timings.
+
 Run the paired benchmark with **two Linux uv binaries** built with the same
 toolchain, profile and features. Only the candidate runs with
 `--preview-features lock-build-dependencies`.
