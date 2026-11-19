@@ -40,7 +40,7 @@ use uv_distribution_types::{
     MinimumLibcVersion, Name, NameRequirementSpecification, PYPI_URL, PathBuiltDist,
     PathSourceDist, RegistryBuiltDist, RegistryBuiltWheel, RegistrySourceDist, RemoteSource,
     Requirement, RequirementSource, RequiresPython, ResolvedDist, SimplifiedMarkerTree,
-    StaticMetadata, ToUrlError, UrlString, VersionId,
+    StaticMetadata, ToUrlError, UrlString, VersionId, wheel_implementation_marker,
 };
 use uv_fs::{PortablePath, PortablePathBuf, Simplified, normalize_path, try_relative_to_if};
 use uv_git::{RepositoryReference, ResolvedRepositoryReference};
@@ -10730,18 +10730,36 @@ fn is_wheel_unreachable_for_marker(
         return true;
     }
 
-    // Filter by platform tags.
+    if marker.is_true() {
+        return false;
+    }
 
-    // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
-    // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
-    // own sufficient to exclude linux wheels), but due to
-    // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
-    // a single disjointness check with the intersection is sufficient, so we have one
-    // constant per platform.
+    // Filter by the implementations allowed by the wheel's Python tags.
+    let implementations = filename
+        .python_tags()
+        .iter()
+        .copied()
+        .map(wheel_implementation_marker)
+        .reduce(MarkerTree::or)
+        .unwrap_or(MarkerTree::TRUE);
+    let mut implementation_marker = *marker;
+    implementation_marker.and(UniversalMarker::from_combined(implementations));
+    if implementation_marker.is_false() {
+        return true;
+    }
+
     let platform_tags = filename.platform_tags();
 
     if platform_tags.iter().all(PlatformTag::is_any) {
         return false;
+    }
+
+    // Check the OS and implementation together. A project supporting CPython on Linux
+    // and PyPy on macOS can exclude CPython wheels for macOS. Check the machine separately
+    // because 32-bit Python on x86_64 Linux can report `x86_64` and need `i686` wheels.
+    let windows_only = platform_tags.iter().all(PlatformTag::is_windows);
+    if windows_only && implementation_marker.is_disjoint(*WINDOWS_MARKERS) {
+        return true;
     }
 
     // Emulated x86_64 Python on Windows ARM64 reports `ARM64` for `platform_machine` but requires
@@ -10751,6 +10769,9 @@ fn is_wheel_unreachable_for_marker(
     }
 
     if platform_tags.iter().all(PlatformTag::is_linux) {
+        if implementation_marker.is_disjoint(*LINUX_MARKERS) {
+            return true;
+        }
         if platform_tags.iter().all(PlatformTag::is_arm) {
             if marker.is_disjoint(*LINUX_ARM_MARKERS) {
                 return true;
@@ -10791,12 +10812,10 @@ fn is_wheel_unreachable_for_marker(
             if marker.is_disjoint(*LINUX_ARMV6L_MARKERS) {
                 return true;
             }
-        } else if marker.is_disjoint(*LINUX_MARKERS) {
-            return true;
         }
     }
 
-    if platform_tags.iter().all(PlatformTag::is_windows) {
+    if windows_only {
         if platform_tags.iter().all(PlatformTag::is_arm) {
             if marker.is_disjoint(*WINDOWS_ARM_MARKERS) {
                 return true;
@@ -10809,12 +10828,13 @@ fn is_wheel_unreachable_for_marker(
             if marker.is_disjoint(*WINDOWS_X86_MARKERS) {
                 return true;
             }
-        } else if marker.is_disjoint(*WINDOWS_MARKERS) {
-            return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_macos) {
+        if implementation_marker.is_disjoint(*MAC_MARKERS) {
+            return true;
+        }
         if platform_tags.iter().all(PlatformTag::is_arm) {
             if marker.is_disjoint(*MAC_ARM_MARKERS) {
                 return true;
@@ -10827,12 +10847,16 @@ fn is_wheel_unreachable_for_marker(
             if marker.is_disjoint(*MAC_X86_MARKERS) {
                 return true;
             }
-        } else if marker.is_disjoint(*MAC_MARKERS) {
-            return true;
         }
     }
 
     if platform_tags.iter().all(PlatformTag::is_android) {
+        // Before Python 3.13, Android reports `sys_platform == 'linux'`.
+        if implementation_marker.is_disjoint(*ANDROID_MARKERS)
+            && implementation_marker.is_disjoint(*LINUX_MARKERS)
+        {
+            return true;
+        }
         if platform_tags.iter().all(PlatformTag::is_arm) {
             if marker.is_disjoint(*ANDROID_ARM_MARKERS) {
                 return true;
