@@ -1847,7 +1847,6 @@ check = [
     { name = "astral-dev-toolchain-jaq" },
     { name = "ruff" },
     { name = "ty" },
-    { name = "typos" },
     { name = "validate-pyproject", extra = ["all", "store"] },
 ]
 dev = [
@@ -1861,7 +1860,6 @@ dev = [
     { name = "astral-dev-toolchain-jaq" },
     { name = "ruff" },
     { name = "ty" },
-    { name = "typos" },
     { name = "validate-pyproject", extra = ["all", "store"] },
 ]
 docker = [
@@ -1887,6 +1885,9 @@ release = [
 test = [
     { name = "astral-dev-toolchain-cargo-nextest" },
 ]
+typos = [
+    { name = "typos" },
+]
 
 [package.group-requires-python]
 docker = ">=3.12"
@@ -1901,7 +1902,6 @@ check = [
     { name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "ty", specifier = ">=0.0.106" },
-    { name = "typos", specifier = ">=1.49.0" },
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" },
 ]
 dev = [
@@ -1915,7 +1915,6 @@ dev = [
     { name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "ty", specifier = ">=0.0.106" },
-    { name = "typos", specifier = ">=1.49.0" },
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" },
 ]
 docker = [{ name = "cargo-zigbuild", marker = "python_full_version >= '3.12'", specifier = ">=0.23.0" }]
@@ -1933,6 +1932,7 @@ docs = [
 jaq = [{ name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" }]
 release = [{ name = "rooster", marker = "python_full_version >= '3.12'", specifier = "==0.1.1" }]
 test = [{ name = "astral-dev-toolchain-cargo-nextest", specifier = ">=0.9.143" }]
+typos = [{ name = "typos", specifier = ">=1.49.0" }]
 
 [[package]]
 name = "validate-pyproject"

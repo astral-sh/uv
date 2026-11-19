@@ -233,4 +233,4 @@ jobs:
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: auto
-      - run: uv run --only-group check typos
+      - run: uv run --only-group typos typos
