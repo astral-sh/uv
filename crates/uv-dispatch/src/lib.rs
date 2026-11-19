@@ -25,12 +25,13 @@ use uv_configuration::{BuildOutput, Concurrency};
 use uv_distribution::DistributionDatabase;
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires, ExtraBuildVariables,
-    Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
+    ArchiveHashPolicy, CachedDist, ConfigSettings, DependencyMetadata, ExtraBuildRequires,
+    ExtraBuildVariables, Identifier, IndexCapabilities, IndexLocations, IsBuildBackendError, Name,
     PackageConfigSettings, Requirement, Resolution, SourceDist, VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_installer::{InstallationStrategy, Installer, Plan, Planner, Preparer, SitePackages};
+use uv_lock::{Lock, LockError};
 use uv_preview::Preview;
 use uv_pypi_types::Conflicts;
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
@@ -71,6 +72,12 @@ pub enum BuildDispatchError {
     },
 
     #[error(transparent)]
+    LockedBuild(#[from] LockError),
+
+    #[error("The build backend requested requirements outside its locked build environment")]
+    UndeclaredBuildRequirement(#[source] anyhow::Error),
+
+    #[error(transparent)]
     Join(#[from] tokio::task::JoinError),
 
     #[error(transparent)]
@@ -96,6 +103,10 @@ impl uv_errors::Hinted for BuildDispatchError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::BuildFrontend(err) => err.hints(),
+            Self::LockedBuild(err) => err.hints(),
+            Self::UndeclaredBuildRequirement(_) => uv_errors::Hints::from(
+                "Declare additional build requirements in `tool.uv.extra-build-dependencies` and run `uv lock`.",
+            ),
             Self::Plan(error) => error.hints(),
             Self::Resolve(err) | Self::ResolveRequirements { source: err, .. } => err.hints(),
             Self::BuildBackend(_)
@@ -117,6 +128,7 @@ impl IsBuildBackendError for BuildDispatchError {
             Self::Resolve(error) | Self::ResolveRequirements { source: error, .. } => {
                 error.is_user_failure()
             }
+            Self::LockedBuild(_) | Self::UndeclaredBuildRequirement(_) => true,
             Self::Prepare(error) => error.is_user_failure(),
             Self::Lookahead(error) => error.is_user_failure(),
             Self::BuildBackend(_)
@@ -135,6 +147,8 @@ impl IsBuildBackendError for BuildDispatchError {
             | Self::Tags(_)
             | Self::Resolve(_)
             | Self::ResolveRequirements { .. }
+            | Self::LockedBuild(_)
+            | Self::UndeclaredBuildRequirement(_)
             | Self::Join(_)
             | Self::Anyhow(_)
             | Self::Prepare(_)
@@ -168,6 +182,8 @@ pub struct BuildDispatch<'a> {
     config_settings: &'a ConfigSettings,
     config_settings_package: &'a PackageConfigSettings,
     base_hasher: &'a HashStrategy,
+    build_lock: Option<(&'a Lock, &'a Path)>,
+    build_source: Option<&'a SourceDist>,
     build_hash_checking: HashCheckingMode,
     exclude_newer: ExcludeNewer,
     source_build_context: SourceBuildContext,
@@ -226,6 +242,8 @@ impl<'a> BuildDispatch<'a> {
             link_mode,
             build_options,
             base_hasher: hasher,
+            build_lock: None,
+            build_source: None,
             build_hash_checking: match hasher.verification() {
                 HashVerification::Required(_) => HashCheckingMode::Require,
                 HashVerification::Unspecified | HashVerification::IfPresent(_) => {
@@ -261,6 +279,82 @@ impl<'a> BuildDispatch<'a> {
             ),
             ..self.clone()
         }
+    }
+
+    /// Use only the given lockfile when installing requirements into isolated builds.
+    #[must_use]
+    pub fn with_build_lock(mut self, lock: &'a Lock, root: &'a Path) -> Self {
+        self.build_lock = lock.locks_build_dependencies().then_some((lock, root));
+        self
+    }
+
+    /// Inspect the source's declared backend without running package code.
+    pub async fn read_build_system(
+        &self,
+        source: &SourceDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> anyhow::Result<(String, Vec<Requirement>)> {
+        let database = DistributionDatabase::new(
+            self.client,
+            self,
+            self.concurrency.downloads_semaphore.clone(),
+        );
+        let cached = if let SourceDist::Registry(dist) = source {
+            let cached = database.cached_registry_source(dist, hashes)?;
+            if cached.is_none() {
+                match database.wheel_pyproject(dist).await {
+                    Ok(Some(contents)) => {
+                        if let Ok(Some(system)) = SourceBuild::archive_build_system(&contents) {
+                            return Ok(system);
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        debug!("Could not read build declaration from wheel for {source}: {err}");
+                    }
+                }
+            }
+            cached
+        } else {
+            None
+        };
+        let tree = match cached {
+            Some(tree) => tree,
+            None => database.source_tree(source, hashes).await?,
+        };
+        match source {
+            SourceDist::Directory(_) | SourceDist::GitDirectory(_) => {}
+            SourceDist::Registry(_)
+            | SourceDist::DirectUrl(_)
+            | SourceDist::Path(_)
+            | SourceDist::GitPath(_) => {
+                if let Some(system) = SourceBuild::read_archive_build_system(&tree).await? {
+                    return Ok(system);
+                }
+            }
+        }
+        let stop_discovery_at = match source {
+            SourceDist::GitDirectory(dist) => Some(dist.subdirectory.as_deref().map_or(
+                tree.as_path(),
+                |subdir| {
+                    tree.ancestors()
+                        .nth(subdir.components().count())
+                        .unwrap_or(&tree)
+                },
+            )),
+            _ => None,
+        };
+        Ok(SourceBuild::read_build_system(
+            &tree,
+            source.name(),
+            self.index_locations,
+            &self.sources,
+            stop_discovery_at,
+            self.cache,
+            &self.workspace_cache,
+            self.client.credentials_cache(),
+        )
+        .await?)
     }
 
     /// Set the environment variables to be used when building a source distribution.
@@ -367,18 +461,64 @@ impl BuildContext for BuildDispatch<'_> {
     async fn resolve<'data>(
         &'data self,
         requirements: &'data [Requirement],
-        hash_override: Option<&'data HashStrategy>,
+        previous: Option<&'data ResolvedRequirements>,
         build_stack: &'data BuildStack,
     ) -> Result<ResolvedRequirements, BuildDispatchError> {
-        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
         let marker_env = self.interpreter.to_resolver_marker_environment();
-        let resolver_env = ResolverEnvironment::specific(marker_env);
         let tags = self.interpreter.tags()?;
 
+        if let Some((lock, root)) = self.build_lock {
+            let source = self.build_source.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Cannot install build requirements without a locked source distribution"
+                )
+            })?;
+            let resolution = lock
+                .resolve_build(
+                    root,
+                    source,
+                    requirements,
+                    &marker_env,
+                    tags,
+                    self.build_options,
+                )
+                .map_err(|err| {
+                    if previous.is_some() {
+                        BuildDispatchError::UndeclaredBuildRequirement(err.into())
+                    } else {
+                        BuildDispatchError::LockedBuild(err)
+                    }
+                })?;
+            if let Some(previous) = previous {
+                for dist in resolution.distributions() {
+                    if !previous
+                        .resolution()
+                        .distributions()
+                        .any(|installed| installed.distribution_id() == dist.distribution_id())
+                    {
+                        return Err(BuildDispatchError::UndeclaredBuildRequirement(
+                            anyhow::anyhow!(
+                                "`{dist}` is not part of the build environment for `{source}`"
+                            ),
+                        ));
+                    }
+                }
+                return Ok(previous.clone());
+            }
+            // Use the selected artifact's hash, not a union of hashes for all indexes providing
+            // this name and version. An index mirror may serve different bytes for the same pin.
+            let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)
+                .map_err(uv_requirements::Error::from)?
+                .with_constraint_hashes(self.base_hasher)
+                .map_err(uv_requirements::Error::from)?;
+            return Ok(ResolvedRequirements::new(resolution, hasher));
+        }
+        let python_requirement = PythonRequirement::from_interpreter(self.interpreter);
+        let resolver_env = ResolverEnvironment::specific(marker_env);
         let active_requirements = requirements.iter().filter(|requirement| {
             requirement.evaluate_markers(Some(self.interpreter.markers()), &[])
         });
-        let previous_hasher = hash_override;
+        let previous_hasher = previous.map(ResolvedRequirements::hasher);
         let hasher = match previous_hasher {
             Some(hasher) if self.require_build_hashes() => hasher
                 .clone()
@@ -634,6 +774,22 @@ impl BuildContext for BuildDispatch<'_> {
             }
         }
 
+        // The cached default-backend resolution is only interchangeable within a build
+        // universe. Nested builds select their own universe from their source distribution.
+        let scoped;
+        let context = if self.build_lock.is_some() {
+            scoped = BuildDispatch {
+                build_source: dist,
+                source_build_context: SourceBuildContext::new(
+                    self.concurrency.builds_semaphore.clone(),
+                ),
+                ..self.clone()
+            };
+            &scoped
+        } else {
+            self
+        };
+
         let builder = SourceBuild::setup(
             source,
             subdirectory,
@@ -642,8 +798,8 @@ impl BuildContext for BuildDispatch<'_> {
             dist_name,
             dist_version,
             self.interpreter,
-            self,
-            self.source_build_context.clone(),
+            context,
+            context.source_build_context.clone(),
             version_id,
             self.index_locations,
             sources.clone(),
@@ -676,6 +832,12 @@ impl BuildContext for BuildDispatch<'_> {
         } else {
             source.to_path_buf()
         };
+
+        // The embedded backend may satisfy the declared range but differ from the exact version
+        // pinned for this particular build. Let the locked build environment supply the backend.
+        if self.build_lock.is_some() {
+            return Ok(None);
+        }
 
         // Only perform the direct build if the backend is uv in a compatible version.
         let source_tree_str = source_tree.display().to_string();

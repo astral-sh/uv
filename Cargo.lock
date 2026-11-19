@@ -6437,6 +6437,7 @@ dependencies = [
  "uv-git",
  "uv-install-wheel",
  "uv-installer",
+ "uv-lock",
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",

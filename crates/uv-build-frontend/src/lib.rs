@@ -498,11 +498,7 @@ impl SourceBuild {
                     .chain(extra_requires)
                     .collect();
                 let resolution = build_context
-                    .resolve(
-                        &requirements,
-                        Some(resolved_requirements.hasher()),
-                        build_stack,
-                    )
+                    .resolve(&requirements, Some(&resolved_requirements), build_stack)
                     .await
                     .map_err(|err| {
                         Error::RequirementsResolve(

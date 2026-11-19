@@ -20,7 +20,7 @@ use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_static::TarBackend;
 use uv_workspace::WorkspaceCache;
 
-use crate::{BuildArena, BuildIsolation, HashStrategy, ResolvedRequirements};
+use crate::{BuildArena, BuildIsolation, ResolvedRequirements};
 
 /// Controls how source tree requirements influence workspace-member editability during lowering.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
@@ -152,13 +152,13 @@ pub trait BuildContext {
     /// Resolve build requirements.
     ///
     /// Pass `None` for the initial requirements, such as `build-system.requires`. When adding
-    /// requirements returned by a build backend, pass the previous resolution's [`HashStrategy`]
+    /// requirements returned by a build backend, pass the previous [`ResolvedRequirements`]
     /// to preserve the hashes already collected. When build dependency hashes are required,
     /// backend output cannot add hashes to this set.
     fn resolve<'a>(
         &'a self,
         requirements: &'a [Requirement],
-        hash_override: Option<&'a HashStrategy>,
+        previous: Option<&'a ResolvedRequirements>,
         build_stack: &'a BuildStack,
     ) -> impl Future<Output = Result<ResolvedRequirements, impl IsBuildBackendError>> + 'a;
 
