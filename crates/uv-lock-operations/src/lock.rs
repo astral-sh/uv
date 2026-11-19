@@ -28,7 +28,8 @@ use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_r
 use uv_resolve_operations::loggers::{ResolveLogger, SummaryResolveLogger};
 use uv_resolve_operations::reporters::ResolverReporter;
 use uv_resolver::{
-    FlatIndex, OptionsBuilder, PythonRequirement, ResolverEnvironment, UniversalMarker,
+    FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, ResolverEnvironment,
+    UniversalMarker,
 };
 use uv_settings::{LockedSource, ResolverSettings};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -1057,15 +1058,18 @@ async fn do_lock(
             .with_workspace_group_metadata(workspace_group_metadata);
 
             let lock = if lock_build_dependencies {
-                // Resolving a build dependency can execute its metadata hook before installation.
-                let hasher = hasher.with_constraint_hashes(&resolution_build_hasher)?;
+                // A universal solve may run metadata hooks for packages on other platforms.
+                // Don't reuse the host's marker-filtered hashes or its in-memory metadata.
+                let build_hashes =
+                    HashStrategy::from_constraints(&build_constraints, None, *build_hash_checking)?;
+                let hasher = hasher.with_constraint_hashes(&build_hashes)?;
                 let resolver = crate::build::BuildResolver {
                     root: target.install_path(),
                     client: &client,
-                    dispatch: &build_dispatch,
+                    dispatch: &build_dispatch.fork(&hasher),
                     index_locations,
                     flat_index: &flat_index,
-                    index: state.index(),
+                    index: InMemoryIndex::default(),
                     interpreter,
                     python: python_requirement,
                     options,

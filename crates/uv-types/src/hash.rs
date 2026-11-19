@@ -354,7 +354,21 @@ impl HashStrategy {
                 continue;
             }
 
-            merge_hashes(&mut constraint_hashes, id, digests, requirement)?;
+            if marker_env.is_none()
+                && let Some(existing) = constraint_hashes.get_mut(&id)
+            {
+                // One universal policy must satisfy every applicable constraint. Until hashes
+                // can vary by resolver fork, the last declaration cannot widen an earlier one.
+                *existing = combine_constraint_hashes(
+                    &id,
+                    std::mem::take(existing),
+                    &digests,
+                    requirement,
+                    mode,
+                )?;
+            } else {
+                merge_hashes(&mut constraint_hashes, id, digests, requirement)?;
+            }
         }
 
         // For each requirement, map from hash identity to allowed hashes.

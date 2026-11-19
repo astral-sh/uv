@@ -114,6 +114,12 @@ grouping builds. Other markers, such as `sys_platform`, don't affect grouping, b
 selecting packages for a build. If the group can't share a resolution, uv retries the builds
 separately.
 
+If you constrain a build dependency by hash, include the source archive's digest when uv needs to
+read its build requirements. Approving a wheel does not approve the source archive. The lock covers
+all target platforms, so uv also checks hashes from constraints whose markers don't match the
+current machine. If two constraints pin the same registry release, only hashes allowed by both can
+authorize its build during locking.
+
 uv includes the requirements in `build-system.requires` and any configured
 [`extra-build-dependencies`](./config.md#augmenting-build-dependencies). If the backend requests a
 package outside its locked environment, the build fails. Add a known requirement to

@@ -2787,6 +2787,7 @@ fn lock_build_requirements_come_from_sdist_not_cached_wheel() -> Result<()> {
 #[test]
 fn lock_build_constraint_rejects_sdist_before_metadata_hook() -> Result<()> {
     let context = uv_test::test_context!("3.12");
+    let other_platform = if cfg!(windows) { "linux" } else { "win32" };
     let sentinel = context.temp_dir.child("backend-executed");
     let name = "demo-pkg".parse()?;
     let version = "1.0.0".parse()?;
@@ -2796,7 +2797,7 @@ fn lock_build_constraint_rejects_sdist_before_metadata_hook() -> Result<()> {
     let replacement_digest = hex::encode(Sha256::digest(&replacement));
     let context = context
         .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
-        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
+        .with_filter((replacement_digest.clone(), "[REPLACEMENT_HASH]"));
     context
         .temp_dir
         .child("dist/demo_pkg-1.0.0.tar.gz")
@@ -2811,15 +2812,20 @@ fn lock_build_constraint_rejects_sdist_before_metadata_hook() -> Result<()> {
         requires-python = ">=3.12"
 
         [build-system]
-        requires = ["demo-pkg==1.0.0"]
+        requires = ["demo-pkg==1.0.0 ; sys_platform == '{other_platform}'"]
         build-backend = "demo_pkg"
 
         [tool.uv]
         no-index = true
         find-links = ["dist"]
-        build-constraint-dependencies = [
-            {{ requirement = "demo-pkg==1.0.0", hashes = ["sha256:{trusted_digest}"] }},
-        ]
+
+        [[tool.uv.build-constraint-dependencies]]
+        requirement = "demo-pkg==1.0.0 ; sys_platform == '{other_platform}'"
+        hashes = ["sha256:{trusted_digest}"]
+
+        [[tool.uv.build-constraint-dependencies]]
+        requirement = "demo-pkg==1.0.0 ; sys_platform != '{other_platform}'"
+        hashes = ["sha256:{trusted_digest}", "sha256:{replacement_digest}"]
     "#})?;
 
     uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
