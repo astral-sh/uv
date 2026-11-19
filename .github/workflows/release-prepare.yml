@@ -60,7 +60,7 @@ jobs:
           ROOSTER_NO_CACHE: "1"
           INPUT_BUMP: ${{ inputs.bump }}
 
-      - uses: astral-sh/github-actions/rewrite-changelog@8c3ce27226508d88b41427ca740b0e29adb39d9d
+      - uses: astral-sh/github-actions/rewrite-changelog@8c3cdbd26db5b9ed8c75193802db22040888af8c # 2026.11.19.1
         with:
           prompt-file: agents/prompts/editorialize-changelog.md
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -124,7 +124,7 @@ jobs:
 
       - name: "Get uv token"
         id: token
-        uses: astral-sh/github-actions/simple-token-service@4877f85420cccab15834c3d0ea3433b0d91507d3
+        uses: astral-sh/github-actions/simple-token-service@8c3cdbd26db5b9ed8c75193802db22040888af8c # 2026.11.19.1
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
