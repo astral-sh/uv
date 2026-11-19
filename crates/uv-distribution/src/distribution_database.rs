@@ -762,6 +762,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         })
     }
 
+    /// Materialize a source distribution for static inspection without invoking its build backend.
+    pub async fn source_tree(
+        &self,
+        source: &SourceDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<std::path::PathBuf, Error> {
+        self.builder.materialize(source, hashes, &self.client).await
+    }
+
     /// Build the wheel metadata for a source distribution, or fetch it from the cache if possible.
     ///
     /// Requested hashes are validated before executing a build backend. User-provided metadata

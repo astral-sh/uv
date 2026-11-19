@@ -671,6 +671,34 @@ impl SourceBuild {
         )
     }
 
+    /// Read the declared backend and its lowered requirements without creating an environment
+    /// or running any backend hooks.
+    pub async fn read_build_system(
+        source_tree: &Path,
+        package_name: &PackageName,
+        locations: &IndexLocations,
+        sources: &NoSources,
+        stop_discovery_at: Option<&Path>,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<(String, Vec<Requirement>), Error> {
+        let (backend, _) = Self::extract_pep517_backend(
+            source_tree,
+            source_tree,
+            Some(package_name),
+            locations,
+            sources,
+            stop_discovery_at,
+            cache,
+            workspace_cache,
+            credentials_cache,
+        )
+        .await
+        .map_err(|err| *err)?;
+        Ok((backend.backend, backend.requirements))
+    }
+
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
     async fn extract_pep517_backend(
         source_tree: &Path,
