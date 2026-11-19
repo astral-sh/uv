@@ -95,6 +95,9 @@ impl EnvVars {
     /// Equivalent to the `--system` command-line argument. If set to `true`, uv will
     /// use the first Python interpreter found in the system `PATH`.
     ///
+    /// This option only applies to the `uv pip` interface. For other commands (like `uv sync`
+    /// or `uv run`), see the `UV_PROJECT_ENVIRONMENT` environment variable.
+    ///
     /// WARNING: `UV_SYSTEM_PYTHON=true` is intended for use in continuous integration (CI)
     /// or containerized environments and should be used with caution, as modifying the system
     /// Python can lead to unexpected behavior.
