@@ -1076,8 +1076,16 @@ async fn do_lock(
                     concurrency,
                     printer,
                 };
-                let previous = validation.as_ref().and(existing_lock.as_ref());
-                Box::pin(resolver.resolve(lock, &resolution, previous, upgrade)).await?
+                // Validation decides whether to prefer old versions, not whether an existing
+                // artifact hash is trusted. Only an explicit upgrade can release that hash.
+                Box::pin(resolver.resolve(
+                    lock,
+                    &resolution,
+                    existing_lock.as_ref(),
+                    versions_lock.is_some(),
+                    hash_upgrade,
+                ))
+                .await?
             } else {
                 lock
             };

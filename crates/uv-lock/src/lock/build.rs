@@ -378,8 +378,8 @@ impl Lock {
         )
     }
 
-    /// Retain the audit decision for a previously locked filename when the index supplies no
-    /// hash of its own. Otherwise, an unrelated lock update could authorize a replaced wheel.
+    /// Retain the trusted digest for a known filename. Even a newly advertised index hash must
+    /// not authorize a replacement on an unrelated lock update.
     pub fn retain_build_hashes(&mut self, previous: &Self, upgraded: &FxHashSet<PackageName>) {
         for package in &mut self.packages {
             if upgraded.contains(package.name())
@@ -394,17 +394,17 @@ impl Lock {
                 continue;
             };
             for wheel in &mut package.wheels {
-                if !wheel.hash.as_ref().is_some_and(satisfies_require_hashes)
-                    && let Some(original) = locked
-                        .wheels
-                        .iter()
-                        .find(|old| old.filename == wheel.filename)
+                if let Some(original) = locked
+                    .wheels
+                    .iter()
+                    .find(|old| old.filename == wheel.filename)
+                    && original.hash.as_ref().is_some_and(satisfies_require_hashes)
                 {
                     wheel.hash.clone_from(&original.hash);
                 }
             }
             if let (Some(sdist), Some(original)) = (&mut package.sdist, &locked.sdist)
-                && !sdist.hash().is_some_and(satisfies_require_hashes)
+                && original.hash().is_some_and(satisfies_require_hashes)
                 && sdist.filename() == original.filename()
             {
                 sdist.metadata_mut().hash = original.hash().cloned();

@@ -287,6 +287,7 @@ impl BuildResolver<'_> {
         mut lock: Lock,
         runtime: &ResolverOutput,
         previous: Option<&Lock>,
+        prefer_previous_versions: bool,
         upgrade: &Upgrade,
     ) -> Result<Lock, LockError> {
         let upgrading = previous.map(|lock| (lock, lock.upgrade_packages(upgrade)));
@@ -297,7 +298,7 @@ impl BuildResolver<'_> {
             .await?;
         let mut preferences =
             read_lock_requirements(&lock, self.root, &Upgrade::default())?.preferences;
-        if let Some((previous, upgraded)) = &upgrading {
+        if prefer_previous_versions && let Some((previous, upgraded)) = &upgrading {
             let runtime_names: BTreeSet<_> = lock.packages().iter().map(Package::name).collect();
             for package in previous.all_packages() {
                 if !upgrade.is_all()

@@ -2610,6 +2610,79 @@ fn lock_wheel_path_relock_hash_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// Re-locking on one platform cannot authorize new bytes for a different platform's wheel.
+/// Its filename is already locked, even though resolving metadata never downloads that wheel.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_retains_other_platform_wheel_hash_until_upgrade() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let name = "demo-pkg".parse()?;
+    let version = "1.0.0".parse()?;
+    let (filename, wheel) = WheelBuilder::new(&name, &version).build();
+    let (windows_filename, windows_wheel) = WheelBuilder::new(&name, &version)
+        .tag("cp312-cp312-win_amd64")
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let windows_path = context.temp_dir.child(&windows_filename);
+    windows_path.write_binary(&windows_wheel)?;
+    let original = hex::encode(Sha256::digest(windows_wheel));
+    let index = context.temp_dir.child("index.html");
+    let listing = formatdoc! {r#"
+        <a href="{filename}#sha256={}">{filename}</a>
+        <a href="{windows_filename}#sha256={original}">{windows_filename}</a>
+    "#, hex::encode(Sha256::digest(wheel))};
+    index.write_str(&listing)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["demo-pkg"]
+        build-backend = "demo_pkg"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["index.html"]
+    "#};
+    pyproject.write_str(project)?;
+    context
+        .lock()
+        .args(["--preview-features", "lock-build-dependencies"])
+        .assert()
+        .success();
+    let locked = context.read("uv.lock");
+    assert!(locked.contains(&original));
+
+    let (_, replacement) = WheelBuilder::new(&name, &version)
+        .tag("cp312-cp312-win_amd64")
+        .files(&[("replacement.py", "")])
+        .build();
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    windows_path.write_binary(&replacement)?;
+    index.write_str(&listing.replace(&original, &replacement_digest))?;
+    pyproject.write_str(&project.replace(">=3.12", ">=3.12.1"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(
+        context.read("uv.lock"),
+        locked.replace(">=3.12", ">=3.12.1")
+    );
+
+    context
+        .lock()
+        .args(["--upgrade-package", "demo-pkg"])
+        .assert()
+        .success();
+    assert!(context.read("uv.lock").contains(&replacement_digest));
+    Ok(())
+}
+
 /// An installed wheel can ship a different pyproject.toml than the sdist uv will build.
 #[cfg(feature = "test-universal")]
 #[test]
