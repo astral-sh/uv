@@ -3800,21 +3800,7 @@ impl Lock {
     pub fn from_toml(input: &str) -> Result<Self, LockParseError> {
         let lock = match Self::from_canonical_toml(input) {
             Ok(lock) => lock,
-            Err(_) => match toml::from_str(input) {
-                Ok(lock) => lock,
-                Err(source) => {
-                    if let Ok(lock) = toml::from_str::<LockVersion>(input)
-                        && lock.version() != VERSION
-                    {
-                        return Err(LockParseError::UnparsableVersion {
-                            supported: VERSION,
-                            version: lock.version(),
-                            source,
-                        });
-                    }
-                    return Err(LockParseError::Toml(source));
-                }
-            },
+            Err(_) => deserialize::from_general_toml(input)?,
         };
 
         if lock.version() != VERSION {
@@ -6967,22 +6953,6 @@ impl TryFrom<LockWire> for Lock {
         )?;
 
         Ok(lock)
-    }
-}
-
-/// Like [`Lock`], but limited to the version field. Used for error reporting: by limiting parsing
-/// to the version field, we can verify compatibility for lockfiles that may otherwise be
-/// unparsable.
-#[derive(Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct LockVersion {
-    version: u32,
-}
-
-impl LockVersion {
-    /// Returns the lockfile version.
-    fn version(&self) -> u32 {
-        self.version
     }
 }
 
