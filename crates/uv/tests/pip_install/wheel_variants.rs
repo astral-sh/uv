@@ -896,12 +896,21 @@ fn universal_lock_excludes_variant_wheels() -> Result<()> {
         "#);
     });
 
-    // A lockfile containing a variant wheel must not make it installable.
+    // A lockfile containing a variant wheel requires the preview.
     let lock = context.read("uv.lock").replace(
         "ok-1.0.0-py3-none-any.whl",
         "ok-1.0.0-9-py3-none-any-cpu.whl",
     );
     context.temp_dir.child("uv.lock").write_str(&lock)?;
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile requires preview features that are not enabled: `wheel-variants`
+
+    hint: Pass `--preview-features wheel-variants` to use this lockfile, or run `uv sync --refresh` to regenerate the lockfile.
+    ");
+
+    // Enabling the preview must not make the variant installable.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--frozen")
         .arg("--preview-features")

@@ -2716,6 +2716,7 @@ impl Lock {
         let lock = Self::new(
             VERSION,
             REVISION,
+            BTreeSet::new(),
             packages,
             requires_python,
             options,
@@ -2741,6 +2742,7 @@ impl Lock {
     fn new(
         version: u32,
         revision: u32,
+        mut requires_preview_features: BTreeSet<String>,
         mut packages: Vec<Package>,
         requires_python: RequiresPython,
         options: ResolverOptions,
@@ -2880,10 +2882,18 @@ impl Lock {
             }
         }
 
+        if packages
+            .iter()
+            .flat_map(|package| &package.wheels)
+            .any(|wheel| wheel.filename.variant().is_some())
+        {
+            requires_preview_features.insert(PreviewFeature::WheelVariants.to_string());
+        }
+
         let lock = Self {
             version,
             revision,
-            requires_preview_features: BTreeSet::new(),
+            requires_preview_features,
             fork_markers,
             conflicts,
             supported_environments,
@@ -7047,9 +7057,10 @@ impl TryFrom<LockWire> for Lock {
             minimum_libc_version: options_wire.minimum_libc_version,
             exclude_newer: options_wire.exclude_newer.into(),
         };
-        let mut lock = Self::new(
+        Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
+            wire.requires_preview_features,
             packages,
             wire.requires_python,
             options,
@@ -7058,9 +7069,7 @@ impl TryFrom<LockWire> for Lock {
             supported_environments,
             required_environments,
             fork_markers,
-        )?;
-        lock.requires_preview_features = wire.requires_preview_features;
-        Ok(lock)
+        )
     }
 }
 
