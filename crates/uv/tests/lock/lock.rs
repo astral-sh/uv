@@ -2683,6 +2683,96 @@ fn lock_build_retains_other_platform_wheel_hash_until_upgrade() -> Result<()> {
     Ok(())
 }
 
+/// A forced resolution under `--locked` must not run metadata hooks from a moved Git branch,
+/// even if the package is only needed at build time and build isolation is disabled.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_build_pins_git_commit_before_metadata_hook() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repo = context.temp_dir.child("helper");
+    repo.create_dir_all()?;
+    let git = || {
+        let mut git = Command::new("git");
+        git.current_dir(repo.path()).args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.org",
+        ]);
+        git
+    };
+    git().args(["init", "-b", "main"]).assert().success();
+    let project = repo.child("pyproject.toml");
+    project.write_str(indoc! {r#"
+        [project]
+        name = "helper"
+        version = "1"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    git().args(["add", "."]).assert().success();
+    git()
+        .args(["commit", "-m", "Static metadata"])
+        .assert()
+        .success();
+
+    let url = SafeUrl::from_directory_path(repo.path())
+        .map_err(|()| anyhow!("expected a file URL for the Git repository"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ git+{url}@main"]
+        build-backend = "helper"
+    "#})?;
+    context
+        .lock()
+        .args(["--preview-features", "lock-build-dependencies", "--offline"])
+        .assert()
+        .success();
+    let locked = context.read("uv.lock");
+
+    let sentinel = context.temp_dir.child("backend-executed");
+    repo.child("backend.py").write_str(&formatdoc! {r#"
+        from pathlib import Path
+        Path({path:?}).touch()
+        raise RuntimeError("unexpected metadata hook from moved branch")
+    "#, path = sentinel.path().to_string_lossy()})?;
+    project.write_str(
+        &fs_err::read_to_string(&project)?.replace("version = \"1\"", "dynamic = [\"version\"]"),
+    )?;
+    git().args(["add", "."]).assert().success();
+    git()
+        .args(["commit", "-m", "Require backend execution"])
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--no-index", "--locked", "--resolution", "lowest-direct", "--refresh", "--no-build-isolation",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolution mode changed from `highest` to `lowest-direct`
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert!(!sentinel.exists());
+    assert_eq!(context.read("uv.lock"), locked);
+    Ok(())
+}
+
 /// Approving only a wheel must not let its sibling sdist introduce new build requirements.
 #[cfg(feature = "test-universal")]
 #[test]

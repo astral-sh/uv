@@ -692,20 +692,36 @@ async fn do_lock(
         (HashStrategy::default(), HashStrategy::default())
     };
     // Re-resolving an outdated lock does not authorize replacing known artifacts. Only an
-    // explicit unlocked upgrade releases the selected packages' hashes.
-    let hash_upgrade = match mode {
+    // explicit unlocked upgrade releases the selected packages' hashes and Git commits.
+    let artifact_upgrade = match mode {
         LockMode::Locked(..) => &Upgrade::default(),
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => upgrade,
     };
-    let resolution_hasher = if hash_upgrade.is_none() {
-        locked_hasher.clone()
-    } else if let Some(existing_lock) = existing_lock.as_ref() {
-        // An explicit upgrade allows replacing the selected packages' files, so do not require
-        // them to match the hashes recorded in the lockfile.
-        let upgrade_packages = existing_lock.upgrade_packages(hash_upgrade);
-        existing_lock.hash_strategy(target.install_path(), &upgrade_packages)?
+    let upgrade_packages = existing_lock
+        .as_ref()
+        .map_or_else(FxHashSet::default, |lock| {
+            lock.upgrade_packages(artifact_upgrade)
+        });
+    let enforced_lock = existing_lock
+        .as_ref()
+        .filter(|lock| lock.locks_build_dependencies());
+    if let Some(lock) = enforced_lock {
+        // Validation itself can run metadata hooks. Pin Git sources before any build, even
+        // when version preferences are unusable or the build uses the caller's environment.
+        for package in lock.all_packages() {
+            if !upgrade_packages.contains(package.name())
+                && let Some(pin) = package.as_git_ref()?
+            {
+                state.git().insert(pin.reference, pin.sha);
+            }
+        }
+    }
+    let resolution_hasher = if let Some(lock) = &existing_lock
+        && !upgrade_packages.is_empty()
+    {
+        lock.hash_strategy(target.install_path(), &upgrade_packages)?
     } else {
-        HashStrategy::default()
+        locked_hasher.clone()
     };
     let hasher = HashStrategy::collect(HashCollection::Url)
         .with_verification(resolution_hasher.verification().clone());
@@ -785,9 +801,6 @@ async fn do_lock(
         preview,
     );
 
-    let enforced_lock = existing_lock
-        .as_ref()
-        .filter(|lock| lock.locks_build_dependencies());
     let lock_build_dependencies =
         preview.is_enabled(PreviewFeature::LockBuildDependencies) || enforced_lock.is_some();
     let build_dispatch = match (&mode, enforced_lock) {
@@ -1082,7 +1095,7 @@ async fn do_lock(
                     &resolution,
                     existing_lock.as_ref(),
                     versions_lock.is_some(),
-                    hash_upgrade,
+                    artifact_upgrade,
                 ))
                 .await?
             } else {
