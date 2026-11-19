@@ -719,7 +719,7 @@ impl InternerGuard<'_> {
         &mut self,
         mut i: NodeId,
         cache: &mut FxHashMap<NodeId, NodeId>,
-        remove: &dyn Fn(&Variable) -> bool,
+        remove: &impl Fn(&Variable) -> bool,
     ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
