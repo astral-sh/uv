@@ -23,6 +23,8 @@ use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
 
+use super::scenario::PackageMetadata;
+
 pub(super) const DEFAULT_WHEEL_TAG: &str = "py3-none-any";
 
 /// Build a wheel in memory. By default, it is a `py3-none-any` wheel with no dependencies.
@@ -181,17 +183,14 @@ fn build_record(dist_info: &str, entries: &[(String, String)]) -> String {
 
 /// Generate a source distribution (`.tar.gz`) as an in-memory tarball.
 ///
-/// The sdist contains a `pyproject.toml` using `hatchling` as build backend,
+/// The sdist contains a `pyproject.toml` with the declared build requirements and backend,
 /// `PKG-INFO` with full metadata, and a stub module.
 ///
 /// Returns `(filename, bytes)`.
 pub fn generate_sdist(
     name: &PackageName,
     version: &Version,
-    requires: &[Requirement],
-    extras: &BTreeMap<ExtraName, Vec<Requirement>>,
-    requires_python: Option<&VersionSpecifiers>,
-    entry_points: &[String],
+    package: &PackageMetadata,
 ) -> (String, Vec<u8>) {
     let normalized = name.as_dist_info_name();
     let prefix = format!("{normalized}-{version}");
@@ -199,21 +198,20 @@ pub fn generate_sdist(
     let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
     let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
 
-    let pyproject = build_pyproject_toml(
-        name,
-        version,
-        requires,
-        extras,
-        requires_python,
-        entry_points,
-    );
+    let pyproject = build_pyproject_toml(name, version, package);
     add_tar_file(
         &mut tar,
         &format!("{prefix}/pyproject.toml"),
         pyproject.as_bytes(),
     );
 
-    let pkg_info = build_metadata(name, version, requires, extras, requires_python);
+    let pkg_info = build_metadata(
+        name,
+        version,
+        &package.requires,
+        &package.extras,
+        package.requires_python.as_ref(),
+    );
     add_tar_file(&mut tar, &format!("{prefix}/PKG-INFO"), pkg_info.as_bytes());
 
     let init_py = format!("__version__ = \"{version}\"\n");
@@ -222,7 +220,7 @@ pub fn generate_sdist(
         &format!("{prefix}/src/{normalized}/__init__.py"),
         init_py.as_bytes(),
     );
-    if !entry_points.is_empty() {
+    if !package.entry_points.is_empty() {
         add_tar_file(
             &mut tar,
             &format!("{prefix}/src/{normalized}/cli.py"),
@@ -285,15 +283,39 @@ fn build_metadata(
     metadata
 }
 
-/// Build a minimal `pyproject.toml` for an sdist using hatchling.
+/// Build a minimal `pyproject.toml` for a scenario package's sdist.
 fn build_pyproject_toml(
     name: &PackageName,
     version: &Version,
-    requires: &[Requirement],
-    extras: &BTreeMap<ExtraName, Vec<Requirement>>,
-    requires_python: Option<&VersionSpecifiers>,
-    entry_points: &[String],
+    package: &PackageMetadata,
 ) -> String {
+    let PackageMetadata {
+        requires,
+        extras,
+        requires_python,
+        entry_points,
+        ..
+    } = package;
+    // Use TOML strings so that quotes and markers in PEP 508 requirements round-trip.
+    let build_requires = package.build_requires.as_ref().map_or_else(
+        || r#"["hatchling"]"#.to_string(),
+        |requirements| {
+            toml::Value::Array(
+                requirements
+                    .iter()
+                    .map(|requirement| toml::Value::String(requirement.to_string()))
+                    .collect(),
+            )
+            .to_string()
+        },
+    );
+    let build_backend = toml::Value::String(
+        package
+            .build_backend
+            .as_deref()
+            .unwrap_or("hatchling.build")
+            .to_string(),
+    );
     let normalized = name.as_dist_info_name();
     let dependencies = if requires.is_empty() {
         "dependencies = []\n".to_string()
@@ -307,6 +329,7 @@ fn build_pyproject_toml(
         dependencies
     };
     let requires_python = requires_python
+        .as_ref()
         .map(|requires_python| format!("requires-python = \"{requires_python}\"\n"))
         .unwrap_or_default();
     let optional_dependencies = if extras.is_empty() {
@@ -339,8 +362,8 @@ fn build_pyproject_toml(
     formatdoc! {
         r#"
         [build-system]
-        requires = ["hatchling"]
-        build-backend = "hatchling.build"
+        requires = {build_requires}
+        build-backend = {build_backend}
 
         [tool.hatch.build.targets.wheel]
         packages = ["src/{normalized}"]
@@ -452,10 +475,11 @@ mod tests {
         let (filename, bytes) = generate_sdist(
             &PackageName::from_str("my-package").expect("valid package name"),
             &Version::from_str("1.0.0").expect("valid version"),
-            &requires,
-            &BTreeMap::new(),
-            Some(&requires_python),
-            &[],
+            &PackageMetadata {
+                requires,
+                requires_python: Some(requires_python),
+                ..PackageMetadata::default()
+            },
         );
         assert_eq!(filename, "my_package-1.0.0.tar.gz");
 
@@ -479,6 +503,36 @@ mod tests {
         assert!(names.contains(&"my_package-1.0.0/pyproject.toml".to_string()));
         assert!(names.contains(&"my_package-1.0.0/PKG-INFO".to_string()));
         assert!(names.contains(&"my_package-1.0.0/src/my_package/__init__.py".to_string()));
+    }
+
+    /// An explicitly empty build environment must not silently pick up the default backend.
+    #[test]
+    fn sdist_without_build_requirements() {
+        let package: PackageMetadata = toml::from_str(
+            r#"
+            build_requires = []
+            build_backend = "in_tree"
+            requires = ["runtime-only"]
+            "#,
+        )
+        .expect("valid scenario metadata");
+        let pyproject: toml::Table = toml::from_str(&build_pyproject_toml(
+            &PackageName::from_str("demo").expect("valid package name"),
+            &Version::from_str("1").expect("valid version"),
+            &package,
+        ))
+        .expect("generated pyproject should be valid TOML");
+        assert_eq!(
+            pyproject["build-system"],
+            toml::Value::Table(toml::toml! {
+                requires = []
+                build-backend = "in_tree"
+            })
+        );
+        assert_eq!(
+            pyproject["project"]["dependencies"][0].as_str(),
+            Some("runtime-only")
+        );
     }
 
     #[test]
