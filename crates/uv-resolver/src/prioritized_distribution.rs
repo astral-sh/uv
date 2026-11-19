@@ -18,7 +18,6 @@ use uv_platform_tags::{
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
-use crate::known_platform::KnownPlatform;
 use crate::resolved::ResolvedDistRef;
 
 /// A collection of distributions that have been filtered by relevance.
@@ -164,6 +163,15 @@ impl<'a> CompatibleDist<'a> {
         }
     }
 
+    /// Return the wheel filenames that contribute to the distribution's marker coverage.
+    pub(crate) fn compatible_wheels(&self) -> impl Iterator<Item = &WheelFilename> {
+        self.prioritized()
+            .into_iter()
+            .flat_map(|prioritized| &prioritized.0.wheels)
+            .filter(|(_, compatibility)| compatibility.is_compatible())
+            .map(|(wheel, _)| &wheel.filename)
+    }
+
     /// Return the set of supported platforms for the distribution, in terms of their markers.
     pub(crate) fn implied_markers(&self) -> MarkerTree {
         match self.prioritized() {
@@ -198,7 +206,6 @@ impl IncompatibleDist {
                     None => format!("has {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("requires {self}"),
-                IncompatibleWheel::MissingPlatform(_) => format!("has {self}"),
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("has {self}"),
@@ -227,7 +234,6 @@ impl IncompatibleDist {
                     None => format!("have {self}"),
                 },
                 IncompatibleWheel::RequiresPython(..) => format!("require {self}"),
-                IncompatibleWheel::MissingPlatform(_) => format!("have {self}"),
             },
             Self::Source(incompatibility) => match incompatibility {
                 IncompatibleSource::NoBuild => format!("have {self}"),
@@ -275,7 +281,6 @@ impl IncompatibleDist {
                 IncompatibleWheel::Yanked(..) => None,
                 IncompatibleWheel::ExcludeNewer(..) => None,
                 IncompatibleWheel::RequiresPython(..) => None,
-                IncompatibleWheel::MissingPlatform(..) => None,
             },
             Self::Source(..) => None,
             Self::Unavailable => None,
@@ -319,15 +324,6 @@ impl Display for IncompatibleDist {
                 },
                 IncompatibleWheel::RequiresPython(python, _) => {
                     write!(f, "Python {python}")
-                }
-                IncompatibleWheel::MissingPlatform(marker) => {
-                    if let Some(platform) = KnownPlatform::from_marker(*marker) {
-                        write!(f, "no {platform}-compatible wheels")
-                    } else if let Some(marker) = marker.try_to_string() {
-                        write!(f, "no `{marker}`-compatible wheels")
-                    } else {
-                        write!(f, "no compatible wheels")
-                    }
                 }
             },
             Self::Source(incompatibility) => match incompatibility {
@@ -386,8 +382,6 @@ pub enum IncompatibleWheel {
     Yanked(Yanked),
     /// The use of binary wheels is disabled.
     NoBinary,
-    /// Wheels are not available for the current platform.
-    MissingPlatform(MarkerTree),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -947,31 +941,26 @@ impl IncompatibleWheel {
                         timestamp_other < timestamp_self
                     }
                 },
-                Self::MissingPlatform(_)
-                | Self::NoBinary
-                | Self::RequiresPython(_, _)
-                | Self::Tag(_)
-                | Self::Yanked(_) => true,
+                Self::NoBinary | Self::RequiresPython(_, _) | Self::Tag(_) | Self::Yanked(_) => {
+                    true
+                }
             },
             Self::Tag(tag_self) => match other {
                 Self::ExcludeNewer(_) => false,
                 Self::Tag(tag_other) => tag_self > tag_other,
-                Self::MissingPlatform(_)
-                | Self::NoBinary
-                | Self::RequiresPython(_, _)
-                | Self::Yanked(_) => true,
+                Self::NoBinary | Self::RequiresPython(_, _) | Self::Yanked(_) => true,
             },
             Self::RequiresPython(_, _) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) => false,
                 // Version specifiers cannot be reasonably compared
                 Self::RequiresPython(_, _) => false,
-                Self::MissingPlatform(_) | Self::NoBinary | Self::Yanked(_) => true,
+                Self::NoBinary | Self::Yanked(_) => true,
             },
             Self::Yanked(_) => match other {
                 Self::ExcludeNewer(_) | Self::Tag(_) | Self::RequiresPython(_, _) => false,
                 // Yanks with a reason are more helpful for errors
                 Self::Yanked(yanked_other) => matches!(yanked_other, Yanked::Reason(_)),
-                Self::MissingPlatform(_) | Self::NoBinary => true,
+                Self::NoBinary => true,
             },
             Self::NoBinary => match other {
                 Self::ExcludeNewer(_)
@@ -979,9 +968,7 @@ impl IncompatibleWheel {
                 | Self::RequiresPython(_, _)
                 | Self::Yanked(_) => false,
                 Self::NoBinary => false,
-                Self::MissingPlatform(_) => true,
             },
-            Self::MissingPlatform(_) => false,
         }
     }
 }
@@ -996,6 +983,27 @@ pub(crate) fn implied_markers(
     let python = implied_python_markers(filename);
     let [glibc, musl] = implied_libc_markers(filename, python, minimum_libc_version);
     glibc.and(musl)
+}
+
+/// The oldest libc releases advertised by wheel tags that match the given markers.
+pub(crate) fn available_libc_versions<'a>(
+    filenames: impl IntoIterator<Item = &'a WheelFilename>,
+    markers: MarkerTree,
+) -> MinimumLibcVersion {
+    // Filter each tag separately, since a wheel can target multiple architectures with
+    // different libc requirements.
+    let mut available = MinimumLibcVersion::default();
+    for filename in filenames {
+        let markers = markers.and(implied_python_markers(filename));
+        for tag in filename.platform_tags() {
+            if let Some(minimum) = MinimumLibcVersion::from_platform_tag(tag)
+                && !markers.is_disjoint(implied_platform_markers([tag]))
+            {
+                available = available.union(minimum);
+            }
+        }
+    }
+    available
 }
 
 /// Infer coverage for each libc independently so separate wheels can satisfy each baseline.

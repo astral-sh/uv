@@ -1497,27 +1497,26 @@ fn merge_unavailable_versions(
         else {
             return None;
         };
-        (package == other_package && reason == other_reason).then(|| other_versions.union(versions))
+        if package != other_package {
+            return None;
+        }
+        let reason = reason.merge(other_reason)?;
+        let versions = other_versions.union(versions);
+        let cause = Arc::new(DerivationTree::External(External::Custom(
+            package.clone(),
+            versions.clone(),
+            reason,
+        )));
+        Some((cause, versions))
     };
 
     // Keep the two cases separate to preserve the ordering of the causes.
-    let (unchanged_cause, merged_versions, merged_is_cause2) =
-        if let Some(merged_versions) = merge(&derived.cause2) {
-            (derived.cause1.clone(), merged_versions, true)
-        } else {
-            let merged_versions = merge(&derived.cause1)?;
-            (derived.cause2.clone(), merged_versions, false)
-        };
-
-    let merged_cause = Arc::new(DerivationTree::External(External::Custom(
-        package.clone(),
-        merged_versions.clone(),
-        reason.clone(),
-    )));
-    let (cause1, cause2) = if merged_is_cause2 {
-        (unchanged_cause, merged_cause)
+    let (cause1, cause2, merged_versions) = if let Some((cause2, versions)) = merge(&derived.cause2)
+    {
+        (derived.cause1.clone(), cause2, versions)
     } else {
-        (merged_cause, unchanged_cause)
+        let (cause1, versions) = merge(&derived.cause1)?;
+        (cause1, derived.cause2.clone(), versions)
     };
 
     let mut terms = derived.terms.clone();
@@ -1565,11 +1564,11 @@ fn merge_unavailable_siblings(derived: &ErrorDerived) -> Option<ErrorTree> {
     }
 
     let versions = versions.union(other_versions);
-    if reason == other_reason {
+    if let Some(reason) = reason.merge(other_reason) {
         return Some(DerivationTree::External(External::Custom(
             package.clone(),
             versions,
-            reason.clone(),
+            reason,
         )));
     }
     if versions.subset_of(term_versions) {

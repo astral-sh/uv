@@ -25,10 +25,11 @@ use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
 use uv_distribution::{
     ArchiveMetadata, DistributionDatabase, Metadata, supported_variant_properties,
 };
+use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, RequestedDist, Requirement,
-    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
+    IndexMetadata, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RemoteSource, RequestedDist,
+    Requirement, RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
     VersionOrUrlRef,
 };
 use uv_git::GitResolver;
@@ -56,7 +57,7 @@ use crate::pins::FilePins;
 use crate::preferences::{PreferenceSource, Preferences};
 use crate::prioritized_distribution::{
     CompatibleDist, IncompatibleDist, IncompatibleSource, IncompatibleWheel, PrioritizedDist,
-    PythonRequirementKind, RegistryVariantsJson, implied_markers,
+    PythonRequirementKind, RegistryVariantsJson, available_libc_versions, implied_markers,
 };
 use crate::pubgrub::{
     DependencySource, PubGrubDependency, PubGrubPackage, PubGrubPackageInner, PubGrubPriorities,
@@ -66,6 +67,7 @@ use crate::python_requirement::PythonRequirement;
 use crate::resolution::{ResolutionGraphBuilder, ResolverOutput};
 use crate::resolution_mode::ResolutionStrategy;
 use crate::resolved::ResolvedDistRef;
+use crate::resolver::availability::MissingPlatform;
 pub(crate) use crate::resolver::availability::{
     ResolverVersion, UnavailablePackage, UnavailableReason, UnavailableVersion,
     UnsatisfiableRequirement,
@@ -1269,25 +1271,23 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             let filename = dist.wheel_filename();
 
             // If the wheel does not cover a required environment, it is incompatible.
-            if env.marker_environment().is_none() && !self.options.artifact_environments.is_empty()
+            if let Some(fork_markers) = env.fork_markers()
+                && !self.options.artifact_environments.is_empty()
             {
                 let wheel_marker = implied_markers(filename, self.options.minimum_libc_version);
-                // If the caller marked an environment as requiring artifact coverage, ensure it
-                // has coverage.
-                for environment_marker in self.options.artifact_environments.iter().copied() {
-                    // If the platform is part of the current environment...
-                    if env.included_by_marker(environment_marker)
-                        && env.included_by_marker(
-                            find_environments(id, pubgrub).and(environment_marker),
-                        )
+                for marker in self.options.artifact_environments.iter().copied() {
+                    if env.included_by_marker(marker)
+                        && !env.included_by_marker(wheel_marker.and(marker))
                     {
-                        // ...but the wheel doesn't support it in this fork, it's incompatible.
-                        if !env.included_by_marker(wheel_marker.and(environment_marker)) {
+                        let required = find_environments(id, pubgrub).and(marker);
+                        if env.included_by_marker(required) {
                             return Ok(Some(ResolverVersion::Unavailable(
                                 version.clone(),
-                                UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                    IncompatibleWheel::MissingPlatform(environment_marker),
-                                )),
+                                self.missing_platform(
+                                    marker,
+                                    required.and(fork_markers),
+                                    [filename],
+                                ),
                             )));
                         }
                     }
@@ -1636,6 +1636,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(selection)
     }
 
+    /// Explain a coverage failure using wheels that match the required environment in this fork.
+    fn missing_platform<'a>(
+        &self,
+        marker: MarkerTree,
+        target: MarkerTree,
+        filenames: impl IntoIterator<Item = &'a WheelFilename>,
+    ) -> UnavailableVersion {
+        let required_libc = self.options.minimum_libc_version.unwrap_or_default();
+        let available_libc = if required_libc == MinimumLibcVersion::default() {
+            MinimumLibcVersion::default()
+        } else {
+            available_libc_versions(
+                filenames,
+                target.and(self.python_requirement.to_marker_tree()),
+            )
+        };
+        UnavailableVersion::MissingPlatform(MissingPlatform {
+            marker,
+            required_libc,
+            available_libc,
+        })
+    }
+
     /// Determine whether a candidate covers all supported platforms; and, if not, generate a fork.
     ///
     /// This only ever applies to versions that lack source distributions And, for now, we only
@@ -1680,9 +1703,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // If the platform is part of the current environment...
             if env.included_by_marker(marker) {
                 // But isn't supported by the distribution in this fork...
-                if !env.included_by_marker(artifact_markers.and(marker))
-                    && env.included_by_marker(find_environments(id, pubgrub).and(marker))
-                {
+                if !env.included_by_marker(artifact_markers.and(marker)) {
+                    let required = find_environments(id, pubgrub).and(marker);
+                    if !env.included_by_marker(required) {
+                        continue;
+                    }
                     // Separate the required environment from the candidate's wheel coverage in
                     // this fork, allowing environments in neither set to fall on either side.
                     // For example, Darwin == 24 becomes Darwin < 25 when the wheels require
@@ -1692,9 +1717,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     let Some((left, right)) = fork_version_by_marker(env, split) else {
                         return Ok(Some(ResolverVersion::Unavailable(
                             candidate.version().clone(),
-                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
-                                IncompatibleWheel::MissingPlatform(marker),
-                            )),
+                            self.missing_platform(
+                                marker,
+                                required.and(fork_markers),
+                                dist.compatible_wheels(),
+                            ),
                         )));
                     };
 
