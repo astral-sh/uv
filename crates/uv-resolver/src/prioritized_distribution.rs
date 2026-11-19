@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
 use arcstr::ArcStr;
@@ -6,22 +7,19 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
-    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantScore,
-    VariantsJsonContent, VariantsJsonFilename, VerbatimFile,
+    File, IndexUrl, InstalledDist, LibcTag, MinimumLibcVersion, Name, RegistryBuiltDist,
+    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SupportedVariantProperties,
+    VariantScore, VariantsJsonContent, VariantsJsonFilename, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
-use uv_pep508::{
-    CanonicalMarkerValueString, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
-    MarkerValueVersion,
-};
+use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{
-    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, PlatformTag, TagPriority, Tags,
+    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, LibcVersion, PlatformTag, TagPriority, Tags,
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
-use crate::python_requirement::declarations_marker;
+use crate::known_platform::KnownPlatform;
 use crate::resolved::ResolvedDistRef;
 
 /// A collection of distributions that have been filtered by relevance.
@@ -167,15 +165,13 @@ impl<'a> CompatibleDist<'a> {
         }
     }
 
-    /// Return the filenames and Python requirements of wheels contributing to marker coverage.
-    pub(crate) fn compatible_wheels(
-        &self,
-    ) -> impl Iterator<Item = (&WheelFilename, Option<&VersionSpecifiers>)> {
+    /// Return the wheel filenames that contribute to the distribution's marker coverage.
+    pub(crate) fn compatible_wheels(&self) -> impl Iterator<Item = &WheelFilename> {
         self.prioritized()
             .into_iter()
             .flat_map(|prioritized| &prioritized.0.wheels)
             .filter(|(_, compatibility)| compatibility.is_compatible())
-            .map(|(wheel, _)| (&wheel.filename, wheel.file.requires_python.as_deref()))
+            .map(|(wheel, _)| &wheel.filename)
     }
 
     /// Return the set of supported platforms for the distribution, in terms of their markers.
@@ -507,7 +503,7 @@ impl PrioritizedDist {
             && (!self.0.python_markers.is_true()
                 || !self.0.markers.iter().all(|markers| markers.is_true()))
         {
-            let python = implied_python_markers(&dist.filename, MarkerPurpose::Coverage);
+            let python = implied_python_markers(&dist.filename);
             self.0.python_markers = self.0.python_markers.or(python);
             for (coverage, markers) in self.0.markers.iter_mut().zip(implied_libc_markers(
                 &dist.filename,
@@ -986,99 +982,123 @@ pub(crate) fn implied_markers(
     filename: &WheelFilename,
     minimum_libc_version: Option<MinimumLibcVersion>,
 ) -> MarkerTree {
-    let python = implied_python_markers(filename, MarkerPurpose::Coverage);
+    let python = implied_python_markers(filename);
     let [glibc, musl] = implied_libc_markers(filename, python, minimum_libc_version);
     glibc.and(musl)
 }
 
-/// The oldest libc releases advertised by wheel tags that match the given markers.
-pub(crate) fn available_libc_versions<'a>(
-    wheels: impl IntoIterator<Item = (&'a WheelFilename, Option<&'a VersionSpecifiers>)>,
-    markers: MarkerTree,
-) -> MinimumLibcVersion {
-    // Filter each tag separately, since a wheel can target multiple architectures with
-    // different libc requirements.
-    let markers = markers.specialize_strings(&[
-        (CanonicalMarkerValueString::SysPlatform, "linux"),
-        (CanonicalMarkerValueString::PlatformSystem, "Linux"),
-        (CanonicalMarkerValueString::OsName, "posix"),
-    ]);
-    if markers.is_false() {
-        return MinimumLibcVersion::default();
-    }
-    let mut available = MinimumLibcVersion::default();
-    for (filename, requires_python) in wheels {
-        let markers = markers
-            .and(declarations_marker(requires_python))
-            .and(abi_markers(filename.abi_tags()));
-        let markers = implied_python_markers(filename, MarkerPurpose::Diagnostic(markers));
-        for tag in filename.platform_tags() {
-            if let Some((arch, libc)) = tag.linux_libc()
-                && !markers
-                    .specialize_strings(&[(
-                        CanonicalMarkerValueString::PlatformMachine,
-                        arch.name(),
-                    )])
-                    .is_false()
-            {
-                available.include(libc);
-            }
-        }
-    }
-    available
+/// A required environment that the available wheels do not cover.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingPlatform {
+    marker: MarkerTree,
+    required_libc: Option<MinimumLibcVersion>,
+    shared_minimum: Option<LibcVersion>,
 }
 
-/// Constrain the target by the runtimes named in the wheel's ABI tags. For example,
-/// `pypy310_pp73` encodes both Python 3.10 and PyPy 7.3.
-fn abi_markers(tags: &[AbiTag]) -> MarkerTree {
-    let version_marker = |key, (major, minor): (u8, u8)| {
-        MarkerTree::expression(MarkerExpression::Version {
-            key,
-            specifier: VersionSpecifier::equals_star_version(Version::new([
-                u64::from(major),
-                u64::from(minor),
-            ])),
-        })
-    };
-    let mut markers = MarkerTree::FALSE;
-    for tag in tags {
-        let (name, python, implementation) = match *tag {
-            AbiTag::None => return MarkerTree::TRUE,
-            AbiTag::Abi3 | AbiTag::Abi3T => (CPYTHON.1, None, None),
-            AbiTag::CPython { python_version, .. } => (CPYTHON.1, Some(python_version), None),
-            AbiTag::PyPy {
-                python_version,
-                implementation_version,
-            } => (PYPY.1, python_version, Some(implementation_version)),
-            AbiTag::GraalPy {
-                python_version,
-                implementation_version,
-            } => (
-                GRAALPY.1,
-                Some(python_version),
-                Some(implementation_version),
-            ),
-            AbiTag::Pyston {
-                implementation_version,
-            } => (PYSTON.1, None, Some(implementation_version)),
+impl MissingPlatform {
+    /// Include the configured libc baselines when the wheels would cover the environment
+    /// with the baselines disabled.
+    pub(crate) fn new<'a>(
+        marker: MarkerTree,
+        target: MarkerTree,
+        required: Option<MinimumLibcVersion>,
+        wheels: impl IntoIterator<Item = &'a WheelFilename>,
+    ) -> Self {
+        let mut missing = Self {
+            marker,
+            required_libc: None,
+            shared_minimum: None,
         };
-        let mut marker = MarkerTree::expression(MarkerExpression::String {
-            key: MarkerValueString::ImplementationName,
-            operator: MarkerOperator::Equal,
-            value: name,
-        });
-        if let Some(python) = python {
-            marker = marker.and(version_marker(MarkerValueVersion::PythonVersion, python));
+        let Some(required) = required else {
+            return missing;
+        };
+        if target.is_disjoint(KnownPlatform::Linux.marker()) {
+            return missing;
         }
-        if let Some(implementation) = implementation {
-            marker = marker.and(version_marker(
-                MarkerValueVersion::ImplementationVersion,
-                implementation,
-            ));
+
+        // Coverage markers approximate interpreter compatibility. Report a tag minimum only if
+        // all wheels and architectures in the requested family agree on it.
+        let mut minima = BTreeSet::new();
+        let mut family_matches = false;
+        let mut all_supported = true;
+        for wheel in wheels {
+            let python = target.and(implied_python_markers(wheel));
+            let mut by_arch = BTreeMap::new();
+            for tag in wheel.platform_tags() {
+                let Some(libc) = LibcTag::from_platform_tag(tag) else {
+                    continue;
+                };
+                let covers = !python.is_disjoint(implied_platform_markers([tag]));
+                if covers {
+                    missing.required_libc = Some(required);
+                }
+                // Independent minima for both families can describe disjoint environments.
+                let (arch, version) = match (libc, required.glibc, required.musl) {
+                    (LibcTag::Glibc(arch, version), Some(_), None) => {
+                        all_supported &= version.is_manylinux_supported(arch);
+                        (arch, version)
+                    }
+                    (LibcTag::Musl(arch, version), None, Some(_)) => (arch, version),
+                    (LibcTag::Glibc(..) | LibcTag::Musl(..), _, _) => continue,
+                };
+                family_matches |= covers;
+                // A wheel can advertise multiple tags for the same architecture.
+                let oldest = by_arch.entry(arch).or_insert(version);
+                *oldest = version.min(*oldest);
+            }
+            minima.extend(by_arch.into_values());
         }
-        markers = markers.or(marker);
+        if family_matches && all_supported && minima.len() == 1 {
+            missing.shared_minimum = minima.pop_first();
+        }
+        missing
     }
-    markers
+
+    /// Combine failures for the same required environment when reporting a version range.
+    pub(crate) fn merge(&self, other: &Self) -> Option<Self> {
+        (self.marker == other.marker).then(|| Self {
+            marker: self.marker,
+            required_libc: self.required_libc.or(other.required_libc),
+            shared_minimum: self
+                .shared_minimum
+                .filter(|min| other.shared_minimum == Some(*min)),
+        })
+    }
+}
+
+impl Display for MissingPlatform {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(platform) = KnownPlatform::from_marker(self.marker) {
+            write!(f, "no {platform}-compatible wheels")?;
+        } else if let Some(marker) = self.marker.try_to_string() {
+            write!(f, "no `{marker}`-compatible wheels")?;
+        } else {
+            f.write_str("no compatible wheels")?;
+        }
+        let required = self.required_libc.unwrap_or_default();
+        let (family, tag, version) = match (required.glibc, required.musl) {
+            (Some(version), None) => ("glibc", "manylinux", version),
+            (None, Some(version)) => ("musl", "musllinux", version),
+            (Some(glibc), Some(musl)) => {
+                return write!(
+                    f,
+                    " that satisfy `minimum-libc-version` for both glibc {glibc} and musl {musl}"
+                );
+            }
+            (None, None) => return Ok(()),
+        };
+        write!(
+            f,
+            " that satisfy `minimum-libc-version` for {family} {version}"
+        )?;
+        if let Some(minimum) = self.shared_minimum {
+            write!(
+                f,
+                " (the {tag} wheels are tagged for {family} {minimum} or newer)"
+            )?;
+        }
+        Ok(())
+    }
 }
 
 /// Infer coverage for each libc independently so separate wheels can satisfy each baseline.
@@ -1264,56 +1284,11 @@ fn macos_darwin_release(major: u16, minor: u16) -> Option<Version> {
     Some(Version::new(release))
 }
 
-// Spelling of each implementation in the platform_python_implementation and
-// implementation_name markers, respectively.
-const CPYTHON: (ArcStr, ArcStr) = (arcstr::literal!("CPython"), arcstr::literal!("cpython"));
-const PYPY: (ArcStr, ArcStr) = (arcstr::literal!("PyPy"), arcstr::literal!("pypy"));
-const GRAALPY: (ArcStr, ArcStr) = (arcstr::literal!("GraalPy"), arcstr::literal!("graalpy"));
-const PYSTON: (ArcStr, ArcStr) = (arcstr::literal!("Pyston"), arcstr::literal!("pyston"));
-
-/// Evaluate both implementation-name markers for the interpreter providing a wheel.
-fn implementation_target(target: MarkerTree, platform: &str, name: &str) -> MarkerTree {
-    target.specialize_strings(&[
-        (
-            CanonicalMarkerValueString::PlatformPythonImplementation,
-            platform,
-        ),
-        (CanonicalMarkerValueString::ImplementationName, name),
-    ])
-}
-
-/// A generic wheel can run on any implementation for which uv generates install tags.
-/// When the target distinguishes implementation versions, check each implementation
-/// separately so that only the CPython branch ties that version to the language version.
-fn generic_python_target(target: MarkerTree) -> MarkerTree {
-    let cpython = target.assume_cpython_versions();
-    if cpython == target {
-        return target;
-    }
-    [
-        (CPYTHON, cpython),
-        (PYPY, target),
-        (GRAALPY, target),
-        (PYSTON, target),
-    ]
-    .into_iter()
-    .map(|((platform, name), target)| implementation_target(target, &platform, &name))
-    .fold(MarkerTree::FALSE, MarkerTree::or)
-}
-
-#[derive(Clone, Copy)]
-enum MarkerPurpose {
-    /// Determine coverage and the markers used to fork the resolution.
-    Coverage,
-    /// Identify matching wheel tags within an existing fork.
-    Diagnostic(MarkerTree),
-}
-
 /// Given a wheel filename, determine the set of supported Python versions, in terms of their markers.
 ///
 /// This is roughly the inverse of Python tag generation: given a tag, we want to infer the
 /// supported Python version (rather than generating the supported tags from a given Python version).
-fn implied_python_markers(filename: &WheelFilename, purpose: MarkerPurpose) -> MarkerTree {
+fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
     let mut marker = MarkerTree::FALSE;
 
     // If any ABI tag is a stable ABI (`abi3` or `abi3t`), the python tag represents a minimum
@@ -1323,8 +1298,11 @@ fn implied_python_markers(filename: &WheelFilename, purpose: MarkerPurpose) -> M
 
     for python_tag in filename.python_tags() {
         // First, construct the version marker based on the tag
-        let tree = match python_tag {
-            LanguageTag::None => MarkerTree::TRUE,
+        let mut tree = match python_tag {
+            LanguageTag::None => {
+                // No Python tag means no Python version requirement.
+                return MarkerTree::TRUE;
+            }
             LanguageTag::Python { major, minor: None } | LanguageTag::CPythonMajor { major } => {
                 if is_abi3 {
                     MarkerTree::expression(MarkerExpression::Version {
@@ -1393,37 +1371,42 @@ fn implied_python_markers(filename: &WheelFilename, purpose: MarkerPurpose) -> M
             }
         };
 
-        let implementation = match python_tag {
-            LanguageTag::None | LanguageTag::Python { .. } => None,
-            LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => Some(CPYTHON),
-            LanguageTag::PyPy { .. } => Some(PYPY),
-            LanguageTag::GraalPy { .. } => Some(GRAALPY),
-            LanguageTag::Pyston { .. } => Some(PYSTON),
-        };
-        let implementation = match (purpose, implementation) {
-            (MarkerPurpose::Coverage, None) => MarkerTree::TRUE,
-            (MarkerPurpose::Coverage, Some((platform, _))) => {
-                MarkerTree::expression(MarkerExpression::String {
+        // Then, add implementation markers for implementation-specific tags
+        match python_tag {
+            LanguageTag::None | LanguageTag::Python { .. } => {
+                // No implementation marker needed
+            }
+            LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. } => {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
-                    value: platform,
-                })
+                    value: arcstr::literal!("CPython"),
+                }));
             }
-            (MarkerPurpose::Diagnostic(target), None) => generic_python_target(target),
-            (MarkerPurpose::Diagnostic(target), Some((platform, name))) => {
-                let target = implementation_target(target, &platform, &name);
-                if matches!(
-                    python_tag,
-                    LanguageTag::CPython { .. } | LanguageTag::CPythonMajor { .. }
-                ) {
-                    target.assume_cpython_versions()
-                } else {
-                    target
-                }
+            LanguageTag::PyPy { .. } => {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("PyPy"),
+                }));
             }
-        };
+            LanguageTag::GraalPy { .. } => {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("GraalPy"),
+                }));
+            }
+            LanguageTag::Pyston { .. } => {
+                tree = tree.and(MarkerTree::expression(MarkerExpression::String {
+                    key: MarkerValueString::PlatformPythonImplementation,
+                    operator: MarkerOperator::Equal,
+                    value: arcstr::literal!("Pyston"),
+                }));
+            }
+        }
 
-        marker = marker.or(tree.and(implementation));
+        marker = marker.or(tree);
     }
 
     marker
@@ -1434,31 +1417,6 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-
-    #[test]
-    fn libc_minimum_for_python_implementation() {
-        let generic =
-            WheelFilename::from_str("demo-1-py313-none-manylinux_2_24_x86_64.whl").unwrap();
-        let pypy72 =
-            WheelFilename::from_str("demo-1-pp312-pypy312_pp72-manylinux_2_24_x86_64.whl").unwrap();
-        let pypy73 = WheelFilename::from_str(
-            "demo-1-pp312-pypy312_pp72.pypy312_pp73-manylinux_2_34_x86_64.whl",
-        )
-        .unwrap();
-        let wheels = [(&generic, None), (&pypy72, None), (&pypy73, None)];
-
-        // CPython 3.12 cannot use py313. PyPy 7.3 running Python 3.12 can use the compressed
-        // wheel via its second ABI, but not the older wheel that only advertises PyPy 7.2.
-        let cpython = "implementation_name == 'cpython' and implementation_version == '3.12.*'"
-            .parse()
-            .unwrap();
-        assert_eq!(available_libc_versions(wheels, cpython).glibc, None);
-        let pypy = "implementation_name == 'pypy' and python_version == '3.12' and implementation_version == '7.3.*'".parse().unwrap();
-        assert_eq!(
-            available_libc_versions(wheels, pypy).glibc,
-            Some("2.34".parse().unwrap())
-        );
-    }
 
     #[track_caller]
     fn assert_platform_markers(filename: &str, expected: &str) {
@@ -1473,7 +1431,7 @@ mod tests {
     fn assert_python_markers(filename: &str, expected: &str) {
         let filename = WheelFilename::from_str(filename).unwrap();
         assert_eq!(
-            implied_python_markers(&filename, MarkerPurpose::Coverage),
+            implied_python_markers(&filename),
             expected.parse::<MarkerTree>().unwrap()
         );
     }
@@ -1552,10 +1510,7 @@ mod tests {
     #[test]
     fn test_implied_python_markers() {
         let filename = WheelFilename::from_str("example-1.0-none-none-any.whl").unwrap();
-        assert_eq!(
-            implied_python_markers(&filename, MarkerPurpose::Coverage),
-            MarkerTree::TRUE
-        );
+        assert_eq!(implied_python_markers(&filename), MarkerTree::TRUE);
 
         assert_python_markers(
             "example-1.0-cp310-cp310-any.whl",

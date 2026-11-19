@@ -1,8 +1,8 @@
 use std::collections::Bound;
 
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
-use uv_pep440::{Version, VersionSpecifiers};
-use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerTree, MarkerValueVersion};
+use uv_pep440::Version;
+use uv_pep508::{MarkerEnvironment, MarkerTree};
 use uv_python_interpreter::Interpreter;
 use uv_python_types::PythonVersion;
 
@@ -19,8 +19,6 @@ pub struct PythonRequirement {
     target: RequiresPython,
     /// The canonical marker representation of the target Python requirement.
     target_marker: MarkerTree,
-    /// Original workspace constraints for diagnostics that depend on excluded Python versions.
-    declared_marker: Option<MarkerTree>,
 }
 
 impl PythonRequirement {
@@ -37,7 +35,6 @@ impl PythonRequirement {
             installed,
             target,
             target_marker,
-            declared_marker: None,
         }
     }
 
@@ -119,36 +116,17 @@ impl PythonRequirement {
         )
     }
 
-    /// Retain the original workspace declarations for diagnostics. Normalizing their
-    /// intersection into a single `requires-python` can discard gaps between supported versions.
-    #[must_use]
-    pub fn with_declared_specifiers<'a>(
-        mut self,
-        declarations: impl IntoIterator<Item = &'a VersionSpecifiers>,
-    ) -> Self {
-        self.declared_marker = Some(declarations_marker(declarations));
-        self
-    }
-
-    /// Set the target for a fork while retaining the project's original declarations.
-    fn with_target(&self, target: RequiresPython) -> Self {
-        Self {
-            declared_marker: self.declared_marker,
-            ..Self::new(
-                self.source,
-                self.exact.clone(),
-                self.installed.clone(),
-                target,
-            )
-        }
-    }
-
     /// Narrow the [`PythonRequirement`] to the given version, if it's stricter (i.e., greater)
     /// than the current `Requires-Python` minimum.
     ///
     /// Returns `None` if the given range is not narrower than the current range.
     pub(crate) fn narrow(&self, target: &RequiresPythonRange) -> Option<Self> {
-        Some(self.with_target(self.target.narrow(target)?))
+        Some(Self::new(
+            self.source,
+            self.exact.clone(),
+            self.installed.clone(),
+            self.target.narrow(target)?,
+        ))
     }
 
     /// Split the [`PythonRequirement`] at the given version.
@@ -157,7 +135,20 @@ impl PythonRequirement {
     /// the result will be `>=3.10 and <3.11` and `>=3.11`.
     pub(crate) fn split(&self, at: Bound<Version>) -> Option<(Self, Self)> {
         let (lower, upper) = self.target.split(at)?;
-        Some((self.with_target(lower), self.with_target(upper)))
+        Some((
+            Self::new(
+                self.source,
+                self.exact.clone(),
+                self.installed.clone(),
+                lower,
+            ),
+            Self::new(
+                self.source,
+                self.exact.clone(),
+                self.installed.clone(),
+                upper,
+            ),
+        ))
     }
 
     /// Returns `true` if the minimum version of Python required by the target is greater than the
@@ -201,30 +192,6 @@ impl PythonRequirement {
     pub(crate) fn to_marker_tree(&self) -> MarkerTree {
         self.target_marker
     }
-
-    /// Return the target range restricted to the Python versions allowed by its declarations.
-    pub(crate) fn diagnostic_marker(&self) -> MarkerTree {
-        let declared = self
-            .declared_marker
-            .unwrap_or_else(|| declarations_marker([self.target.specifiers()]));
-        self.target_marker.and(declared)
-    }
-}
-
-/// Intersect `Requires-Python` declarations as markers, including any excluded versions.
-pub(crate) fn declarations_marker<'a>(
-    declarations: impl IntoIterator<Item = &'a VersionSpecifiers>,
-) -> MarkerTree {
-    let mut marker = MarkerTree::TRUE;
-    for specifiers in declarations {
-        for specifier in specifiers.iter() {
-            marker = marker.and(MarkerTree::expression(MarkerExpression::Version {
-                key: MarkerValueVersion::PythonFullVersion,
-                specifier: specifier.clone(),
-            }));
-        }
-    }
-    marker
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Ord)]

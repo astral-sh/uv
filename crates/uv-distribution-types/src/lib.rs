@@ -84,7 +84,7 @@ pub use crate::index_entry::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
-pub use crate::minimum_libc_version::MinimumLibcVersion;
+pub use crate::minimum_libc_version::{LibcTag, MinimumLibcVersion};
 pub use crate::origin::*;
 pub use crate::pip_index::*;
 pub use crate::proxy_index::*;

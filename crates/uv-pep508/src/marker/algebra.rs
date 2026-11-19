@@ -556,11 +556,7 @@ impl InternerGuard<'_> {
         })
     }
 
-    pub(super) fn restrict_nodes(
-        &mut self,
-        i: NodeId,
-        select: &impl Fn(&Node) -> Option<NodeId>,
-    ) -> NodeId {
+    fn restrict_nodes(&mut self, i: NodeId, select: &impl Fn(&Node) -> Option<NodeId>) -> NodeId {
         self.restrict_by_cached(i, select, &mut None)
     }
 
@@ -596,43 +592,6 @@ impl InternerGuard<'_> {
         if cache_result && let Some(cache) = cache {
             cache.insert(i, result);
         }
-        result
-    }
-
-    /// Rebuild implementation-version decisions over the same ranges of Python versions.
-    pub(super) fn assume_cpython_versions(
-        &mut self,
-        marker: NodeId,
-        cache: &mut FxHashMap<NodeId, NodeId>,
-    ) -> NodeId {
-        if marker.is_true() || marker.is_false() {
-            return marker;
-        }
-        let node = self.shared.node(marker);
-        if let Some(&result) = cache.get(&marker) {
-            return result;
-        }
-        let result = match node.var.cmp(&Variable::Version(
-            CanonicalMarkerValueVersion::ImplementationVersion,
-        )) {
-            Ordering::Less => {
-                let children = node
-                    .children
-                    .map(marker, |child| self.assume_cpython_versions(child, cache));
-                self.create_node(node.var.clone(), children)
-            }
-            Ordering::Equal => {
-                let children = node.children.map(marker, |child| child);
-                self.rebuild_node(
-                    &Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion),
-                    children,
-                )
-            }
-            // Variables occur in order along every path. Once past implementation_version
-            // we can share the subtree, including any constraints on Python's own version.
-            Ordering::Greater => return marker,
-        };
-        cache.insert(marker, result);
         result
     }
 

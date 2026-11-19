@@ -12,7 +12,7 @@ pub(crate) enum KnownPlatform {
 
 impl KnownPlatform {
     /// Return a [`MarkerTree`] for the platform.
-    fn marker(self) -> MarkerTree {
+    pub(crate) fn marker(self) -> MarkerTree {
         MarkerTree::expression(MarkerExpression::String {
             key: MarkerValueString::SysPlatform,
             operator: MarkerOperator::Equal,
