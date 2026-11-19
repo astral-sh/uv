@@ -2801,7 +2801,7 @@ impl Lock {
                 let Some(&index) = by_id.get(&dependency.package_id) else {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
-                        dependency: dependency.package_id.clone().into(),
+                        dependency: dependency.clone(),
                     }
                     .into());
                 };
@@ -7933,11 +7933,12 @@ impl PackageWire {
 
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
-                .map(|dep| dep.unwire(requires_python, environment, default, &self.id, package_ids))
+                .map(|dep| dep.unwire(requires_python, environment, default, package_ids))
                 .collect()
         };
 
         Ok(Package {
+            id: self.id,
             metadata: self.metadata,
             default_groups: self.default_groups,
             group_requires_python: self.group_requires_python,
@@ -7960,7 +7961,6 @@ impl PackageWire {
                 .into_iter()
                 .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
-            id: self.id,
         })
     }
 }
@@ -8019,30 +8019,25 @@ struct PackageIdForDependency {
 impl PackageIdForDependency {
     fn unwire(
         self,
-        parent_id: &PackageId,
         package_ids: &FxHashMap<PackageName, Option<PackageId>>,
     ) -> Result<PackageId, LockError> {
-        let (version, source) = match package_ids.get(&self.name) {
-            None => {
-                return Err(LockErrorKind::UnrecognizedDependency {
-                    id: parent_id.clone(),
-                    dependency: self,
-                }
-                .into());
-            }
-            Some(Some(package_id)) => (
+        let (version, source) = match (package_ids.get(&self.name), self.source) {
+            (Some(Some(package_id)), source) => (
                 self.version.or_else(|| package_id.version.clone()),
-                self.source.unwrap_or_else(|| package_id.source.clone()),
+                source.unwrap_or_else(|| package_id.source.clone()),
             ),
-            Some(None) => {
-                let Some(source) = self.source else {
-                    return Err(LockErrorKind::MissingDependencySource { name: self.name }.into());
-                };
-                // A source tree can omit its version when the version is dynamic.
-                if self.version.is_none() && !source.is_source_tree() {
-                    return Err(LockErrorKind::MissingDependencyVersion { name: self.name }.into());
-                }
+            // An explicit ID needs no inference. Source trees can have dynamic versions.
+            (_, Some(source)) if self.version.is_some() || source.is_source_tree() => {
                 (self.version, source)
+            }
+            (None, _) => {
+                return Err(LockErrorKind::MissingDependencyPackage { name: self.name }.into());
+            }
+            (Some(None), None) => {
+                return Err(LockErrorKind::MissingDependencySource { name: self.name }.into());
+            }
+            (Some(None), Some(_)) => {
+                return Err(LockErrorKind::MissingDependencyVersion { name: self.name }.into());
             }
         };
         Ok(PackageId {
@@ -8050,16 +8045,6 @@ impl PackageIdForDependency {
             version,
             source,
         })
-    }
-}
-
-impl Display for PackageIdForDependency {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(&package_label(&self.name, self.version.as_ref()))?;
-        if let Some(source) = &self.source {
-            write!(f, " @ {source}")?;
-        }
-        Ok(())
     }
 }
 
@@ -8463,31 +8448,17 @@ impl Source {
 
 impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}+", self.name())?;
-        let url = match self {
+        match self {
             Self::Registry(RegistrySource::Url(url)) | Self::Git(url, _) | Self::Direct(url, _) => {
-                url.as_ref()
-            }
-            // Registries with unrecognized schemes (including `HTTPS://`) deserialize as paths.
-            Self::Registry(RegistrySource::Path(path))
-                if let Some(url) = path.to_str()
-                    && split_scheme(url).is_some_and(|(scheme, rest)| {
-                        scheme.len() > 1 && rest.starts_with("//")
-                    }) =>
-            {
-                url
+                write!(f, "{}+{}", self.name(), url)
             }
             Self::Registry(RegistrySource::Path(path))
             | Self::Path(path)
             | Self::Directory(path)
             | Self::Editable(path)
             | Self::Virtual(path) => {
-                return write!(f, "{}", PortablePath::from(path));
+                write!(f, "{}+{}", self.name(), PortablePath::from(path))
             }
-        };
-        match SafeUrl::parse(url) {
-            Ok(url) => write!(f, "{url}"),
-            Err(_) => f.write_str("<invalid URL>"),
         }
     }
 }
@@ -9734,10 +9705,8 @@ impl DependencyWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        parent_id: &PackageId,
         package_ids: &FxHashMap<PackageName, Option<PackageId>>,
     ) -> Result<Dependency, LockError> {
-        let package_id = self.package_id.unwire(parent_id, package_ids)?;
         let (simplified_marker, complexified_marker) =
             if self.marker.as_simplified_marker_tree().is_true() {
                 (environment, default)
@@ -9749,7 +9718,7 @@ impl DependencyWire {
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id,
+            package_id: self.package_id.unwire(package_ids)?,
             index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
@@ -10327,13 +10296,13 @@ enum LockErrorKind {
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a package that isn't in the lockfile.
-    #[error("No matching package entry for `{dependency}` (required by `{id}`)", dependency = dependency.cyan(), id = id.cyan())]
+    #[error("For package `{id}`, found dependency `{dependency}` with no locked package", id = id.cyan(), dependency = dependency.cyan())]
     UnrecognizedDependency {
         /// The ID of the package that has an unrecognized dependency.
         id: PackageId,
         /// The ID of the dependency that doesn't have a corresponding package
         /// entry.
-        dependency: PackageIdForDependency,
+        dependency: Dependency,
     },
     /// An artifact does not satisfy the lockfile's hash requirement.
     #[error(transparent)]
@@ -10471,6 +10440,9 @@ enum LockErrorKind {
         #[source]
         io::Error,
     ),
+    /// A dependency omits part of its ID, but no package has its name.
+    #[error("Dependency `{name}` has no matching package entry in the lockfile", name = name.cyan())]
+    MissingDependencyPackage { name: PackageName },
     /// An error that occurs when an ambiguous `package.dependency` is
     /// missing a `version` field.
     #[error("Dependency `{name}` has missing `version` field but has more than one matching package", name = name.cyan())]
