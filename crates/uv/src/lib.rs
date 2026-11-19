@@ -2412,6 +2412,7 @@ async fn run_project(
                 .check_refresh_conflict(&args.refresh)?;
 
             // Initialize the cache.
+            let allow_preview_downgrade = matches!(args.refresh, Refresh::All(_));
             let cache = cache.init().await?.with_refresh(
                 args.refresh
                     .combine(Refresh::from(args.settings.reinstall.clone()))
@@ -2430,6 +2431,7 @@ async fn run_project(
                 args.lock_check,
                 args.frozen,
                 args.dry_run,
+                allow_preview_downgrade,
                 args.active,
                 args.all_packages,
                 args.package,

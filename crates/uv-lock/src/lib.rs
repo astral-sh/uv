@@ -5,7 +5,8 @@ mod lock;
 pub use lock::{
     CanonicalLockError, DependencySelection, DependencySelectionConflict, GroupMetadata,
     Installable, InstallableRootKind, Lock, LockError, LockHashError, LockParseError,
-    LockSatisfaction, LockSatisfactionError, Metadata, Package, PackageMap, PylockToml,
-    PylockTomlError, PylockTomlErrorKind, PythonReport, RequirementsTxtExport, ResolverManifest,
-    SelectedDependency, TreeDisplay, TreeJsonTarget, cyclonedx_json, implicit_constraints_marker,
+    LockPreviewError, LockSatisfaction, LockSatisfactionError, Metadata, Package, PackageMap,
+    PylockToml, PylockTomlError, PylockTomlErrorKind, PythonReport, RequirementsTxtExport,
+    ResolverManifest, SelectedDependency, TreeDisplay, TreeJsonTarget, cyclonedx_json,
+    implicit_constraints_marker,
 };

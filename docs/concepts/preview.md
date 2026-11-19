@@ -64,6 +64,13 @@ gated by user interaction. For example, while `pylock.toml` support is in previe
 `pylock.toml` file indicates you want to use the feature. However, a warning will be displayed that
 the feature is in preview. The preview feature can be enabled to silence the warning.
 
+## Preview features in the lockfile
+
+If a preview feature changes the structure of your `uv.lock`, you can only install from that
+lockfile while the feature is active. To downgrade the lockfile, disable the feature and run
+`uv sync --refresh`. If uv can't read the locked packages without the feature, it can't retain their
+hashes. In that case, use `uv sync --refresh --upgrade` to resolve all packages from scratch.
+
 ## Available preview features
 
 The following preview features are available:

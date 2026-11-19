@@ -684,12 +684,13 @@ pub async fn run(
                 // If we're not syncing, we should still attempt to respect the locked preferences
                 // in any `--with` requirements.
                 if !isolated && !requirements.is_empty() {
-                    base_lock = LockTarget::from(project.workspace())
-                        .read()
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|lock| (lock, project.workspace().install_path().to_owned()));
+                    let lock = match LockTarget::from(project.workspace()).read().await {
+                        Ok(lock) => lock,
+                        Err(err @ LockError::Preview(_)) => return Err(UvError::from(err).into()),
+                        Err(_) => None,
+                    };
+                    base_lock =
+                        lock.map(|lock| (lock, project.workspace().install_path().to_owned()));
                 }
                 // `--with` may still build an overlay under `--no-sync`. Unless explicitly frozen,
                 // use the current project build constraints, not those recorded in `uv.lock`.

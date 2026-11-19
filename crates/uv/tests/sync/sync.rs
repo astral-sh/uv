@@ -51,6 +51,68 @@ fn sync() -> Result<()> {
     Ok(())
 }
 
+/// Regenerating an unreadable preview lock discards all package hashes and needs a full upgrade.
+#[test]
+fn lockfile_unknown_preview_with_unreadable_packages() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]")?;
+    let locked = indoc! {r#"
+        version = 1
+        requires-preview-features = ["future-feature"]
+        requires-python = ">=3.12"
+        [[package]]
+        name = "project"
+        source = { future-source = "." }
+    "#};
+    context.temp_dir.child("uv.lock").write_str(locked)?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--refresh"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile requires an unknown preview feature: `future-feature`
+
+    hint: Upgrade to a version of uv that supports the required preview features, or run `uv sync --refresh --upgrade` to regenerate the lockfile without the locked hashes.
+    ");
+    assert_eq!(context.read("uv.lock"), locked);
+    context
+        .sync()
+        .args(["--refresh", "--upgrade"])
+        .assert()
+        .success();
+    Ok(())
+}
+
+#[test]
+fn lockfile_requires_disabled_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str("[tool.uv.workspace]")?;
+    context.lock().assert().success();
+    let stable = context.read("uv.lock");
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        requires-preview-features = ["lock-without-metadata"]
+        {stable}"#})?;
+
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: The lockfile requires preview features that are not enabled: `lock-without-metadata`
+
+    hint: Pass `--preview-features lock-without-metadata` to use this lockfile, or run `uv sync --refresh` to regenerate the lockfile.
+    ");
+    context.sync().arg("--refresh").assert().success();
+    assert_eq!(context.read("uv.lock"), stable);
+    Ok(())
+}
+
 /// Sync a frozen resolution after removing the project manifest.
 #[test]
 fn sync_lockfile_without_manifest() -> Result<()> {

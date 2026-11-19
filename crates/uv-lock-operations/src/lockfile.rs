@@ -63,6 +63,11 @@ impl FrozenWorkspace {
                         return Ok(None);
                     }
                 }
+                // Only enforce the ancestor's requirements once we know it owns this member.
+                workspace
+                    .lock
+                    .check_preview_features()
+                    .with_context(|| format!("Cannot use frozen lockfile `{}`", path.display()))?;
                 if workspace.lock.configured_member_default_groups().is_none() {
                     bail!(
                         "Frozen lockfile discovery requires a lockfile with revision 5 or later; run `uv lock` to update it"
@@ -91,7 +96,7 @@ impl FrozenWorkspace {
         let contents = fs_err::tokio::read_to_string(&path)
             .await
             .with_context(|| format!("Failed to read lockfile `{}`", path.display()))?;
-        let lock = Lock::from_toml(&contents)
+        let lock = Lock::from_toml_for_inspection(&contents)
             .with_context(|| format!("Failed to parse lockfile `{}`", path.display()))?;
         Ok(Self { root, lock })
     }

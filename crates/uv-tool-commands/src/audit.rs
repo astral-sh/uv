@@ -184,6 +184,9 @@ pub async fn audit(
                 );
                 continue;
             }
+            Err(LockParseError::Preview(error)) => {
+                bail!("Cannot audit tool `{name}`: {error}");
+            }
             Err(LockParseError::Toml(error)) => {
                 if explicit_tool {
                     bail!(
