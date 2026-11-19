@@ -716,12 +716,12 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
             .to_string(),
         String::new(),
     )]);
-    wheel(
-        &context,
-        "demo",
-        "2.0.0",
-        "cp312-cp312-manylinux_2_34_x86_64",
-    )?;
+    for (version, tag) in [
+        ("1.0.0", "cp312-cp312-manylinux_2_36_x86_64"),
+        ("2.0.0", "cp312-cp312-manylinux_2_34_x86_64"),
+    ] {
+        wheel(&context, "demo", version, tag)?;
+    }
     write_tar_gz(
         fs_err::File::create(context.temp_dir.child("links/demo-2.0.0.tar.gz").path())?,
         &[
@@ -809,8 +809,7 @@ fn minimum_libc_allows_sdist_fallback() -> Result<()> {
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     error: No solution found when resolving dependencies
-      cause: Because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 (the manylinux wheels are tagged for glibc 2.34 or newer) and only demo==2.0.0 is available, we can conclude that all versions of demo cannot be used.
-             And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+      cause: Because all versions of demo have no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     Ok(())

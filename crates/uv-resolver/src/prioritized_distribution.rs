@@ -1,3 +1,4 @@
+use std::cell::LazyCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 
@@ -1025,13 +1026,14 @@ impl MissingPlatform {
         let mut minima = BTreeSet::new();
         let mut all_supported = true;
         for wheel in wheels {
-            let python = target.and(implied_python_markers(wheel));
+            let wheel_target = LazyCell::new(|| target.and(implied_python_markers(wheel)));
             let mut by_arch = BTreeMap::new();
             for tag in wheel.platform_tags() {
                 let Some(libc) = tag.libc_tag() else {
                     continue;
                 };
-                let covers = !python.is_disjoint(implied_platform_markers([tag]));
+                let covers = !missing.family_matches
+                    && !wheel_target.is_disjoint(implied_platform_markers([tag]));
                 if covers {
                     missing.required_libc = Some(required);
                     // Independent minima for both families can describe disjoint environments.
