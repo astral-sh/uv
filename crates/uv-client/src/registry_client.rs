@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use async_http_range_reader::AsyncHttpRangeReader;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use http::{HeaderMap, StatusCode};
+use http::StatusCode;
 use itertools::Either;
 use reqwest::{Proxy, Response};
 use rustc_hash::FxHashMap;
@@ -56,6 +56,7 @@ use crate::{
 };
 
 mod registry_wheel_request;
+mod wheel_pyproject;
 
 /// Cache parsed core metadata and variant requirements from the same wheel.
 #[derive(Serialize, Deserialize)]
@@ -1365,35 +1366,7 @@ impl RegistryClient {
 
         // Attempt to fetch via a range request.
         if effective_index.is_none_or(|index| capabilities.supports_range_requests(index)) {
-            let req = self
-                .uncached_client(url)
-                .head(url.clone())
-                .header(
-                    "accept-encoding",
-                    http::HeaderValue::from_static("identity"),
-                )
-                .build()
-                .map_err(|err| {
-                    ErrorKind::from_reqwest(url.clone(), err, self.client.certificate_source())
-                })?;
-
-            // Copy authorization headers from the HEAD request to subsequent requests
-            let mut headers = HeaderMap::default();
-            if let Some(authorization) = req.headers().get("authorization") {
-                headers.append("authorization", authorization.clone());
-            }
-            // These range requests need the bytes from the wheel archive itself.
-            // After `reqwest` moved decompression to tower-http[1], this path could receive
-            // transparently decompressed responses. That breaks the byte offsets used by
-            // `AsyncHttpRangeReader` and results in us incorrectly trying to double-decompress gzip streams[2].
-            // We request with `Accept: identity` so that the range reader always sees the compressed wheel bytes.
-            //
-            // [1]: https://github.com/seanmonstar/reqwest/pull/2840
-            // [2]: https://github.com/astral-sh/async_http_range_reader/pull/3#discussion_r2700194798
-            headers.insert(
-                reqwest::header::ACCEPT_ENCODING,
-                reqwest::header::HeaderValue::from_static("identity"),
-            );
+            let (req, headers) = self.wheel_range_request(url)?;
             // This response callback is special, we actually make a number of subsequent requests to
             // fetch the file from the remote zip.
             let read_metadata_range_request = |response: Response, _: &mut RetryState| {

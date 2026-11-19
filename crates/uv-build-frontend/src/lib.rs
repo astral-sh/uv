@@ -671,6 +671,62 @@ impl SourceBuild {
         )
     }
 
+    /// Read a published project's build declaration independently of its runtime metadata.
+    /// Some sdists provide valid PKG-INFO but have legacy or incomplete `[project]` tables.
+    /// Fall back to source discovery for declarations that need workspace source mappings.
+    pub fn archive_build_system(
+        contents: &str,
+    ) -> Result<Option<(String, Vec<Requirement>)>, Error> {
+        Self::parse_archive_build_system(contents, None)
+    }
+
+    fn parse_archive_build_system(
+        contents: &str,
+        fallback: Option<&Pep517Backend>,
+    ) -> Result<Option<(String, Vec<Requirement>)>, Error> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct Declaration {
+            build_system: Option<BuildSystem>,
+        }
+
+        let document = toml_edit::Document::from_str(contents)?;
+        if document
+            .get("tool")
+            .and_then(|tool| tool.get("uv"))
+            .and_then(|uv| uv.get("sources"))
+            .is_some()
+        {
+            return Ok(None);
+        }
+        let declaration = Declaration::deserialize(document.into_deserializer())?;
+        match declaration.build_system {
+            Some(system) => Ok(Some((
+                system
+                    .build_backend
+                    .unwrap_or_else(|| DEFAULT_BACKEND.backend.clone()),
+                system.requires.into_iter().map(Requirement::from).collect(),
+            ))),
+            None => {
+                Ok(fallback.map(|backend| (backend.backend.clone(), backend.requirements.clone())))
+            }
+        }
+    }
+
+    /// Inspect an extracted archive. A missing pyproject uses the legacy setuptools backend.
+    pub async fn read_archive_build_system(
+        tree: &Path,
+    ) -> Result<Option<(String, Vec<Requirement>)>, Error> {
+        match fs::tokio::read_to_string(tree.join("pyproject.toml")).await {
+            Ok(contents) => Self::parse_archive_build_system(&contents, Some(&DEFAULT_BACKEND)),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Some((
+                DEFAULT_BACKEND.backend.clone(),
+                DEFAULT_BACKEND.requirements.clone(),
+            ))),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     /// Read the declared backend and its lowered requirements without creating an environment
     /// or running any backend hooks.
     pub async fn read_build_system(
@@ -1431,5 +1487,30 @@ impl Write for Printer {
             Self::Quiet => {}
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SourceBuild;
+
+    #[test]
+    fn archive_build_system_ignores_unrelated_project_metadata() {
+        let (backend, requires) = SourceBuild::archive_build_system(
+            r#"
+            [project]
+            name = 17
+
+            [build-system]
+            requires = ["flit-core>=3"]
+            build-backend = "flit_core.buildapi"
+            "#,
+        )
+        .expect("valid build declaration")
+        .expect("declared build system");
+
+        assert_eq!(backend, "flit_core.buildapi");
+        assert_eq!(requires.len(), 1);
+        assert_eq!(requires[0].name.as_str(), "flit-core");
     }
 }
