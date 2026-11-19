@@ -692,6 +692,57 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
     Ok(())
 }
 
+/// The two older glibc tags belong to a wheel for a different CPython version and to a
+/// release whose index metadata excludes the Python version supported by its wheel.
+#[test]
+fn minimum_libc_requires_matching_python_tag_and_metadata() -> Result<()> {
+    let server = PackseServer::from_toml(indoc! {r#"
+        name = "minimum-libc-python-requirements"
+
+        [root]
+
+        [expected]
+        satisfiable = false
+
+        [packages.demo.versions."1"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-manylinux_2_24_x86_64"]
+        requires_python = "!=3.12.*"
+
+        [packages.demo.versions."2"]
+        sdist = false
+        wheel_tags = ["cp313-cp313-manylinux_2_28_x86_64"]
+
+        [packages.demo.versions."3"]
+        sdist = false
+        wheel_tags = ["cp312-cp312-manylinux_2_34_x86_64"]
+    "#})?;
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12,<3.14"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        preview-features = ["minimum-libc-version"]
+        required-environments = ["sys_platform == 'linux' and implementation_version == '3.12.*'"]
+        minimum-libc-version = { glibc = "2.17" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because all versions of demo have no `implementation_version == '3.12.*' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.17 (matching manylinux tags require glibc 2.34 or newer) and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
 /// A source distribution remains usable when its wheel requires a newer glibc.
 #[test]
 fn minimum_libc_allows_sdist_fallback() -> Result<()> {

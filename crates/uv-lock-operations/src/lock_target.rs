@@ -21,13 +21,15 @@ use uv_lock::Lock;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep508::RequirementOrigin;
 use uv_pypi_types::{Conflicts, SupportedEnvironments, VerbatimParsedUrl};
-use uv_python_discovery::{PythonRequirementSource, find_workspace_python_requirement};
+use uv_python_discovery::find_workspace_python_requirement;
 use uv_scripts::Pep723Script;
 use uv_workspace::dependency_groups::{
     DependencyGroupError, FlatDependencyGroup, FlatDependencyGroups,
 };
 use uv_workspace::pyproject::{BuildConstraintDependency, OverrideDependency};
-use uv_workspace::{Editability, Workspace, WorkspaceCache, WorkspaceMember};
+use uv_workspace::{
+    Editability, RequiresPythonSources, Workspace, WorkspaceCache, WorkspaceMember,
+};
 
 use crate::{LockError, MissingLockfileSource};
 
@@ -307,29 +309,27 @@ impl<'lock> LockTarget<'lock> {
 
     /// Return the `Requires-Python` bound for the [`LockTarget`].
     pub fn requires_python(self) -> Result<Option<RequiresPython>, LockError> {
-        Ok(self.requires_python_with_source()?.0)
+        Ok(self
+            .requires_python_with_sources()?
+            .map(|(requires_python, _)| requires_python))
     }
 
     /// Return the Python requirement and the source of any workspace declarations.
-    pub(crate) fn requires_python_with_source(
+    pub(crate) fn requires_python_with_sources(
         self,
-    ) -> Result<(Option<RequiresPython>, Option<PythonRequirementSource>), LockError> {
+    ) -> Result<Option<(RequiresPython, RequiresPythonSources)>, LockError> {
         match self {
             Self::Workspace(workspace) => {
                 // When locking, don't try to enforce requires-python bounds that appear on groups
                 let groups = DependencyGroupsWithDefaults::none();
-                Ok(find_workspace_python_requirement(workspace, &groups)?
-                    .map(|requirement| (requirement.requires_python, requirement.source))
-                    .unzip())
+                Ok(find_workspace_python_requirement(workspace, &groups)?)
             }
-            Self::Script(script) => Ok((
-                script
-                    .metadata
-                    .requires_python
-                    .clone()
-                    .map(RequiresPython::from_specifiers),
-                None,
-            )),
+            Self::Script(script) => Ok(script.metadata.requires_python.clone().map(|specifiers| {
+                (
+                    RequiresPython::from_specifiers(specifiers),
+                    RequiresPythonSources::new(),
+                )
+            })),
         }
     }
 
