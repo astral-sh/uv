@@ -317,6 +317,7 @@ fn minimum_libc_switch_families() -> Result<()> {
         "#);
     });
 
+    // The oldest glibc and musl tags among these releases belong to different versions.
     pyproject_toml.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -329,14 +330,14 @@ fn minimum_libc_switch_families() -> Result<()> {
         find-links = ["links"]
         environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
         required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-        minimum-libc-version = { glibc = "2.31", musl = "1.2" }
+        minimum-libc-version = { glibc = "2.16", musl = "1.1" }
     "#})?;
     uv_snapshot!(filters, context.lock().arg("--offline"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux')
-      cause: Because demo>=2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 and musl 1.2 and your project depends on demo>=2, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
+      cause: Because demo>=2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for both glibc 2.16 and musl 1.1 and your project depends on demo>=2, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // Generic Linux wheels cover both baselines, but must still match the architecture.
@@ -629,7 +630,8 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
 }
 
 /// Across releases, the error reports the oldest glibc supported by wheels for the target
-/// architecture and Python range.
+/// architecture and Python implementation. The adjacent exclusions exercise a gap that
+/// workspace normalization drops, so the diagnostic needs the original Python specifiers.
 #[test]
 fn minimum_libc_no_compatible_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -644,6 +646,8 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
         .collect();
     for (version, tag) in [
         ("2.0.0", "cp311-cp311-manylinux_2_32_x86_64"),
+        ("2.0.0", "cp313-cp313-manylinux_2_32_x86_64"),
+        ("2.0.0", "pp312-pypy312_pp73-manylinux_2_33_x86_64"),
         (
             "2.0.0",
             "cp312-cp312-manylinux_2_17_aarch64.manylinux_2_34_x86_64",
@@ -658,13 +662,13 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
         [project]
         name = "project"
         version = "0.1.0"
-        requires-python = ">=3.12"
+        requires-python = ">=3.12,!=3.13.*,!=3.14.0"
         dependencies = ["demo"]
 
         [tool.uv]
         no-index = true
         find-links = ["links"]
-        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+        environments = ["sys_platform == 'linux' and platform_machine == 'x86_64' and implementation_name == 'cpython'"]
         minimum-libc-version = { glibc = "2.31" }
     "#})?;
 
@@ -672,8 +676,8 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
-    error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
-      cause: Because all versions of demo have no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 (the minimum supported is glibc 2.34) and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    error: No solution found when resolving dependencies for split (markers: implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux')
+      cause: Because all versions of demo have no `implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 (the minimum supported is glibc 2.34) and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
     // A concrete target uses its platform tags instead of the universal libc baseline.

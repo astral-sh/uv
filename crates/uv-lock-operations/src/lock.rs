@@ -602,8 +602,15 @@ async fn do_lock(
     }
 
     // Determine the Python requirement.
-    let python_requirement =
+    let mut python_requirement =
         PythonRequirement::from_requires_python(interpreter, requires_python.clone());
+    if minimum_libc_version.is_some() {
+        python_requirement = python_requirement.with_declared_specifiers(
+            packages
+                .values()
+                .filter_map(|member| member.project().requires_python.as_ref()),
+        );
+    }
 
     // Initialize the client.
     let client_builder = client_builder.clone().keyring(*keyring_provider);

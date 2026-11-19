@@ -242,20 +242,28 @@ impl Display for MissingPlatform {
         if self.available_libc == MinimumLibcVersion::default() {
             return Ok(());
         }
-        let mut separator = " that satisfy `minimum-libc-version` for ";
-        for (family, required, minimum) in [
-            ("glibc", self.required_libc.glibc, self.available_libc.glibc),
-            ("musl", self.required_libc.musl, self.available_libc.musl),
-        ] {
-            if let Some(required) = required {
-                write!(f, "{separator}{family} {required}")?;
-                if let Some(minimum) = minimum
-                    && minimum > required
-                {
-                    write!(f, " (the minimum supported is {family} {minimum})")?;
-                }
-                separator = " and ";
+        let (family, required, minimum) = match (self.required_libc.glibc, self.required_libc.musl)
+        {
+            // The oldest glibc and musl tags can come from different package releases
+            // or target disjoint Python versions within a release.
+            (Some(glibc), Some(musl)) => {
+                return write!(
+                    f,
+                    " that satisfy `minimum-libc-version` for both glibc {glibc} and musl {musl}"
+                );
             }
+            (Some(glibc), None) => ("glibc", glibc, self.available_libc.glibc),
+            (None, Some(musl)) => ("musl", musl, self.available_libc.musl),
+            (None, None) => return Ok(()),
+        };
+        write!(
+            f,
+            " that satisfy `minimum-libc-version` for {family} {required}"
+        )?;
+        if let Some(minimum) = minimum
+            && minimum > required
+        {
+            write!(f, " (the minimum supported is {family} {minimum})")?;
         }
         Ok(())
     }

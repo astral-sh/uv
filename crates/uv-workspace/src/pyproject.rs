@@ -229,7 +229,7 @@ pub struct Project {
     /// The version of the project
     version: Option<Version>,
     /// The Python versions this project is compatible with.
-    pub(crate) requires_python: Option<VersionSpecifiers>,
+    pub requires_python: Option<VersionSpecifiers>,
     /// The dependencies of the project.
     pub dependencies: Option<Vec<String>>,
     /// The optional dependencies of the project.

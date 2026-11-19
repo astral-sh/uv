@@ -1273,25 +1273,17 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             // If the wheel does not cover a required environment, it is incompatible.
             if let Some(fork_markers) = env.fork_markers()
                 && !self.options.artifact_environments.is_empty()
+                && let Some((marker, target)) = self.uncovered_environment(
+                    implied_markers(filename, self.options.minimum_libc_version),
+                    fork_markers,
+                    id,
+                    pubgrub,
+                )
             {
-                let wheel_marker = implied_markers(filename, self.options.minimum_libc_version);
-                for marker in self.options.artifact_environments.iter().copied() {
-                    if env.included_by_marker(marker)
-                        && !env.included_by_marker(wheel_marker.and(marker))
-                    {
-                        let required = find_environments(id, pubgrub).and(marker);
-                        if env.included_by_marker(required) {
-                            return Ok(Some(ResolverVersion::Unavailable(
-                                version.clone(),
-                                self.missing_platform(
-                                    marker,
-                                    required.and(fork_markers),
-                                    [filename],
-                                ),
-                            )));
-                        }
-                    }
-                }
+                return Ok(Some(ResolverVersion::Unavailable(
+                    version.clone(),
+                    self.missing_platform(marker, target, [filename]),
+                )));
             }
 
             let incompatible_tag = if filename.variant().is_some()
@@ -1636,6 +1628,29 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         Ok(selection)
     }
 
+    /// Find the first configured environment that lacks artifact coverage in this fork.
+    /// Return its marker and the subset of the fork where the package is required.
+    fn uncovered_environment(
+        &self,
+        artifact_markers: MarkerTree,
+        fork_markers: MarkerTree,
+        id: Id<PubGrubPackage>,
+        pubgrub: &State<UvDependencyProvider>,
+    ) -> Option<(MarkerTree, MarkerTree)> {
+        for marker in self.options.artifact_environments.iter().copied() {
+            if fork_markers.is_disjoint(marker)
+                || !fork_markers.is_disjoint(artifact_markers.and(marker))
+            {
+                continue;
+            }
+            let required = find_environments(id, pubgrub).and(marker);
+            if !fork_markers.is_disjoint(required) {
+                return Some((marker, required.and(fork_markers)));
+            }
+        }
+        None
+    }
+
     /// Explain a coverage failure using wheels that match the required environment in this fork.
     fn missing_platform<'a>(
         &self,
@@ -1649,7 +1664,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         } else {
             available_libc_versions(
                 filenames,
-                target.and(self.python_requirement.to_marker_tree()),
+                target.and(self.python_requirement.diagnostic_marker()),
             )
         };
         UnavailableVersion::MissingPlatform(MissingPlatform {
@@ -1697,60 +1712,46 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             return Ok(None);
         }
 
-        // If the caller marked an environment as requiring artifact coverage, ensure it has
-        // coverage.
-        for marker in self.options.artifact_environments.iter().copied() {
-            // If the platform is part of the current environment...
-            if env.included_by_marker(marker) {
-                // But isn't supported by the distribution in this fork...
-                if !env.included_by_marker(artifact_markers.and(marker)) {
-                    let required = find_environments(id, pubgrub).and(marker);
-                    if !env.included_by_marker(required) {
-                        continue;
-                    }
-                    // Separate the required environment from the candidate's wheel coverage in
-                    // this fork, allowing environments in neither set to fall on either side.
-                    // For example, Darwin == 24 becomes Darwin < 25 when the wheels require
-                    // Darwin >= 25. This avoids introducing forks for unrelated wheel tags.
-                    let coverage = dist.implied_markers().and(fork_markers);
-                    let split = marker.restrict(marker.or(coverage));
-                    let Some((left, right)) = fork_version_by_marker(env, split) else {
-                        return Ok(Some(ResolverVersion::Unavailable(
-                            candidate.version().clone(),
-                            self.missing_platform(
-                                marker,
-                                required.and(fork_markers),
-                                dist.compatible_wheels(),
-                            ),
-                        )));
-                    };
+        if let Some((marker, target)) =
+            self.uncovered_environment(artifact_markers, fork_markers, id, pubgrub)
+        {
+            // Separate the required environment from the candidate's wheel coverage in
+            // this fork, allowing environments in neither set to fall on either side.
+            // For example, Darwin == 24 becomes Darwin < 25 when the wheels require
+            // Darwin >= 25. This avoids introducing forks for unrelated wheel tags.
+            let coverage = artifact_markers.and(fork_markers);
+            let split = marker.restrict(marker.or(coverage));
+            let Some((left, right)) = fork_version_by_marker(env, split) else {
+                return Ok(Some(ResolverVersion::Unavailable(
+                    candidate.version().clone(),
+                    self.missing_platform(marker, target, dist.compatible_wheels()),
+                )));
+            };
 
-                    debug!(
-                        "Forking on required platform `{}` for {}=={} ({})",
-                        marker.try_to_string().unwrap_or_else(|| "true".to_string()),
-                        name,
-                        candidate.version(),
-                        [&left, &right]
-                            .iter()
-                            .map(ToString::to_string)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                    let forks = vec![
-                        VersionFork {
-                            env: left,
-                            id,
-                            version: None,
-                        },
-                        VersionFork {
-                            env: right,
-                            id,
-                            version: None,
-                        },
-                    ];
-                    return Ok(Some(ResolverVersion::Forked(forks)));
-                }
-            }
+            debug!(
+                "Forking on required platform `{}` for {}=={} ({})",
+                marker.try_to_string().unwrap_or_else(|| "true".to_string()),
+                name,
+                candidate.version(),
+                [&left, &right]
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            let forks = vec![
+                VersionFork {
+                    env: left,
+                    id,
+                    version: None,
+                },
+                VersionFork {
+                    env: right,
+                    id,
+                    version: None,
+                },
+            ];
+            return Ok(Some(ResolverVersion::Forked(forks)));
         }
 
         // For now, we only apply this to local versions.
