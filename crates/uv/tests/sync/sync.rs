@@ -19291,6 +19291,38 @@ fn locked_build_member_index_freshness() -> Result<()> {
     Ok(())
 }
 
+/// Only a 3.12+ runtime dependency needs the bridge. The bridge's own build backend doesn't
+/// have to support 3.11, even though neither of the two build edges declares a marker.
+#[test]
+fn locked_build_propagates_python_version_to_nested_builds() -> Result<()> {
+    let server = PackseServer::new("build/python-scope.toml");
+    let context =
+        uv_test::test_context!("3.12").with_env(EnvVars::UV_DEFAULT_INDEX, server.index_url());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["modern; python_version >= '3.12'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-cache"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + modern==1
+    ");
+    Ok(())
+}
+
 /// Dropping platform markers makes these declarations look identical. Their combined solve
 /// fails, but each build works independently on both sides of the platform marker.
 #[test]

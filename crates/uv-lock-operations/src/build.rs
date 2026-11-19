@@ -105,6 +105,42 @@ fn split_conflicting_markers(
     true
 }
 
+/// A build-only dependency may first appear on 3.12+, then be needed on 3.11 through a
+/// different backend. Revisit it only when its Python coverage grows, so cycles terminate.
+#[derive(Default)]
+struct BuildQueue {
+    coverage: BTreeMap<PackageId, MarkerTree>,
+    pending: BTreeMap<PackageId, (Package, MarkerTree)>,
+}
+
+impl BuildQueue {
+    fn extend(
+        &mut self,
+        lock: &Lock,
+        resolution: &ResolverOutput,
+        root: &Path,
+    ) -> Result<(), LockError> {
+        let environments = Lock::build_python_environments(resolution, root)?;
+        for package in lock.packages() {
+            let python = environments
+                .get(package.id())
+                .copied()
+                .unwrap_or(MarkerTree::TRUE);
+            let covered = self
+                .coverage
+                .entry(package.id().clone())
+                .or_insert(MarkerTree::FALSE);
+            let combined = covered.or(python);
+            if combined != *covered {
+                *covered = combined;
+                self.pending
+                    .insert(package.id().clone(), (package.clone(), combined));
+            }
+        }
+        Ok(())
+    }
+}
+
 pub(crate) struct BuildResolver<'a> {
     pub root: &'a Path,
     pub client: &'a RegistryClient,
@@ -127,6 +163,7 @@ impl BuildResolver<'_> {
     async fn declarations(
         &self,
         package: &Package,
+        python: MarkerTree,
         runtime: &ResolverOutput,
     ) -> anyhow::Result<Option<DeclaredBuild>> {
         let Some(source) = package.build_source(self.root)? else {
@@ -180,8 +217,10 @@ impl BuildResolver<'_> {
             }
         }
         for req in &mut requirements {
+            req.marker = req.marker.and(python);
             req.origin = None;
         }
+        requirements.retain(|req| !req.marker.is_false());
         requirements.sort();
         requirements.dedup();
         Ok(Some(DeclaredBuild {
@@ -276,21 +315,24 @@ impl BuildResolver<'_> {
             }
         }
         let mut inputs = BTreeMap::new();
-        let mut seen = BTreeSet::<PackageId>::new();
-        let mut pending = lock.packages().to_vec();
+        let mut queue = BuildQueue::default();
+        queue.extend(&lock, runtime, self.root)?;
         let mut resolved: Vec<(Vec<Requirement>, BuildUniverse)> = Vec::new();
-        while !pending.is_empty() {
-            // Inspect each source identity once, including self-hosting backends. Keep output order
-            // deterministic even though downloads run concurrently.
-            let declarations = stream::iter(
-                pending
-                    .drain(..)
-                    .filter(|pkg| seen.insert(pkg.id().clone())),
-            )
-            .map(|package| async move { self.declarations(&package, runtime).await })
-            .buffered(self.concurrency.downloads)
-            .try_collect::<Vec<_>>()
-            .await?;
+        while !queue.pending.is_empty() {
+            // A wider solve supersedes an owner's earlier, narrower build environment.
+            for (_, universe) in &mut resolved {
+                universe
+                    .owners
+                    .retain(|owner| !queue.pending.contains_key(&owner.id));
+            }
+            // Keep output order deterministic even though downloads run concurrently.
+            let declarations = stream::iter(std::mem::take(&mut queue.pending).into_values())
+                .map(|(package, python)| async move {
+                    self.declarations(&package, python, runtime).await
+                })
+                .buffered(self.concurrency.downloads)
+                .try_collect::<Vec<_>>()
+                .await?;
             let mut clusters: Vec<Cluster> = Vec::new();
             for declaration in declarations.into_iter().flatten() {
                 let DeclaredBuild {
@@ -379,11 +421,7 @@ impl BuildResolver<'_> {
                 build
                     .complete_registry_hashes(self.client, self.root, self.concurrency.downloads)
                     .await?;
-                for package in build.packages() {
-                    if !seen.contains(package.id()) {
-                        pending.push(package.clone());
-                    }
-                }
+                queue.extend(&build, &resolution, self.root)?;
                 resolved.push((
                     requirements.into_iter().collect(),
                     BuildUniverse {

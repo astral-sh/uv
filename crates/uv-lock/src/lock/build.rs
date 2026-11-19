@@ -19,6 +19,7 @@ use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::ResolverMarkerEnvironment;
+use uv_resolver_types::ResolverOutput;
 
 use super::{
     Dependency, HashedDist, Lock, LockError, LockErrorKind, Package, PackageId, ResolverManifest,
@@ -43,6 +44,32 @@ pub struct BuildUniverse {
 }
 
 impl BuildUniverse {
+    /// When a later build expands a package's supported Python range, its replacement
+    /// resolution can make the old backend (and that backend's own build) unreachable.
+    fn reachable(universes: Vec<Self>, runtime: &[Package]) -> Vec<Self> {
+        let owners: FxHashMap<_, _> = universes
+            .iter()
+            .enumerate()
+            .flat_map(|(index, universe)| {
+                universe.owners.iter().map(move |owner| (&owner.id, index))
+            })
+            .collect();
+        let mut pending: Vec<_> = runtime.iter().map(Package::id).collect();
+        let mut reachable = FxHashSet::default();
+        while let Some(id) = pending.pop() {
+            if let Some(&index) = owners.get(id)
+                && reachable.insert(index)
+            {
+                pending.extend(universes[index].lock.packages.iter().map(Package::id));
+            }
+        }
+        universes
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, universe)| reachable.contains(&index).then_some(universe))
+            .collect()
+    }
+
     fn assign_names(universes: Vec<Self>) -> Vec<(String, Self)> {
         // Name collisions are resolved from the backend distribution's own version before
         // falling back to a serial number (two builds can use the same backend version).
@@ -314,6 +341,22 @@ impl Lock {
             .chain(self.build.iter().flat_map(|build| build.packages()))
     }
 
+    /// Pair each locked package with the Python versions on which it can be reached from a
+    /// resolution root, even when its name wasn't forked into multiple versions.
+    pub fn build_python_environments(
+        resolution: &ResolverOutput,
+        root: &Path,
+    ) -> Result<BTreeMap<PackageId, MarkerTree>, LockError> {
+        let mut markers = BTreeMap::new();
+        for (_, dist) in resolution.base_dists() {
+            let id = PackageId::from_annotated_dist(dist, root)?;
+            let python = dist.marker.pep508().only_python_version();
+            let marker = markers.entry(id).or_insert(MarkerTree::FALSE);
+            *marker = marker.or(python);
+        }
+        Ok(markers)
+    }
+
     /// Reject a runtime-only lock when the caller explicitly requires build dependency locking.
     pub fn require_locked_builds(&self) -> Result<(), LockError> {
         if !self.locks_build_dependencies() {
@@ -434,7 +477,8 @@ impl Lock {
         inputs: &BTreeMap<PackageId, BuildInputs>,
         root: &Path,
     ) -> Result<Self, LockError> {
-        let named = BuildUniverse::assign_names(universes);
+        let named =
+            BuildUniverse::assign_names(BuildUniverse::reachable(universes, &self.packages));
 
         let mut nodes: BTreeMap<PackageId, Vec<(Package, Vec<String>)>> = BTreeMap::new();
         for package in &self.packages {

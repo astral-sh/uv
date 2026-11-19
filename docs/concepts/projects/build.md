@@ -108,7 +108,9 @@ backend uses version 2. Both versions are recorded, but syncing the project does
 backend into the project environment. A `build-dependencies-universe` entry selects which set of
 edges to follow when the **same** backend version has different transitive dependencies.
 
-uv uses Python version markers when grouping builds for resolution. Other markers, such as
+If a package is used only on Python 3.12 and later, its backend only needs to resolve for those
+Python versions, even through another build dependency. uv keeps these Python version markers
+when grouping builds. Other markers, such as
 `sys_platform`, don't affect grouping, but still apply when selecting packages for a build. If
 the group can't share a resolution, uv retries the builds separately.
 
@@ -116,10 +118,6 @@ uv includes the requirements in `build-system.requires` and any configured
 [`extra-build-dependencies`](./config.md#augmenting-build-dependencies). If the backend requests a
 package outside its locked environment, the build fails. Add a known requirement to
 `extra-build-dependencies` and update the lock before retrying.
-
-For now, uv resolves build requirements across the project's supported Python versions. For
-example, if your project supports Python 3.10 but a backend requires Python 3.12, locking can
-fail even if the package that uses that backend is only needed on Python 3.12.
 
 Locking can take longer: uv may need the source archive even for a package normally installed from
 a wheel. Generating or updating a lock can still execute build backends to obtain package metadata.
