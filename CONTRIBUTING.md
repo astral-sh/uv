@@ -198,7 +198,7 @@ cargo dev generate-all --mode dry-run
 shellcheck <script>
 
 # Spell checking
-uv run --only-group=check typos
+uv run --only-group=typos typos
 
 # Unused Rust dependencies
 uv run --only-group=check cargo-shear
