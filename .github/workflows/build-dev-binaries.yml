@@ -351,7 +351,7 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - run: cargo +${MSRV} build --locked --profile no-debug
@@ -424,7 +424,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@v2.9.2
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Cross build"

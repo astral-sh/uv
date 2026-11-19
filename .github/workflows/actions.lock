@@ -18,7 +18,7 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'astral-sh/github-actions@2026.11.16.0'
         - 'astral-sh/github-actions@2026.11.16.1'
-        - 'swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6'
+        - 'swatinem/rust-cache@v2.9.2'
     '.github/workflows/build-docker.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
@@ -68,7 +68,7 @@ workflows:
         - 'astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2'
     '.github/workflows/check-zizmor.yml':
         - 'actions/checkout@v7.0.1'
-        - 'zizmorcore/zizmor-action@v0.6.4'
+        - 'zizmorcore/zizmor-action@v0.8.1'
     '.github/workflows/ci.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/download-artifact@v8.0.2'
@@ -426,9 +426,9 @@ dependencies:
         commit: 'sha1-1f40c72289eff860ee54a304f1438e3cff362e0a'
         owner_id: 5429470
         repo_id: 288487894
-    'github/codeql-action@cdf488f595d80d6e07e03d4674febd5ab45fa938':
-        ref: 'v4.37.9'
-        commit: 'sha1-cdf488f595d80d6e07e03d4674febd5ab45fa938'
+    'github/codeql-action@9b3254085494b55a0f7c4c2b3d2d52cc712ce370':
+        ref: 'v4.39.1'
+        commit: 'sha1-9b3254085494b55a0f7c4c2b3d2d52cc712ce370'
         owner_id: 9919
         repo_id: 259445878
     'google-github-actions/auth@fc2174804b84f912b1f6d334e9463f484f1c552d':
@@ -480,10 +480,10 @@ dependencies:
         commit: 'sha1-d1da7f2c0322a5ee4f24975344f67fc0f5baf364'
         owner_id: 325196
         repo_id: 292721064
-    'zizmorcore/zizmor-action@v0.6.4':
-        ref: 'v0.6.4'
-        commit: 'sha1-cc914d7f3750a2d13d75c7f184a1060aa0e9d482'
+    'zizmorcore/zizmor-action@v0.8.1':
+        ref: 'v0.8.1'
+        commit: 'sha1-45d7276c9ca790aabd705e31ca99c6185c3e76dd'
         owner_id: 210636713
         repo_id: 985558803
         uses:
-            - 'github/codeql-action@cdf488f595d80d6e07e03d4674febd5ab45fa938'
+            - 'github/codeql-action@9b3254085494b55a0f7c4c2b3d2d52cc712ce370'
