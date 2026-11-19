@@ -57,7 +57,7 @@ use uv_platform_tags::{
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml, Yanked,
 };
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_resolver_types::{
@@ -9225,15 +9225,15 @@ impl Wheel {
             ResolvedDist::Installed { .. } => unreachable!(),
             ResolvedDist::Installable { dist, .. } => dist.as_ref(),
         };
-        let is_reachable = |filename: &WheelFilename| {
-            !is_wheel_unreachable_for_marker(filename, requires_python, marker, None)
+        let is_reachable = |filename: &WheelFilename, yanked: Option<&Yanked>| {
+            !is_wheel_unreachable_for_marker(filename, yanked, requires_python, marker, None)
         };
         let hashes = annotated_dist.hashes.as_slice();
         let wheels = match dist {
             Dist::Built(BuiltDist::Registry(dist)) => &dist.wheels,
             Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => &dist.wheels,
             Dist::Source(_) => return Ok(vec![]),
-            Dist::Built(dist) if !is_reachable(dist.wheel_filename()) => return Ok(vec![]),
+            Dist::Built(dist) if !is_reachable(dist.wheel_filename(), None) => return Ok(vec![]),
             Dist::Built(BuiltDist::DirectUrl(dist)) => {
                 return Ok(vec![Self::from_direct_dist(dist, hashes)]);
             }
@@ -9250,7 +9250,7 @@ impl Wheel {
             // Reject distributions from registries that don't match the index URL, as can occur with
             // `--find-links`.
             .filter(|wheel| Some(&wheel.index) == index)
-            .filter(|wheel| is_reachable(&wheel.filename))
+            .filter(|wheel| is_reachable(&wheel.filename, wheel.file.yanked.as_deref()))
             .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
             .collect()
     }
@@ -10708,10 +10708,10 @@ fn canonical_marker_trees(
 /// For example, a package included under `sys_platform == 'win32'` does not need Linux
 /// wheels.
 ///
-/// Returns `true` if the wheel is definitely unreachable, and `false` if it may be reachable,
-/// including if the wheel tag isn't recognized.
+/// For unyanked wheels, account for tags that other installers might recognize.
 fn is_wheel_unreachable_for_marker(
     filename: &WheelFilename,
+    yanked: Option<&Yanked>,
     requires_python: &RequiresPython,
     marker: &UniversalMarker,
     tags: Option<&Tags>,
@@ -10725,12 +10725,29 @@ fn is_wheel_unreachable_for_marker(
     {
         return true;
     }
-    // Remove wheels that don't match `requires-python` and can't be selected for installation.
-    if !requires_python.matches_wheel_tag(filename) {
+    // Lockfiles omit yank status. Require yanked wheels to pass uv's own tag checks
+    // before making them available to other installers.
+    let yanked = yanked.is_some_and(Yanked::is_yanked);
+    let matches_python = if yanked {
+        requires_python.matches_wheel_tag(filename)
+    } else {
+        requires_python.may_match_wheel_tag(filename)
+    };
+    if !matches_python {
         return true;
     }
 
-    // Filter by platform tags.
+    // Filter by platform tags when the environment and wheel constrain the platform.
+    if marker.is_true() || filename.platform_tags().iter().all(PlatformTag::is_any) {
+        return false;
+    }
+    let platform_tags = if yanked {
+        Cow::Borrowed(filename.platform_tags())
+    } else if let Some(tags) = filename.complete_platform_tags() {
+        tags
+    } else {
+        return false;
+    };
 
     // Naively, we'd check whether `platform_system == 'Linux'` is disjoint, or
     // `os_name == 'posix'` is disjoint, or `sys_platform == 'linux'` is disjoint (each on its
@@ -10738,12 +10755,6 @@ fn is_wheel_unreachable_for_marker(
     // `(A ∩ (B ∩ C) = ∅) => ((A ∩ B = ∅) or (A ∩ C = ∅))`
     // a single disjointness check with the intersection is sufficient, so we have one
     // constant per platform.
-    let platform_tags = filename.platform_tags();
-
-    if platform_tags.iter().all(PlatformTag::is_any) {
-        return false;
-    }
-
     // Emulated x86_64 Python on Windows ARM64 reports `ARM64` for `platform_machine` but requires
     // `win_amd64` wheels. Keep them unless concrete tags or `Requires-Python` already rejected them.
     if platform_tags.contains(&PlatformTag::WinAmd64) && !marker.is_disjoint(*WINDOWS_ARM_MARKERS) {

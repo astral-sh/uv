@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -168,19 +169,62 @@ impl WheelFilename {
         }
     }
 
-    /// Return the wheel's Python tags.
+    /// Return the recognized Python tags in the wheel filename.
     pub fn python_tags(&self) -> &[LanguageTag] {
         self.tags.python_tags()
     }
 
-    /// Return the wheel's ABI tags.
+    /// Return all Python tags for lockfile filtering if every tag is recognized, ignoring ASCII case.
+    pub fn complete_python_tags(&self) -> Option<Cow<'_, [LanguageTag]>> {
+        self.complete_tags(0, self.python_tags())
+    }
+
+    /// Return the recognized ABI tags in the wheel filename.
     pub fn abi_tags(&self) -> &[AbiTag] {
         self.tags.abi_tags()
     }
 
-    /// Return the wheel's platform tags.
+    /// Return all ABI tags for lockfile filtering if every tag is recognized, ignoring ASCII case.
+    pub fn complete_abi_tags(&self) -> Option<Cow<'_, [AbiTag]>> {
+        self.complete_tags(1, self.abi_tags())
+    }
+
+    /// Return the recognized platform tags in the wheel filename.
     pub fn platform_tags(&self) -> &[PlatformTag] {
         self.tags.platform_tags()
+    }
+
+    /// Return all platform tags for lockfile filtering if every tag is recognized, ignoring ASCII case.
+    pub fn complete_platform_tags(&self) -> Option<Cow<'_, [PlatformTag]>> {
+        self.complete_tags(2, self.platform_tags())
+    }
+
+    /// Return all tags for a component, indexing `python-abi-platform` from zero.
+    fn complete_tags<'a, T: Clone + FromStr>(
+        &self,
+        index: usize,
+        tags: &'a [T],
+    ) -> Option<Cow<'a, [T]>> {
+        let large = match &self.tags {
+            WheelTag::Small { .. } => return Some(Cow::Borrowed(tags)),
+            WheelTag::Large { large } => large,
+        };
+        // Large tags retain the original spelling. Each recognized tag contributes one entry.
+        let index = index + usize::from(large.build_tag.is_some());
+        let component = large.repr.split('-').nth(index)?;
+        if MemchrSplitter::split(component, b'.').count() == tags.len() {
+            return Some(Cow::Borrowed(tags));
+        }
+
+        // Other installers can recognize additional tags after lowercasing.
+        if !component.bytes().any(|byte| byte.is_ascii_uppercase()) {
+            return None;
+        }
+        let normalized = component.to_ascii_lowercase();
+        MemchrSplitter::split(&normalized, b'.')
+            .map(|tag| tag.parse().ok())
+            .collect::<Option<Vec<T>>>()
+            .map(Cow::Owned)
     }
 
     /// Return the wheel's build tag, if present.
@@ -714,6 +758,15 @@ mod tests {
             },
         )
         "#);
+    }
+
+    #[test]
+    fn complete_tags_with_build_tag() {
+        let wheel = WheelFilename::from_str("foo-1.2.3-7-PY2.py3-none-FUTURE.win32.whl").unwrap();
+        assert_eq!(wheel.python_tags().len(), 1);
+        assert_eq!(wheel.complete_python_tags().unwrap().len(), 2);
+        assert!(wheel.complete_abi_tags().is_some());
+        assert!(wheel.complete_platform_tags().is_none());
     }
 
     #[test]

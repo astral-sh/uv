@@ -371,132 +371,96 @@ impl RequiresPython {
         marker.complexify_python_versions(lower.as_ref(), upper.as_ref())
     }
 
-    /// Returns `false` if the wheel's tags state it can't be used in the given Python version
-    /// range.
-    ///
-    /// It is meant to filter out clearly unusable wheels with perfect specificity and acceptable
-    /// sensitivity, we return `true` if the tags are unknown.
+    /// Check whether a wheel can match the Python version range for a lockfile consumer,
+    /// which might recognize additional tags.
+    pub fn may_match_wheel_tag(&self, wheel: &WheelFilename) -> bool {
+        if self.matches_wheel_tag(wheel) {
+            return true;
+        }
+
+        let python_tags = wheel.complete_python_tags();
+        let matches_python = |stable_abi| {
+            python_tags.as_deref().is_none_or(|tags| {
+                tags.iter()
+                    .any(|tag| self.matches_python_tag(*tag, stable_abi))
+            })
+        };
+        let Some(abi_tags) = wheel.complete_abi_tags() else {
+            // An unknown ABI may be stable, in which case cp311 supports CPython 3.11 and later.
+            return matches_python(true);
+        };
+        abi_tags
+            .iter()
+            .any(|abi| self.matches_abi_tag(*abi) && matches_python(abi.is_stable_abi()))
+    }
+
+    /// Check whether a tag recognized by uv can match the Python version range.
     pub fn matches_wheel_tag(&self, wheel: &WheelFilename) -> bool {
-        wheel.abi_tags().iter().any(|abi_tag| {
-            if abi_tag.is_stable_abi() {
-                // Universal tags are allowed.
-                true
-            } else if *abi_tag == AbiTag::None {
-                wheel.python_tags().iter().any(|python_tag| {
-                    // Remove `py2-none-any` and `py27-none-any` and analogous `cp` and `pp` tags.
-                    if matches!(
-                        python_tag,
-                        LanguageTag::Python { major: 2, .. }
-                            | LanguageTag::CPython {
-                                python_version: (2, ..)
-                            }
-                            | LanguageTag::PyPy {
-                                python_version: (2, ..)
-                            }
-                            | LanguageTag::GraalPy {
-                                python_version: (2, ..)
-                            }
-                            | LanguageTag::Pyston {
-                                python_version: (2, ..)
-                            }
-                    ) {
-                        return false;
-                    }
-
-                    // Remove (e.g.) `py312-none-any` if the specifier is `==3.10.*`. However,
-                    // `py37-none-any` would be fine, since the `3.7` represents a lower bound.
-                    if let LanguageTag::Python {
-                        major: 3,
-                        minor: Some(minor),
-                    } = python_tag
-                    {
-                        // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                        let wheel_bound =
-                            UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
-                        if wheel_bound > self.range.upper().major_minor() {
-                            return false;
-                        }
-
-                        return true;
-                    }
-
-                    // Remove (e.g.) `cp36-none-any` or `cp312-none-any` if the specifier is
-                    // `==3.10.*`, since these tags require an exact match.
-                    if let LanguageTag::CPython {
-                        python_version: (3, minor),
-                    }
-                    | LanguageTag::PyPy {
-                        python_version: (3, minor),
-                    }
-                    | LanguageTag::GraalPy {
-                        python_version: (3, minor),
-                    }
-                    | LanguageTag::Pyston {
-                        python_version: (3, minor),
-                    } = python_tag
-                    {
-                        // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                        let wheel_bound =
-                            LowerBound(Bound::Included(Version::new([3, u64::from(*minor)])));
-                        if wheel_bound < self.range.lower().major_minor() {
-                            return false;
-                        }
-
-                        // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                        let wheel_bound =
-                            UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
-                        if wheel_bound > self.range.upper().major_minor() {
-                            return false;
-                        }
-
-                        return true;
-                    }
-
-                    // Unknown tags are allowed.
-                    true
+        wheel.abi_tags().iter().any(|abi| {
+            if *abi == AbiTag::None {
+                wheel.python_tags().iter().any(|tag| {
+                    matches!(tag, LanguageTag::CPythonMajor { .. })
+                        || self.matches_python_tag(*tag, false)
                 })
-            } else if matches!(
-                abi_tag,
-                AbiTag::CPython {
-                    python_version: (2, ..),
-                    ..
-                } | AbiTag::PyPy {
-                    python_version: None | Some((2, ..)),
-                    ..
-                } | AbiTag::GraalPy {
-                    python_version: (2, ..),
-                    ..
-                }
-            ) {
-                // Python 2 is never allowed.
-                false
-            } else if let AbiTag::CPython {
-                python_version: (3, minor),
-                ..
-            }
-            | AbiTag::PyPy {
-                python_version: Some((3, minor)),
-                ..
-            }
-            | AbiTag::GraalPy {
-                python_version: (3, minor),
-                ..
-            } = abi_tag
-            {
-                // Ex) If the wheel bound is `3.6`, then it doesn't match `>=3.10`.
-                let wheel_bound = LowerBound(Bound::Included(Version::new([3, u64::from(*minor)])));
-                if wheel_bound < self.range.lower().major_minor() {
-                    return false;
-                }
-
-                // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
-                let wheel_bound = UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
-                wheel_bound <= self.range.upper().major_minor()
             } else {
-                // Unknown tags are allowed.
-                true
+                self.matches_abi_tag(*abi)
             }
         })
+    }
+
+    /// Check the Python tag's version, accounting for the CPython stable ABI.
+    fn matches_python_tag(&self, tag: LanguageTag, stable_abi: bool) -> bool {
+        match tag {
+            LanguageTag::None => true,
+            LanguageTag::Python { major, minor: None } | LanguageTag::CPythonMajor { major } => {
+                major != 2
+            }
+            LanguageTag::Python {
+                major,
+                minor: Some(minor),
+            } => self.matches_python_version((major, minor), false),
+            LanguageTag::CPython { python_version } => {
+                self.matches_python_version(python_version, !stable_abi)
+            }
+            LanguageTag::PyPy { python_version }
+            | LanguageTag::GraalPy { python_version }
+            | LanguageTag::Pyston { python_version } => {
+                self.matches_python_version(python_version, true)
+            }
+        }
+    }
+
+    /// Check the Python version encoded by the ABI tag, if any.
+    fn matches_abi_tag(&self, tag: AbiTag) -> bool {
+        match tag {
+            AbiTag::CPython { python_version, .. }
+            | AbiTag::PyPy {
+                python_version: Some(python_version),
+                ..
+            }
+            | AbiTag::GraalPy { python_version, .. } => {
+                self.matches_python_version(python_version, true)
+            }
+            AbiTag::PyPy {
+                python_version: None,
+                ..
+            } => false,
+            AbiTag::None | AbiTag::Abi3 | AbiTag::Abi3T | AbiTag::Pyston { .. } => true,
+        }
+    }
+
+    /// A Python version in a wheel tag is either exact (`cp311-cp311`) or a minimum
+    /// (`py311-none` or `cp311-abi3`).
+    fn matches_python_version(&self, version: (u8, u8), exact: bool) -> bool {
+        match version {
+            (2, _) => false,
+            (3, minor) => {
+                let version = Version::new([3, u64::from(minor)]);
+                (!exact || self.range.lower().major_minor().contains(&version))
+                    && self.range.upper().major_minor().contains(&version)
+            }
+            _ => true,
+        }
     }
 }
 
@@ -686,6 +650,9 @@ mod tests {
         let version_specifiers = VersionSpecifiers::from_str("==3.10.*").unwrap();
         let requires_python = RequiresPython::from_specifiers(version_specifiers);
         let wheel_names = &[
+            // Even a stable ABI requires at least the version in the CPython tag.
+            "demo-1.0-cp311-cp311.ABI3-linux_x86_64.whl",
+            "demo-1.0-cp311-cp311.unknown-linux_x86_64.whl",
             "PySocks-1.7.1-py27-none-any.whl",
             "black-24.4.2-cp39-cp39-win_amd64.whl",
             "dearpygui-1.11.1-cp312-cp312-win_amd64.whl",
@@ -697,10 +664,9 @@ mod tests {
             "torch-1.10.0-py311-none-macosx_10_9_x86_64.whl",
         ];
         for wheel_name in wheel_names {
-            assert!(
-                !requires_python.matches_wheel_tag(&WheelFilename::from_str(wheel_name).unwrap()),
-                "{wheel_name}"
-            );
+            let wheel = WheelFilename::from_str(wheel_name).unwrap();
+            assert!(!requires_python.matches_wheel_tag(&wheel), "{wheel_name}");
+            assert!(!requires_python.may_match_wheel_tag(&wheel), "{wheel_name}");
         }
 
         let version_specifiers = VersionSpecifiers::from_str(">=3.12.3").unwrap();

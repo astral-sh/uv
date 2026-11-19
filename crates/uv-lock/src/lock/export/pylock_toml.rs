@@ -698,6 +698,7 @@ impl<'lock> PylockToml {
                 .filter(|wheel| {
                     !is_wheel_unreachable_for_marker(
                         &wheel.filename,
+                        wheel.file.yanked.as_deref(),
                         requires_python,
                         &node.marker,
                         tags,

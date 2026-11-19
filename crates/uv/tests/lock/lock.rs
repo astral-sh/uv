@@ -13340,6 +13340,12 @@ async fn lock_index_hash_algorithm() -> Result<()> {
             "url": format!("{}/files/basic_package-0.1.0-cp312-cp312-manylinux_2_17_x86_64.whl", server.uri()),
             "hashes": { "sha512": "ab".repeat(64) }
         }, {
+            // Normalizing CP313 would add a yanked wheel to the lockfile.
+            "filename": "basic_package-0.1.0-CP313.cp312-none-any.whl",
+            "url": format!("{}/files/basic_package-0.1.0-CP313.cp312-none-any.whl", server.uri()),
+            "hashes": { "sha512": "cd".repeat(64) },
+            "yanked": true
+        }, {
             "filename": "basic_package-0.1.0.tar.gz",
             "url": format!("{}/files/basic_package-0.1.0.tar.gz", server.uri()),
             "hashes": {
