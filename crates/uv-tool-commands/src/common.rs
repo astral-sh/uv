@@ -581,6 +581,7 @@ impl ToolLock {
             &hasher,
             state.index(),
             &database,
+            None,
             preview,
             printer,
         )

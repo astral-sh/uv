@@ -6980,7 +6980,9 @@ name = "uv-lock-operations"
 version = "0.0.101"
 dependencies = [
  "anyhow",
+ "astral-version-ranges",
  "fs-err",
+ "futures",
  "itertools 0.14.0",
  "owo-colors",
  "rustc-hash",

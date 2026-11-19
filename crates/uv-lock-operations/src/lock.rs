@@ -169,7 +169,14 @@ impl<'env> LockOperation<'env> {
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
-                Ok(LockResult::Unchanged(target.read_frozen(source).await?))
+                let lock = target.read_frozen(source).await?;
+                if self
+                    .preview
+                    .is_enabled(PreviewFeature::LockBuildDependencies)
+                {
+                    lock.require_locked_builds()?;
+                }
+                Ok(LockResult::Unchanged(lock))
             }
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
@@ -180,6 +187,13 @@ impl<'env> LockOperation<'env> {
                         lock_filename,
                     ));
                 };
+
+                if self
+                    .preview
+                    .is_enabled(PreviewFeature::LockBuildDependencies)
+                {
+                    existing.require_locked_builds()?;
+                }
 
                 if self.preview.is_enabled(PreviewFeature::LockfileFormatCheck)
                     && let Some(line) = find_lock_format_error(&existing_contents)
@@ -770,9 +784,28 @@ async fn do_lock(
         preview,
     );
 
+    let lock_build_dependencies = preview.is_enabled(PreviewFeature::LockBuildDependencies)
+        || existing_lock
+            .as_ref()
+            .is_some_and(Lock::locks_build_dependencies);
+    let enforced_lock = existing_lock
+        .as_ref()
+        .filter(|lock| lock.locks_build_dependencies());
+    let build_dispatch = match (&mode, enforced_lock) {
+        (LockMode::Locked(..), Some(lock)) => {
+            build_dispatch.with_build_lock(lock, target.install_path())
+        }
+        _ => build_dispatch,
+    };
+
     // If any of the resolution-determining settings changed, invalidate the lock.
     let validation = if let Some(existing_lock) = &existing_lock {
         let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
+        let validation_build_dispatch = if let Some(lock) = enforced_lock {
+            validation_build_dispatch.with_build_lock(lock, target.install_path())
+        } else {
+            validation_build_dispatch
+        };
         let database = DistributionDatabase::new(
             &client,
             &validation_build_dispatch,
@@ -806,6 +839,7 @@ async fn do_lock(
             &hasher,
             state.index(),
             &database,
+            lock_build_dependencies.then_some((&validation_build_dispatch, &extra_build_requires)),
             preview,
             printer,
         ))
@@ -962,7 +996,7 @@ async fn do_lock(
                 upgrade,
                 None,
                 resolver_env,
-                python_requirement,
+                python_requirement.clone(),
                 interpreter.markers(),
                 conflicts.clone(),
                 &client,
@@ -970,15 +1004,16 @@ async fn do_lock(
                 state.index(),
                 &build_dispatch,
                 concurrency,
-                options,
+                options.clone(),
                 recorder.clone(),
                 Box::new(SummaryResolveLogger),
                 printer,
             )
             .await?;
 
-            // Print the success message after completing resolution.
-            logger.on_complete(resolution.len(), start, printer)?;
+            if !lock_build_dependencies {
+                logger.on_complete(resolution.len(), start, printer)?;
+            }
 
             // Notify the user of any resolution diagnostics.
             uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
@@ -1021,6 +1056,29 @@ async fn do_lock(
             .with_member_group_metadata(packages)?
             .with_workspace_group_metadata(workspace_group_metadata);
 
+            let lock = if lock_build_dependencies {
+                let resolver = crate::build::BuildResolver {
+                    root: target.install_path(),
+                    client: &client,
+                    dispatch: &build_dispatch,
+                    index_locations,
+                    flat_index: &flat_index,
+                    index: state.index(),
+                    interpreter,
+                    python: python_requirement,
+                    options,
+                    environments: lock_supported_environments,
+                    constraints: &build_constraints,
+                    hasher: &hasher,
+                    extra: &extra_build_requires,
+                    concurrency,
+                    printer,
+                };
+                let previous = validation.as_ref().and(existing_lock.as_ref());
+                Box::pin(resolver.resolve(lock, &resolution, previous, upgrade)).await?
+            } else {
+                lock
+            };
             let lock = if let Some(recorder) = recorder {
                 lock.prune_unused(recorder.take())
             } else if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
@@ -1028,6 +1086,10 @@ async fn do_lock(
             } else {
                 lock
             };
+
+            if lock_build_dependencies {
+                logger.on_complete(lock.len(), start, printer)?;
+            }
 
             let (previous, reason) = match validation {
                 Some(status) => (existing_lock, status.into_mismatch()),

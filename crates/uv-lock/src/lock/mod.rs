@@ -4257,6 +4257,7 @@ impl Lock {
         workspace_default_groups: Option<&DefaultGroups>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
+        build_indexes: &[IndexMetadata],
         tags: &Tags,
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
@@ -5062,6 +5063,9 @@ impl Lock {
         // Runtime traversal never follows build edges. Check build-only index selections too,
         // and re-read editable backend packages whose own dependencies may have changed.
         if let Some(build) = &self.build {
+            for index in build_indexes {
+                Self::record_index(index, &mut remotes, &mut locals, root);
+            }
             for package in build.packages() {
                 if let Some(mismatch) = package.missing_index(remotes.as_ref(), locals.as_ref()) {
                     return Ok(LockSatisfaction::Mismatch(mismatch));
@@ -8959,7 +8963,9 @@ impl SourceDist {
 
     fn metadata_mut(&mut self) -> &mut SourceDistMetadata {
         match self {
-            Self::Metadata { metadata } | Self::Url { metadata, .. } | Self::Path { metadata, .. } => metadata,
+            Self::Metadata { metadata }
+            | Self::Url { metadata, .. }
+            | Self::Path { metadata, .. } => metadata,
         }
     }
 

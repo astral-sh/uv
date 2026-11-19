@@ -9,7 +9,9 @@ use uv_command_support::Printer;
 use uv_configuration::{Constraints, ExcludeDependency, Override, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{DependencyMetadata, IndexLocations, Requirement, RequiresPython};
+use uv_distribution_types::{
+    DependencyMetadata, ExtraBuildRequires, IndexLocations, Requirement, RequiresPython,
+};
 use uv_lock::{GroupMetadata, Lock, LockSatisfaction};
 use uv_normalize::{DefaultGroups, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
@@ -66,6 +68,7 @@ impl ValidatedLock {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+        builds: Option<(&BuildDispatch<'_>, &ExtraBuildRequires)>,
         preview: Preview,
         printer: Printer,
     ) -> Result<Self, LockValidationError> {
@@ -282,6 +285,19 @@ impl ValidatedLock {
             Some(index_locations)
         };
 
+        let build_indexes = if let Some((dispatch, extra)) = builds {
+            let Some(indexes) =
+                crate::build::validated_build_indexes(lock, install_path, dispatch, extra)
+                    .await
+                    .map_err(LockValidationError::BuildInputs)?
+            else {
+                return Ok(Self::Preferable(LockMismatchReason::BuildDependencies));
+            };
+            indexes
+        } else {
+            Vec::new()
+        };
+
         // Determine whether the lockfile satisfies the workspace requirements.
         match Box::pin(lock.satisfies(
             install_path,
@@ -298,6 +314,7 @@ impl ValidatedLock {
             workspace_default_groups,
             dependency_metadata,
             indexes,
+            &build_indexes,
             interpreter.tags()?,
             interpreter.markers(),
             &options.build_options,

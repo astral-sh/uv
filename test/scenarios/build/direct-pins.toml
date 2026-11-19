@@ -1,0 +1,30 @@
+name = "direct-build-pins"
+description = "Two sdists pin incompatible helpers. A third accepts either pin and must pick one."
+
+[root]
+requires = ["legacy", "modern", "unspecified"]
+
+[expected]
+satisfiable = true
+
+# This scenario exercises isolated source builds during a frozen sync.
+[testgen]
+disable = true
+
+[packages.legacy.versions."1"]
+wheel = false
+build_requires = ["hatchling", "helper==1"]
+
+[packages.modern.versions."1"]
+wheel = false
+build_requires = ["hatchling", "helper==2"]
+
+[packages.unspecified.versions."1"]
+wheel = false
+build_requires = ["hatchling", "helper"]
+
+[packages.helper.versions."1"]
+sdist = false
+
+[packages.helper.versions."2"]
+sdist = false
