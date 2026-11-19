@@ -48,13 +48,13 @@ jobs:
       unsigned-windows: ${{ steps.windows.outputs.artifact-id }}
       assembly: ${{ steps.assembly.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: "Plan signed release targets"
         id: targets
-        uses: astral-sh/github-actions/plan-release-signing@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/plan-release-signing@2026.11.16.0
         with:
           archive-package: uv
           packages: >-
@@ -67,26 +67,26 @@ jobs:
             }
 
       - name: "Download built wheels"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           pattern: build-wheels-*
           path: wheel-artifacts
 
       - name: "Download built GitHub release archives"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           pattern: build-github-archives-*
           path: github-archives
           merge-multiple: true
 
       - name: "Download uv source distribution"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: build-sdist-uv
           path: sdists/uv
 
       - name: "Download uv_build source distribution"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           name: build-sdist-uv_build
           path: sdists/uv_build
@@ -106,14 +106,14 @@ jobs:
           done
 
       - name: "Prepare release signing inputs"
-        uses: astral-sh/github-actions/prepare-release-signing@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/prepare-release-signing@2026.11.16.0
         with:
           targets: ${{ steps.targets.outputs.artifacts }}
           output-directory: prepared
 
       - name: "Upload unsigned macOS executables"
         id: macos
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: unsigned-binaries-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: prepared/unsigned/macos
@@ -121,7 +121,7 @@ jobs:
 
       - name: "Upload unsigned Windows executables"
         id: windows
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: unsigned-binaries-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: prepared/unsigned/windows
@@ -129,7 +129,7 @@ jobs:
 
       - name: "Upload assembly inputs"
         id: assembly
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: signing-assembly-inputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -151,14 +151,14 @@ jobs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - name: "Download unsigned executable wheel members"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.prepare.outputs.unsigned-macos }}
           path: unsigned
           merge-multiple: true
 
       - name: "Sign and notarize macOS executables"
-        uses: astral-sh/github-actions/sign-macos@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/sign-macos@2026.11.16.0
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -177,7 +177,7 @@ jobs:
 
       - name: "Upload signed executable wheel members"
         id: upload
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: signed-binaries-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed
@@ -195,14 +195,14 @@ jobs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - name: "Download unsigned executable wheel members"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.prepare.outputs.unsigned-windows }}
           path: unsigned
           merge-multiple: true
 
       - name: "Sign Windows executables"
-        uses: astral-sh/github-actions/sign-windows@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/sign-windows@2026.11.16.0
         with:
           unsigned-directory: ${{ github.workspace }}/unsigned
           signed-directory: ${{ github.workspace }}/signed
@@ -216,7 +216,7 @@ jobs:
 
       - name: "Upload signed executable wheel members"
         id: upload
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: signed-binaries-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed
@@ -239,32 +239,32 @@ jobs:
       uv-sdist: ${{ steps.uv-sdist.outputs.artifact-id }}
       uv-build-sdist: ${{ steps.uv-build-sdist.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: "Download assembly inputs"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.prepare.outputs.assembly }}
           merge-multiple: true
 
       - name: "Download signed macOS executables"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.sign-macos.outputs.artifact }}
           path: signed
           merge-multiple: true
 
       - name: "Download signed Windows executables"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.sign-windows.outputs.artifact }}
           path: signed
           merge-multiple: true
 
       - name: "Assemble signed release artifacts"
-        uses: astral-sh/github-actions/assemble-signed-release@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/assemble-signed-release@2026.11.16.0
         with:
           targets: ${{ needs.prepare.outputs.artifacts }}
           # The complete release inputs retain the originals checked during preparation.
@@ -284,7 +284,7 @@ jobs:
 
       - name: "Upload signed macOS wheels"
         id: macos-wheels
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: signed-wheels-macos-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed-artifacts/wheels/macos
@@ -292,7 +292,7 @@ jobs:
 
       - name: "Upload signed Windows wheels"
         id: windows-wheels
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: signed-wheels-windows-${{ github.run_id }}-${{ github.run_attempt }}
           path: signed-artifacts/wheels/windows
@@ -300,7 +300,7 @@ jobs:
 
       - name: "Upload uv release wheels"
         id: uv-wheels
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: release-wheels-uv-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-artifacts/wheels/uv
@@ -308,7 +308,7 @@ jobs:
 
       - name: "Upload uv_build release wheels"
         id: uv-build-wheels
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: release-wheels-uv_build-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-artifacts/wheels/uv_build
@@ -316,7 +316,7 @@ jobs:
 
       - name: "Upload GitHub release archives"
         id: github-archives
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: release-github-archives-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-artifacts/github-archives/*
@@ -324,7 +324,7 @@ jobs:
 
       - name: "Upload uv source distribution"
         id: uv-sdist
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: release-sdist-uv-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-artifacts/sdists/uv
@@ -332,7 +332,7 @@ jobs:
 
       - name: "Upload uv_build source distribution"
         id: uv-build-sdist
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: release-sdist-uv_build-${{ github.run_id }}-${{ github.run_attempt }}
           path: release-artifacts/sdists/uv_build
@@ -351,40 +351,40 @@ jobs:
     env:
       TARGET: ${{ matrix.platform.target }}
     steps:
-      - uses: astral-sh/github-actions/demudhra@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/github-actions/demudhra@2026.11.16.0
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@v7.0.0
         with:
           cache: ""
           python-version: "3.15"
           architecture: ${{ matrix.platform.python-architecture }}
 
       - name: "Download signed executables"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.sign-macos.outputs.artifact }}
           path: signed
           merge-multiple: true
 
       - name: "Download signed wheels"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.assemble.outputs.macos-wheels }}
           path: wheels
           merge-multiple: true
 
       - name: "Download signed GitHub release archives"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.assemble.outputs.github-archives }}
           path: github-archives
           merge-multiple: true
 
       - name: "Verify signed release artifacts"
-        uses: astral-sh/github-actions/verify-release@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/verify-release@2026.11.16.0
         with:
           target: ${{ toJSON(matrix.platform) }}
           signed-directory: signed/${{ matrix.platform.target }}
@@ -407,39 +407,39 @@ jobs:
     env:
       TARGET: ${{ matrix.platform.target }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@v7.0.0
         with:
           cache: ""
           python-version: "3.15"
           architecture: ${{ matrix.platform.python-architecture }}
 
       - name: "Download signed executables"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.sign-windows.outputs.artifact }}
           path: signed
           merge-multiple: true
 
       - name: "Download signed wheels"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.assemble.outputs.windows-wheels }}
           path: wheels
           merge-multiple: true
 
       - name: "Download signed GitHub release archives"
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           artifact-ids: ${{ needs.assemble.outputs.github-archives }}
           path: github-archives
           merge-multiple: true
 
       - name: "Verify signed release artifacts"
-        uses: astral-sh/github-actions/verify-release@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/verify-release@2026.11.16.0
         with:
           target: ${{ toJSON(matrix.platform) }}
           signed-directory: signed/${{ matrix.platform.target }}

@@ -29,7 +29,7 @@ jobs:
     env:
       VERSION: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -38,7 +38,7 @@ jobs:
 
       - name: "Get versions token"
         id: token
-        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/simple-token-service@2026.11.16.0
         with:
           exchange-url: ${{ secrets.RELEASES_STS_API_URL }}/exchange
           audience: ${{ secrets.RELEASES_STS_API_URL }}
@@ -48,7 +48,7 @@ jobs:
             pull_requests: write
 
       - name: "Checkout versions repo"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           repository: astral-sh/versions
           ref: main
