@@ -45,25 +45,12 @@ request, whether a wheel will be available at install time, or how long a
 resolver run will take. Large source distributions are underrepresented, so
 these counts are not failure rates or performance results.
 
-## Repeat the scan
+## How the sample was selected
 
-Use the
+The scan used the
 [pinned 15,000-release inventory](https://github.com/astral-sh/uv-ecosystem-testing/blob/4ae32dc2f34d250b64c0cca7c6f2217517087ff7/data/top-15k-pypi-latest-version.csv)
 (SHA-256 `3ede20286c4dcddc24c82f0c13a548d4ae241aefb1ee0170961aa9ea2a0e0229`).
-From this directory, with Python 3.12+ and `requests` available:
-
-```sh
-mirror=$(mktemp -d)
-python mirror.py /path/to/top-15k-pypi-latest-version.csv "$mirror" --exclude-newer 2026-11-01
-docker run --rm --network none --read-only --memory 512m \
-  -v "$PWD/scan.py:/scan.py:ro" -v "$mirror:/input:ro" \
-  python:3.14-alpine@sha256:a18b20ad69e74df6cf6d2e1b1a260d7a1ecf5380fd83b310f83ba88c461cf894 \
-  python /scan.py /input > results.jsonl
-```
-
-The mirror copies opaque artifacts; only the container opens archives. The
-cutoff excludes uploads at or after midnight UTC on November 1, 2026. The mirror
-skips currently yanked files and records unavailable releases instead of
-silently picking another version. Results can change if publishers yank or
-remove files later. Each successfully inspected row includes the artifact's
-SHA-256 digest. Remove the temporary mirror after collecting the results.
+Only a network-isolated container opened the archives. The scan excluded yanked files and
+uploads at or after midnight UTC on November 1, 2026, and recorded unavailable releases
+instead of substituting another version. Each successfully inspected row includes the
+archive's SHA-256 digest.

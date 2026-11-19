@@ -92,8 +92,7 @@ The baseline commit was `7f396534d58321e60b5ba204151326712d912ece`. The full coh
 candidate Git **source tree** `fac0ff5d2bfef2aaf06be22b21b8212d5d8689ee`; the named benchmarks and
 the 74-input intermediate rerun measured `3922440ba9d463ce4abfeb98cb9cbe42a6ac3d43`. These are tree
 IDs, not published commit SHAs. The portable report bundles both exact patches, raw paired
-observations, the subset manifest, and the named before/after lockfiles.
-[Run the comparison](README.md) with the
+observations, the subset manifest, the named before/after lockfiles, and the runner used with the
 [pinned inventory](https://github.com/astral-sh/uv-ecosystem-testing/blob/4ae32dc2f34d250b64c0cca7c6f2217517087ff7/data/top-15k-pypi-latest-version.csv).
 
 The full run used equivalent debug builds on Linux, Python 3.11, PyPI, an exclusive cutoff of
