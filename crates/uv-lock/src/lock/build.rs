@@ -12,13 +12,13 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use uv_client::RegistryClient;
 use uv_configuration::BuildOptions;
 use uv_distribution_types::{
-    ArchiveHashPolicy, Edge, ExtraBuildRequirement, FirstParty, Name, Node, Requirement,
-    Resolution, ResolvedDist, SourceDist, satisfies_require_hashes,
+    Edge, ExtraBuildRequirement, FirstParty, Name, Node, Requirement, Resolution, ResolvedDist,
+    SourceDist, satisfies_require_hashes,
 };
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
-use uv_pypi_types::ResolverMarkerEnvironment;
+use uv_pypi_types::{HashDigest, ResolverMarkerEnvironment};
 use uv_resolver_types::ResolverOutput;
 
 use super::{
@@ -166,13 +166,8 @@ impl Package {
         self.to_source_dist(root, FirstParty::No)
     }
 
-    pub fn source_hash_policy(&self) -> ArchiveHashPolicy<'_> {
-        self.sdist
-            .as_ref()
-            .and_then(super::SourceDist::hash)
-            .map_or(ArchiveHashPolicy::None, |hash| {
-                ArchiveHashPolicy::All(std::slice::from_ref(hash))
-            })
+    pub fn source_hash(&self) -> Option<&HashDigest> {
+        self.sdist.as_ref().and_then(super::SourceDist::hash)
     }
 
     pub fn has_local_build_source(&self) -> bool {

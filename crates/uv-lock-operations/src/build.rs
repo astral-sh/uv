@@ -10,8 +10,8 @@ use uv_command_support::Printer;
 use uv_configuration::{Concurrency, Constraints, ExtrasSpecification, Reinstall, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution_types::{
-    ExtraBuildRequires, IndexLocations, IndexMetadata, Name, Requirement, RequirementSource,
-    UnresolvedRequirementSpecification,
+    ArchiveHashPolicy, ExtraBuildRequires, IndexLocations, IndexMetadata, Name, Requirement,
+    RequirementSource, UnresolvedRequirementSpecification,
 };
 use uv_lock::{
     BuildInputs, BuildUniverse, BuildUniverseOwner, Lock, Package, PackageId, ResolverManifest,
@@ -169,9 +169,19 @@ impl BuildResolver<'_> {
         let Some(source) = package.build_source(self.root)? else {
             return Ok(None);
         };
+        let digests = package
+            .source_hash()
+            .map(|digest| self.hasher.constrained_archive_digests(&source, digest))
+            .transpose()
+            .with_context(|| {
+                format!("Source archive for `{source}` does not match the allowed build hashes")
+            })?;
+        let hashes = digests
+            .as_deref()
+            .map_or(ArchiveHashPolicy::None, ArchiveHashPolicy::All);
         let (backend, mut requirements) = self
             .dispatch
-            .read_build_system(&source, package.source_hash_policy())
+            .read_build_system(&source, hashes)
             .await
             .with_context(|| format!("Failed to read build requirements for `{}`", package.id()))?;
         let extra = self
@@ -462,7 +472,7 @@ pub(crate) async fn validated_build_indexes(
         let requires = if package.has_local_build_source() {
             if let Some(source) = package.build_source(root)? {
                 dispatch
-                    .read_build_system(&source, package.source_hash_policy())
+                    .read_build_system(&source, ArchiveHashPolicy::None)
                     .await?
                     .1
             } else {

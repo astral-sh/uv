@@ -141,6 +141,28 @@ impl HashStrategy {
         self.archive_policy_for_id(|| distribution.version_id())
     }
 
+    /// Check a recorded archive digest against any constraints on that distribution.
+    /// Registry hashes allow alternative files; a digest for a wheel cannot approve its sdist.
+    /// Direct URLs identify one file, so all supplied digests apply to the same bytes.
+    pub fn constrained_archive_digests(
+        &self,
+        distribution: &(impl DistributionMetadata + Display),
+        recorded: &HashDigest,
+    ) -> Result<Vec<HashDigest>, HashStrategyError> {
+        let id = distribution.version_id();
+        let digests = vec![recorded.clone()];
+        let Some(constraints) = self.hashes_for_id(&id) else {
+            return Ok(digests);
+        };
+        let mode = match self.verification {
+            HashVerification::Required(_) => HashCheckingMode::Require,
+            HashVerification::IfPresent(_) | HashVerification::Unspecified => {
+                HashCheckingMode::Verify
+            }
+        };
+        combine_constraint_hashes(&id, digests, constraints, distribution, mode)
+    }
+
     /// Return the [`MetadataHashPolicy`] for retrieving the given distribution's metadata.
     pub fn metadata_policy<T: DistributionMetadata>(
         &self,

@@ -2683,6 +2683,57 @@ fn lock_build_retains_other_platform_wheel_hash_until_upgrade() -> Result<()> {
     Ok(())
 }
 
+/// Approving only a wheel must not let its sibling sdist introduce new build requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_rejects_unapproved_sdist_before_reading_its_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist = context.temp_dir.child("dist");
+    let (filename, wheel) = WheelBuilder::new(&"demo-pkg".parse()?, &"1.0".parse()?).build();
+    let trusted = hex::encode(Sha256::digest(&wheel));
+    dist.child(filename).write_binary(&wheel)?;
+    let mut sdist = Vec::new();
+    write_tar_gz(
+        &mut sdist,
+        &[(
+            "demo_pkg-1.0/pyproject.toml",
+            indoc! {r#"
+            [build-system]
+            requires = ["injected"]
+            build-backend = "injected"
+        "#},
+        )],
+    )?;
+    dist.child("demo_pkg-1.0.tar.gz").write_binary(&sdist)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["demo-pkg"]
+        build-backend = "demo_pkg"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["dist"]
+        build-constraint-dependencies = [
+            {{ requirement = "demo-pkg==1.0", hashes = ["sha256:{trusted}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Source archive for `demo-pkg==1.0` does not match the allowed build hashes
+      cause: In `--verify-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: demo-pkg==1.0
+    ");
+    Ok(())
+}
+
 /// An installed wheel can ship a different pyproject.toml than the sdist uv will build.
 #[cfg(feature = "test-universal")]
 #[test]
