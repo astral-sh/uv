@@ -2801,7 +2801,7 @@ impl Lock {
                 let Some(&index) = by_id.get(&dependency.package_id) else {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
-                        dependency: dependency.clone(),
+                        dependency: dependency.package_id.clone(),
                     }
                     .into());
                 };
@@ -8450,17 +8450,31 @@ impl Source {
 
 impl Display for Source {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
+        write!(f, "{}+", self.name())?;
+        let url = match self {
             Self::Registry(RegistrySource::Url(url)) | Self::Git(url, _) | Self::Direct(url, _) => {
-                write!(f, "{}+{}", self.name(), url)
+                url.as_ref()
+            }
+            // Registries with unrecognized schemes (including `HTTPS://`) deserialize as paths.
+            Self::Registry(RegistrySource::Path(path))
+                if let Some(url) = path.to_str()
+                    && split_scheme(url).is_some_and(|(scheme, rest)| {
+                        scheme.len() > 1 && rest.starts_with("//")
+                    }) =>
+            {
+                url
             }
             Self::Registry(RegistrySource::Path(path))
             | Self::Path(path)
             | Self::Directory(path)
             | Self::Editable(path)
             | Self::Virtual(path) => {
-                write!(f, "{}+{}", self.name(), PortablePath::from(path))
+                return write!(f, "{}", PortablePath::from(path));
             }
+        };
+        match SafeUrl::parse(url) {
+            Ok(url) => write!(f, "{url}"),
+            Err(_) => f.write_str("<invalid URL>"),
         }
     }
 }
@@ -10304,7 +10318,7 @@ enum LockErrorKind {
         id: PackageId,
         /// The ID of the dependency that doesn't have a corresponding package
         /// entry.
-        dependency: Dependency,
+        dependency: PackageId,
     },
     /// An artifact does not satisfy the lockfile's hash requirement.
     #[error(transparent)]
