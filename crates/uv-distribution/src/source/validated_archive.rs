@@ -223,7 +223,9 @@ mod tests {
                 ..NO_VALIDATION
             },
             ArchiveValidation {
-                hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::Generate),
+                hash_policy: ArtifactHashPolicy::required(ArchiveHashPolicy::All(slice::from_ref(
+                    &digest,
+                ))),
                 ..NO_VALIDATION
             },
             ArchiveValidation {

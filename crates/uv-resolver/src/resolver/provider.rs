@@ -359,7 +359,11 @@ impl<Context: BuildContext> ResolverProvider for DefaultResolverProvider<'_, Con
         wheel: &BuiltDist,
     ) -> Result<Option<VariantsJsonContent>, uv_distribution::Error> {
         self.fetcher
-            .get_wheel_variant_metadata(wheel, self.hasher.archive_policy(wheel))
+            .get_wheel_variant_metadata(
+                wheel,
+                self.hasher.archive_policy(wheel),
+                self.hasher.output(),
+            )
             .await
     }
 

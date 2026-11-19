@@ -42,7 +42,7 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
@@ -212,6 +212,7 @@ pub(crate) struct SourceDistributionBuilder<'a, T: BuildContext> {
     build_context: &'a T,
     build_stack: Option<&'a BuildStack>,
     reporter: Option<Arc<dyn Reporter>>,
+    output_hash: Option<HashAlgorithm>,
     metadata_first_party_packages: Option<&'a FirstPartyPackages>,
 }
 
@@ -237,19 +238,22 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             build_context,
             build_stack: None,
             reporter: None,
+            output_hash: None,
             metadata_first_party_packages: None,
         }
     }
 
-    /// Set the first-party policy for a metadata build.
+    /// Configure hash output and first-party packages for a metadata build.
     pub(crate) fn for_metadata<'metadata>(
         &'metadata self,
+        output_hash: Option<HashAlgorithm>,
         first_party_packages: Option<&'metadata FirstPartyPackages>,
     ) -> SourceDistributionBuilder<'metadata, T> {
         SourceDistributionBuilder {
             build_context: self.build_context,
             build_stack: self.build_stack,
             reporter: self.reporter.clone(),
+            output_hash,
             metadata_first_party_packages: first_party_packages,
         }
     }
@@ -1053,6 +1057,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // Refresh if the cached revision fails verification or lacks a required size.
         if hashes.can_reuse(&revision, source_index_hashes(source))
+            && revision.has_output_hash(self.output_hash)
             && (expected_size.is_none() || revision.size().is_some())
         {
             hashes.verify_required(source, revision.hashes())?;
@@ -1367,6 +1372,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             && *pointer.cache_info() == cache_info
             && ArtifactHashPolicy::required(hashes)
                 .can_reuse(pointer.revision(), source_index_hashes(source))
+            && pointer.revision().has_output_hash(self.output_hash)
         {
             return Ok(pointer);
         }
@@ -1853,10 +1859,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the revision already exists, return it. There's no need to check for freshness, since
         // everything is scoped to a Git commit.
-        if let Some(revision) = RevisionHashes::read_from(&revision_entry)? {
-            if revision.has_digests(hashes) {
-                return Ok(revision);
-            }
+        if let Some(revision) = RevisionHashes::read_from(&revision_entry)?
+            && revision.has_digests(hashes)
+            && revision.has_output_hash(self.output_hash)
+        {
+            return Ok(revision);
         }
 
         // Otherwise, we need to unzip the archive, or at least compute the hashes.
@@ -2898,7 +2905,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.cache(),
             self.build_context.tar_backend(),
             ArchiveValidation {
-                extra_algorithms: &[],
+                extra_algorithms: self.output_hash.as_slice(),
                 hash_policy: ArtifactHashPolicy::required(hash_policy),
                 existing_hashes,
                 expected_size: None,

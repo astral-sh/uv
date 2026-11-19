@@ -178,14 +178,7 @@ impl HashStrategy {
 
     /// Return the archive hash policy for a distribution identity.
     fn archive_policy_for_id(&self, id: impl FnOnce() -> VersionId) -> ArchiveHashPolicy<'_> {
-        let validation = self.validation_for_id(id);
-        match validation {
-            HashValidation::None => match self.output {
-                HashOutput::None => ArchiveHashPolicy::None,
-                HashOutput::Direct | HashOutput::All => ArchiveHashPolicy::Generate,
-            },
-            HashValidation::Any(_) | HashValidation::All(_) => validation.into(),
-        }
+        self.validation_for_id(id).into()
     }
 
     fn validation_for_id(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
@@ -807,8 +800,7 @@ mod tests {
     }
 
     #[test]
-    fn generate_and_verify_validates_known_hashes_and_generates_unknown_hashes()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn collecting_hashes_preserves_expected_hashes() -> Result<(), Box<dyn std::error::Error>> {
         let url: SafeUrl = "https://example.com/anyio-4.0.0.tar.gz".parse()?;
         let unknown_url: SafeUrl = "https://example.com/anyio-4.1.0.tar.gz".parse()?;
         let name: PackageName = "anyio".parse()?;
@@ -845,7 +837,7 @@ mod tests {
         }
         assert_eq!(
             strategy.archive_policy_for_url(&unknown_url),
-            ArchiveHashPolicy::Generate
+            ArchiveHashPolicy::None
         );
         assert_eq!(
             strategy.metadata_policy_for_url(&unknown_url),
@@ -867,7 +859,7 @@ mod tests {
         );
         assert_eq!(
             strategy.archive_policy_for_package(&name, &unknown_version),
-            ArchiveHashPolicy::Generate
+            ArchiveHashPolicy::None
         );
 
         Ok(())

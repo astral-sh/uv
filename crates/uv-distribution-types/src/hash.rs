@@ -1,13 +1,11 @@
 use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes};
 use uv_redacted::SafeUrl;
 
-/// Hash generation and validation policy for an archive.
+/// Hash validation policy for an archive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArchiveHashPolicy<'a> {
     /// No hash policy is specified.
     None,
-    /// Hashes should be generated (specifically, a SHA-256 hash), but not validated.
-    Generate,
     /// Hashes should be validated against a pre-defined list of hashes, and any matching digest is
     /// sufficient. If necessary, hashes should be generated so as to ensure that the archive is
     /// valid.
@@ -45,7 +43,6 @@ impl<'a> ArchiveHashPolicy<'a> {
     pub fn algorithms(&self) -> Vec<HashAlgorithm> {
         match self {
             Self::None => vec![],
-            Self::Generate => vec![HashAlgorithm::Sha256],
             Self::Any(hashes) | Self::All(hashes) => {
                 let mut algorithms = hashes.iter().map(HashDigest::algorithm).collect::<Vec<_>>();
                 algorithms.sort();
@@ -59,7 +56,6 @@ impl<'a> ArchiveHashPolicy<'a> {
     pub fn digests(&self) -> &[HashDigest] {
         match self {
             Self::None => &[],
-            Self::Generate => &[],
             Self::Any(hashes) | Self::All(hashes) => hashes,
         }
     }
@@ -68,9 +64,6 @@ impl<'a> ArchiveHashPolicy<'a> {
     pub fn matches(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
-            Self::Generate => hashes
-                .iter()
-                .any(|hash| hash.algorithm() == HashAlgorithm::Sha256),
             Self::Any(required) => {
                 !required.is_empty() && hashes.iter().any(|hash| required.contains(hash))
             }
@@ -84,9 +77,6 @@ impl<'a> ArchiveHashPolicy<'a> {
     fn has_required_algorithms(&self, hashes: &[HashDigest]) -> bool {
         match self {
             Self::None => true,
-            Self::Generate => hashes
-                .iter()
-                .any(|hash| hash.algorithm() == HashAlgorithm::Sha256),
             Self::Any(required) => {
                 !required.is_empty()
                     && required
@@ -112,8 +102,7 @@ impl<'a> ArchiveHashPolicy<'a> {
 ///
 /// - If the index provides a wheel's hash, metadata lookup uses [`ArchiveHashPolicy::None`].
 ///   The resolver can record the index-provided hash without hashing the wheel.
-/// - If the index provides no hashes, metadata lookup uses [`ArchiveHashPolicy::Generate`]
-///   to obtain a SHA-256 hash of the wheel.
+/// - If the index provides no hashes, metadata lookup requests a SHA-256 hash of the wheel.
 ///
 /// If source metadata requires a build and `validation` contains expected hashes, the fetcher
 /// instead uses [`ArchiveHashPolicy::Any`] or [`ArchiveHashPolicy::All`] to check the archive
@@ -187,6 +176,15 @@ pub fn parse_url_hashes(url: &SafeUrl) -> Option<HashDigests> {
 pub trait Hashed {
     /// Return the [`HashDigest`]s for the archive.
     fn hashes(&self) -> &[HashDigest];
+
+    /// Whether the cached digests include the requested output algorithm.
+    fn has_output_hash(&self, algorithm: Option<HashAlgorithm>) -> bool {
+        algorithm.is_none_or(|algorithm| {
+            self.hashes()
+                .iter()
+                .any(|hash| hash.algorithm() == algorithm)
+        })
+    }
 
     /// Returns `true` if the archive satisfies the given hash policy.
     fn satisfies(&self, hashes: ArchiveHashPolicy) -> bool {

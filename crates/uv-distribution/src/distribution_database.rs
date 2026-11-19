@@ -26,7 +26,7 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, CanonicalFileLocation, Dist, DistRef,
-    GitPathBuiltDist, HashOutput, HashValidation, IndexLocations, IndexUrl, InstalledDist,
+    GitPathBuiltDist, HashOutput, Hashed, IndexLocations, IndexUrl, InstalledDist,
     MetadataHashPolicy, Name, ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent,
     parse_url_hashes,
 };
@@ -39,7 +39,7 @@ use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
 use uv_preview::PreviewFeature;
-use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_python_types::PythonVariant;
 use uv_redacted::SafeUrl;
 use uv_threads::initialize_rayon_once;
@@ -223,7 +223,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         match dist {
             Dist::Built(built) => {
                 check_supported_wheel_variant(built)?;
-                let wheel = self.get_wheel(built, hashes).await?;
+                let wheel = self.get_wheel(built, hashes, None).await?;
                 check_wheel_variant_compatibility(
                     &wheel.filename,
                     &wheel.archive,
@@ -284,6 +284,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         wheel: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
+        output: HashOutput,
     ) -> Result<Option<VariantsJsonContent>, Error> {
         let filename = wheel.wheel_filename();
         let Some(label) = filename.variant() else {
@@ -297,7 +298,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
             BuiltDist::DirectUrl(url) => {
                 // Hash generation downloads the full wheel, so skip the metadata request.
-                if hashes != ArchiveHashPolicy::Generate || parse_url_hashes(&url.url).is_some() {
+                let output_hash = wheel_output_hash(wheel, &hashes, output);
+                if output_hash.is_none() {
                     let result = self
                         .client
                         .managed(|client| {
@@ -317,7 +319,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 // TODO(konsti): Read `variant.json` from the same archive that supplied the hash.
                 // With `Cache-Control: no-store`, `pip compile --generate-hashes` can hash one
                 // wheel and check compatibility against a different wheel returned by a second GET.
-                let wheel = Box::pin(self.get_wheel(wheel, hashes)).await?;
+                let wheel = Box::pin(self.get_wheel(wheel, hashes, output_hash)).await?;
                 return read_extracted_wheel_variant(filename, &wheel.archive, label).map(Some);
             }
             // Registry candidates use index variant metadata.
@@ -339,6 +341,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         &self,
         dist: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
+        output_hash: Option<HashAlgorithm>,
     ) -> Result<LocalWheel, Error> {
         match dist {
             BuiltDist::Registry(wheels) => {
@@ -363,7 +366,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         .to_file_path()
                         .map_err(|()| Error::NonFileUrl(request.url.clone()))?;
                     return self
-                        .load_wheel(&path, &wheel.filename, wheel_entry, dist, hashes)
+                        .load_wheel(
+                            &path,
+                            &wheel.filename,
+                            wheel_entry,
+                            dist,
+                            hashes,
+                            output_hash,
+                        )
                         .await;
                 }
 
@@ -382,6 +392,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         &wheel_entry,
                         dist,
                         hashes,
+                        output_hash,
                     )
                     .await
                 {
@@ -421,6 +432,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 &wheel_entry,
                                 dist,
                                 hashes,
+                                output_hash,
                             )
                             .await?;
 
@@ -459,6 +471,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                         &wheel_entry,
                         dist,
                         ArtifactHashPolicy::required(hashes),
+                        output_hash,
                     )
                     .await
                 {
@@ -498,6 +511,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                                 &wheel_entry,
                                 dist,
                                 ArtifactHashPolicy::required(hashes),
+                                output_hash,
                             )
                             .await?;
                         Ok(LocalWheel {
@@ -529,8 +543,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
 
                 let install_path = fetch.path().join(&wheel.install_path);
 
-                self.load_wheel(&install_path, &wheel.filename, cache_entry, dist, hashes)
-                    .await
+                self.load_wheel(
+                    &install_path,
+                    &wheel.filename,
+                    cache_entry,
+                    dist,
+                    hashes,
+                    output_hash,
+                )
+                .await
             }
 
             BuiltDist::Path(wheel) => {
@@ -546,6 +567,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                     cache_entry,
                     dist,
                     hashes,
+                    output_hash,
                 )
                 .await
             }
@@ -681,35 +703,14 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         dist: &BuiltDist,
         hashes: MetadataHashPolicy<'_>,
     ) -> Result<ArchiveMetadata, Error> {
-        let hash_policy = match hashes.validation {
-            HashValidation::None => {
-                let compute_hashes = match hashes.output {
-                    HashOutput::None => false,
-                    HashOutput::Direct | HashOutput::All => match dist {
-                        BuiltDist::Registry(dist) => {
-                            // Generate missing hashes for indexes and `--find-links` without hashes.
-                            // This hashes only the selected wheel, not every distribution for the version.
-                            hashes.output == HashOutput::All
-                                && dist.best_wheel().file.hashes.is_empty()
-                        }
-                        BuiltDist::DirectUrl(dist) => parse_url_hashes(&dist.url).is_none(),
-                        BuiltDist::Path(_) | BuiltDist::GitPath(_) => true,
-                    },
-                };
-                if compute_hashes {
-                    ArchiveHashPolicy::Generate
-                } else {
-                    ArchiveHashPolicy::None
-                }
-            }
-            HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
-        };
-
+        let expected = ArchiveHashPolicy::from(hashes.validation);
+        let output = hashes.output;
         // Box the full-wheel futures to keep their state out of metadata-only requests.
         // Fetch the entire wheel only when we need to compute a hash for resolution.
         // TODO(charlie): Request the hashes via a separate method, to reduce the coupling in this API.
-        if hash_policy == ArchiveHashPolicy::Generate {
-            let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
+        let output_hash = wheel_output_hash(dist, &expected, output);
+        if output_hash.is_some() {
+            let wheel = Box::pin(self.get_wheel(dist, expected, output_hash)).await?;
             // If the metadata was provided by the user directly, prefer it.
             let metadata = if let Some(metadata) =
                 self.dependency_metadata(dist.name(), Some(dist.version()))
@@ -755,7 +756,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             Err(err) => return Err(err.into()),
         }
 
-        let wheel = Box::pin(self.get_wheel(dist, hash_policy)).await?;
+        let wheel = Box::pin(self.get_wheel(dist, expected, None)).await?;
         Ok(ArchiveMetadata {
             metadata: Metadata::from_metadata23(wheel.metadata()?),
             hashes: wheel.hashes,
@@ -782,30 +783,27 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             }
         }
 
-        let url_hashes = if let BuildableSource::Dist(SourceDist::DirectUrl(dist)) = source {
-            parse_url_hashes(&dist.url)
-        } else if let BuildableSource::Url(SourceUrl::Direct(url)) = source {
-            parse_url_hashes(url.url)
-        } else {
-            None
-        };
+        let mut expected = ArchiveHashPolicy::from(hashes.validation);
+        let output = hashes.output;
+        let mut output_hash = None;
+        let url_hashes;
+        if output != HashOutput::None && expected.is_none() {
+            url_hashes = match source {
+                BuildableSource::Dist(SourceDist::DirectUrl(dist)) => parse_url_hashes(&dist.url),
+                BuildableSource::Url(SourceUrl::Direct(url)) => parse_url_hashes(url.url),
+                _ => None,
+            };
+            if let Some(digests) = &url_hashes {
+                expected = ArchiveHashPolicy::All(digests.as_slice());
+            } else {
+                output_hash = Some(HashAlgorithm::Sha256);
+            }
+        }
 
-        let build_hash_policy = match hashes.validation {
-            HashValidation::None => match hashes.output {
-                HashOutput::None => ArchiveHashPolicy::None,
-                // If resolving metadata requires a build, validate any URL hash before executing
-                // the backend, even when the caller only requested hash collection.
-                HashOutput::Direct | HashOutput::All => match url_hashes.as_ref() {
-                    Some(digests) => ArchiveHashPolicy::All(digests.as_slice()),
-                    None => ArchiveHashPolicy::Generate,
-                },
-            },
-            HashValidation::Any(_) | HashValidation::All(_) => hashes.validation.into(),
-        };
         let ArchiveMetadata { metadata, hashes } = self
             .builder
-            .for_metadata(self.first_party_packages)
-            .download_and_build_metadata(source, build_hash_policy, &self.client)
+            .for_metadata(output_hash, self.first_party_packages)
+            .download_and_build_metadata(source, expected, &self.client)
             .boxed_local()
             .await?;
 
@@ -847,6 +845,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: ArtifactHashPolicy<'_>,
+        output_hash: Option<HashAlgorithm>,
     ) -> Result<Archive, Error> {
         // Sometimes we can promote the size hint to a trusted effective size.
         let expected_size = match dist {
@@ -996,6 +995,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| hashes.can_reuse(archive, wheel_index_hashes(dist)))
+            .filter(|archive| archive.has_output_hash(output_hash))
             .filter(|archive| archive.exists(self.build_context.cache()))
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
@@ -1038,6 +1038,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         wheel_entry: &CacheEntry,
         dist: &BuiltDist,
         hashes: ArtifactHashPolicy<'_>,
+        output_hash: Option<HashAlgorithm>,
     ) -> Result<Archive, Error> {
         // Sometimes we can promote the size hint to a trusted effective size.
         let expected_size = match dist {
@@ -1125,6 +1126,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         // If the archive is missing the required hashes or size, or has since been removed, force a refresh.
         let archive = Some(archive)
             .filter(|archive| hashes.can_reuse(archive, wheel_index_hashes(dist)))
+            .filter(|archive| archive.has_output_hash(output_hash))
             .filter(|archive| archive.exists(self.build_context.cache()))
             .filter(|archive| expected_size.is_none() || archive.size.is_some());
 
@@ -1458,6 +1460,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         wheel_entry: CacheEntry,
         dist: &BuiltDist,
         hashes: ArchiveHashPolicy<'_>,
+        output_hash: Option<HashAlgorithm>,
     ) -> Result<LocalWheel, Error> {
         // Acquire an advisory lock, to guard against concurrent writes.
         let _lock = Self::lock_wheel(&wheel_entry, filename).await?;
@@ -1470,13 +1473,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         let pointer = PathArchivePointer::read_from(&pointer_entry)?;
 
         let index_hashes = wheel_index_hashes(dist);
+        let needs_hashes = !hashes.is_none() || !index_hashes.is_empty() || output_hash.is_some();
         let hash_policy = ArtifactHashPolicy::required(hashes);
 
         // Extract the archive from the pointer.
         let archive = pointer
             .filter(|pointer| pointer.is_up_to_date(modified))
             .map(PathArchivePointer::into_archive)
-            .filter(|archive| hash_policy.can_reuse(archive, index_hashes));
+            .filter(|archive| hash_policy.can_reuse(archive, index_hashes))
+            .filter(|archive| archive.has_output_hash(output_hash));
 
         // If the file is already unzipped, and the cache is up-to-date, return it.
         if let Some(archive) = archive {
@@ -1492,7 +1497,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
                 cache: CacheInfo::from_timestamp(modified),
                 build: None,
             })
-        } else if hashes.is_none() && index_hashes.is_empty() {
+        } else if !needs_hashes {
             // Otherwise, unzip the wheel.
             let archive = Archive::new(
                 self.unzip_wheel(path, wheel_entry.path(), DistRef::Built(dist))
@@ -1533,7 +1538,7 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             .map_err(Error::CacheWrite)?;
 
             let verifier = hash_policy.for_download(index_hashes);
-            let algorithms = verifier.algorithms([]);
+            let algorithms = verifier.algorithms(output_hash);
             let mut hashers = algorithms.into_iter().map(Hasher::from).collect::<Vec<_>>();
             let mut hasher = uv_extract::hash::HashReader::new(file, &mut hashers);
 
@@ -1682,6 +1687,25 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
     pub fn client(&self) -> &ManagedClient<'a> {
         &self.client
     }
+}
+
+/// Return the hash to compute if resolution needs the full wheel for its output.
+fn wheel_output_hash(
+    dist: &BuiltDist,
+    expected: &ArchiveHashPolicy<'_>,
+    output: HashOutput,
+) -> Option<HashAlgorithm> {
+    if !expected.is_none() || output == HashOutput::None {
+        return None;
+    }
+    let missing = match dist {
+        BuiltDist::Registry(dist) => {
+            output == HashOutput::All && dist.best_wheel().file.hashes.is_empty()
+        }
+        BuiltDist::DirectUrl(dist) => parse_url_hashes(&dist.url).is_none(),
+        BuiltDist::Path(_) | BuiltDist::GitPath(_) => true,
+    };
+    missing.then_some(HashAlgorithm::Sha256)
 }
 
 fn wheel_index_hashes(dist: &BuiltDist) -> &[HashDigest] {
