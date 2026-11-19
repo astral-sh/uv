@@ -50,8 +50,7 @@ jobs:
           set -e -o pipefail
           uv check --only-group check
 
-          export UV_PREVIEW_FEATURES=check-command,workspace-list-scripts
-          uv workspace list --scripts |
+          uv workspace list --scripts --preview-features workspace-list-scripts |
           while IFS= read -r script; do
             printf 'Checking %s\n' "$script" >&2
             uv check --script "$script" --locked
