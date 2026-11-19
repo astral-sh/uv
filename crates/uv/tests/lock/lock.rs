@@ -2610,6 +2610,110 @@ fn lock_wheel_path_relock_hash_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// An installed wheel can ship a different pyproject.toml than the sdist uv will build.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_requirements_come_from_sdist_not_cached_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist = context.temp_dir.child("dist");
+    let name = "demo-pkg".parse()?;
+    let version = "1.0.0".parse()?;
+    let (filename, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[(
+            "pyproject.toml",
+            indoc! {r#"
+                [build-system]
+                requires = ["only-in-the-wheel"]
+                build-backend = "only_in_the_wheel"
+            "#},
+        )])
+        .build();
+    dist.child(filename).write_binary(&wheel)?;
+    dist.child("demo_pkg-1.0.0.tar.gz")
+        .write_binary(&generate_source_archive(&name, &version, "", None)?)?;
+    let server = uv_test::find_links::FindLinksServer::new(dist.path());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["{}"]
+    "#, server.url()})?;
+
+    // Populate the wheel cache without fetching the sdist.
+    context.sync().assert().success();
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Resolving a build-only dependency can run its metadata hook even when nothing is installed.
+/// A build constraint must authenticate the sdist before that hook runs on the first lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_constraint_rejects_sdist_before_metadata_hook() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let sentinel = context.temp_dir.child("backend-executed");
+    let name = "demo-pkg".parse()?;
+    let version = "1.0.0".parse()?;
+    let trusted = generate_source_archive(&name, &version, "", None)?;
+    let replacement = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
+    let trusted_digest = hex::encode(Sha256::digest(trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest, "[REPLACEMENT_HASH]"));
+    context
+        .temp_dir
+        .child("dist/demo_pkg-1.0.0.tar.gz")
+        .write_binary(&replacement)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["demo-pkg==1.0.0"]
+        build-backend = "demo_pkg"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["dist"]
+        build-constraint-dependencies = [
+            {{ requirement = "demo-pkg==1.0.0", hashes = ["sha256:{trusted_digest}"] }},
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `demo-pkg==1.0.0`
+      cause: Hash mismatch for `demo-pkg==1.0.0`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+    ");
+    assert!(!sentinel.exists(), "the unverified backend was executed");
+    Ok(())
+}
+
 /// Unrelated project changes retain direct archive hashes until an explicit upgrade releases them.
 #[cfg(feature = "test-universal")]
 #[tokio::test]

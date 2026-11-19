@@ -299,29 +299,7 @@ impl<'a> BuildDispatch<'a> {
             self,
             self.concurrency.downloads_semaphore.clone(),
         );
-        let cached = if let SourceDist::Registry(dist) = source {
-            let cached = database.cached_registry_source(dist, hashes)?;
-            if cached.is_none() {
-                match database.wheel_pyproject(dist).await {
-                    Ok(Some(contents)) => {
-                        if let Ok(Some(system)) = SourceBuild::archive_build_system(&contents) {
-                            return Ok(system);
-                        }
-                    }
-                    Ok(None) => {}
-                    Err(err) => {
-                        debug!("Could not read build declaration from wheel for {source}: {err}");
-                    }
-                }
-            }
-            cached
-        } else {
-            None
-        };
-        let tree = match cached {
-            Some(tree) => tree,
-            None => database.source_tree(source, hashes).await?,
-        };
+        let tree = database.source_tree(source, hashes).await?;
         match source {
             SourceDist::Directory(_) | SourceDist::GitDirectory(_) => {}
             SourceDist::Registry(_)

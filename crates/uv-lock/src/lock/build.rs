@@ -163,17 +163,7 @@ impl Package {
         if matches!(self.id.source, Source::Virtual(_)) {
             return Ok(None);
         }
-        let mut source = self.to_source_dist(root, FirstParty::No)?;
-        if let Some(SourceDist::Registry(dist)) = &mut source
-            && let Source::Registry(index) = &self.id.source
-        {
-            dist.wheels = self
-                .wheels
-                .iter()
-                .map(|wheel| wheel.to_registry_wheel(index, root))
-                .collect::<Result<_, _>>()?;
-        }
-        Ok(source)
+        self.to_source_dist(root, FirstParty::No)
     }
 
     pub fn source_hash_policy(&self) -> ArchiveHashPolicy<'_> {

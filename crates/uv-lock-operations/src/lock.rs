@@ -1057,6 +1057,8 @@ async fn do_lock(
             .with_workspace_group_metadata(workspace_group_metadata);
 
             let lock = if lock_build_dependencies {
+                // Resolving a build dependency can execute its metadata hook before installation.
+                let hasher = hasher.with_constraint_hashes(&resolution_build_hasher)?;
                 let resolver = crate::build::BuildResolver {
                     root: target.install_path(),
                     client: &client,

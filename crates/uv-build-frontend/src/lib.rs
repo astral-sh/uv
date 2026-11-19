@@ -670,16 +670,7 @@ impl SourceBuild {
     /// Read a published project's build declaration independently of its runtime metadata.
     /// Some sdists provide valid PKG-INFO but have legacy or incomplete `[project]` tables.
     /// Fall back to source discovery for declarations that need workspace source mappings.
-    pub fn archive_build_system(
-        contents: &str,
-    ) -> Result<Option<(String, Vec<Requirement>)>, Error> {
-        Self::parse_archive_build_system(contents, None)
-    }
-
-    fn parse_archive_build_system(
-        contents: &str,
-        fallback: Option<&Pep517Backend>,
-    ) -> Result<Option<(String, Vec<Requirement>)>, Error> {
+    fn archive_build_system(contents: &str) -> Result<Option<(String, Vec<Requirement>)>, Error> {
         #[derive(Deserialize)]
         #[serde(rename_all = "kebab-case")]
         struct Declaration {
@@ -714,9 +705,10 @@ impl SourceBuild {
                     .unwrap_or_else(|| DEFAULT_BACKEND.backend.clone()),
                 system.requires.into_iter().map(Requirement::from).collect(),
             ))),
-            None => {
-                Ok(fallback.map(|backend| (backend.backend.clone(), backend.requirements.clone())))
-            }
+            None => Ok(Some((
+                DEFAULT_BACKEND.backend.clone(),
+                DEFAULT_BACKEND.requirements.clone(),
+            ))),
         }
     }
 
@@ -725,7 +717,7 @@ impl SourceBuild {
         tree: &Path,
     ) -> Result<Option<(String, Vec<Requirement>)>, Error> {
         match fs::tokio::read_to_string(tree.join("pyproject.toml")).await {
-            Ok(contents) => Self::parse_archive_build_system(&contents, Some(&DEFAULT_BACKEND)),
+            Ok(contents) => Self::archive_build_system(&contents),
             Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Some((
                 DEFAULT_BACKEND.backend.clone(),
                 DEFAULT_BACKEND.requirements.clone(),

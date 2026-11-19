@@ -26,9 +26,9 @@ use uv_client::{
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, CanonicalFileLocation, Dist, DistRef,
-    GitPathBuiltDist, HashCollection, HashValidation, Hashed, IndexLocations, IndexUrl,
-    InstalledDist, MetadataHashPolicy, Name, RegistrySourceDist, ResolutionRecorder, SourceDist,
-    SourceUrl, VariantsJsonContent, parse_url_hashes,
+    GitPathBuiltDist, HashCollection, HashValidation, IndexLocations, IndexUrl, InstalledDist,
+    MetadataHashPolicy, Name, RegistrySourceDist, ResolutionRecorder, SourceDist, SourceUrl,
+    VariantsJsonContent, parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -762,9 +762,8 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         })
     }
 
-    /// Check a previously extracted source before making any wheel metadata requests. A matching
-    /// locked digest identifies the revision even when its HTTP cache lifetime has expired.
-    pub fn cached_registry_source(
+    /// A matching locked digest identifies an extracted source revision even after HTTP expiry.
+    fn cached_registry_source(
         &self,
         dist: &RegistrySourceDist,
         hashes: ArchiveHashPolicy<'_>,
@@ -801,72 +800,17 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         Ok(path.is_dir().then_some(path))
     }
 
-    /// Prefer a cached wheel's embedded declaration, then range-read one wheel. Most wheels
-    /// have no such file; in that case the caller inspects the source distribution.
-    pub async fn wheel_pyproject(
-        &self,
-        dist: &RegistrySourceDist,
-    ) -> Result<Option<String>, Error> {
-        let cache = self.build_context.cache();
-        for wheel in &dist.wheels {
-            let request = RegistryArtifactRequest::new(
-                &wheel.index,
-                &wheel.file.location,
-                self.client.index_locations(),
-            )?;
-            let entry = cache.entry(
-                CacheBucket::Wheels,
-                WheelCache::Index(request.index).wheel_dir(wheel.filename.name.as_ref()),
-                format!("{}.http", wheel.filename.cache_key()),
-            );
-            if let Some(pointer) = HttpArchivePointer::read_from(entry)? {
-                let archive = pointer.into_archive();
-                if archive.exists(cache)
-                    && archive.satisfies(
-                        ArchiveHashPolicy::None.with_index_hashes(wheel.file.hashes.as_slice()),
-                    )
-                {
-                    let tree = cache.archive(&archive.id);
-                    let dist_info = format!(
-                        "{}-{}.dist-info",
-                        wheel.filename.name.as_dist_info_name(),
-                        wheel.filename.version
-                    );
-                    for path in [
-                        tree.join(dist_info).join("pyproject.toml"),
-                        tree.join("pyproject.toml"),
-                    ] {
-                        if path
-                            .metadata()
-                            .is_ok_and(|metadata| metadata.len() <= 1024 * 1024)
-                        {
-                            return Ok(Some(
-                                fs_err::tokio::read_to_string(path)
-                                    .await
-                                    .map_err(Error::CacheRead)?,
-                            ));
-                        }
-                    }
-                    // The cached wheel had no declaration. Don't ask the server for it again.
-                    return Ok(None);
-                }
-            }
-        }
-        let Some(wheel) = dist.wheels.first() else {
-            return Ok(None);
-        };
-        Ok(self
-            .client
-            .managed(|client| client.wheel_pyproject(wheel, self.build_context.capabilities()))
-            .await?)
-    }
-
     /// Materialize a source distribution for static inspection without invoking its build backend.
     pub async fn source_tree(
         &self,
         source: &SourceDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<PathBuf, Error> {
+        if let SourceDist::Registry(dist) = source
+            && let Some(tree) = self.cached_registry_source(dist, hashes)?
+        {
+            return Ok(tree);
+        }
         self.builder.materialize(source, hashes, &self.client).await
     }
 
