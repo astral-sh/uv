@@ -993,6 +993,8 @@ pub(crate) fn implied_markers(
 pub struct MissingPlatform {
     marker: MarkerTree,
     required_libc: Option<MinimumLibcVersion>,
+    /// Whether a tag for the single requested libc family covers the target, ignoring the baseline.
+    family_matches: bool,
     shared_minimum: Option<LibcVersion>,
 }
 
@@ -1008,6 +1010,7 @@ impl MissingPlatform {
         let mut missing = Self {
             marker,
             required_libc: None,
+            family_matches: false,
             shared_minimum: None,
         };
         let Some(required) = required else {
@@ -1020,7 +1023,6 @@ impl MissingPlatform {
         // Coverage markers approximate interpreter compatibility. Report a tag minimum only if
         // all wheels and architectures in the requested family agree on it.
         let mut minima = BTreeSet::new();
-        let mut family_matches = false;
         let mut all_supported = true;
         for wheel in wheels {
             let python = target.and(implied_python_markers(wheel));
@@ -1042,18 +1044,18 @@ impl MissingPlatform {
                     | (LibcTag::Musl(arch, version), None, Some(_)) => (arch, version),
                     (LibcTag::Glibc(..) | LibcTag::Musl(..), _, _) => continue,
                 };
-                family_matches |= covers;
+                missing.family_matches |= covers;
                 all_supported &= libc.is_supported();
                 // A wheel can advertise multiple tags for the same architecture.
                 let oldest = by_arch.entry(arch).or_insert(version);
                 *oldest = version.min(*oldest);
             }
             minima.extend(by_arch.into_values());
-            if missing.required_libc.is_some() && (!all_supported || minima.len() > 1) {
+            if missing.family_matches && (!all_supported || minima.len() > 1) {
                 return missing;
             }
         }
-        if family_matches {
+        if missing.family_matches {
             missing.shared_minimum = minima.pop_first();
         }
         missing
@@ -1061,7 +1063,10 @@ impl MissingPlatform {
 
     /// Combine releases missing coverage for the same environment and libc baselines.
     pub(crate) fn merge(&self, other: &Self) -> Option<Self> {
-        if self.marker != other.marker || self.required_libc != other.required_libc {
+        if self.marker != other.marker
+            || self.required_libc != other.required_libc
+            || self.family_matches != other.family_matches
+        {
             return None;
         }
         Some(Self {
@@ -1089,7 +1094,7 @@ impl Display for MissingPlatform {
             (Some(glibc), Some(musl)) => {
                 return write!(
                     f,
-                    " that satisfy `minimum-libc-version` for both glibc {glibc} and musl {musl}"
+                    " that together cover the `minimum-libc-version` baselines of glibc {glibc} and musl {musl}"
                 );
             }
             (None, None) => return Ok(()),

@@ -336,7 +336,7 @@ fn minimum_libc_switch_families() -> Result<()> {
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     error: No solution found when resolving dependencies for split (markers: python_full_version >= '3.12' and platform_machine == 'x86_64' and sys_platform == 'linux')
-      cause: Because demo>=2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for both glibc 2.31 and musl 1.2 and your project depends on demo>=2, we can conclude that your project's requirements are unsatisfiable.
+      cause: Because demo>=2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that together cover the `minimum-libc-version` baselines of glibc 2.31 and musl 1.2 and your project depends on demo>=2, we can conclude that your project's requirements are unsatisfiable.
     ");
 
     // Generic Linux wheels cover both baselines, but must still match the architecture.
@@ -643,7 +643,8 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
         )])
         .collect();
     for (version, tag) in [
-        ("1.0.0", "cp312-cp312-win_amd64"),
+        ("1.0.0", "cp312-cp312-musllinux_1_2_x86_64"),
+        ("1.5.0", "cp312-cp312-manylinux_2_34_x86_64"),
         (
             "2.0.0",
             "cp312-cp312-manylinux_2_36_x86_64.manylinux_2_34_x86_64",
@@ -672,18 +673,15 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
-      cause: Because demo==1.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only the following versions of demo are available:
+      cause: Because demo==1.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 and only the following versions of demo are available:
                  demo==1.0.0
-                 demo==2.0.0
-             we can conclude that all of:
-                 demo<2.0.0
-                 demo>2.0.0
-              cannot be used.
-             And because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 (the manylinux wheels are tagged for glibc 2.34 or newer) and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+                 demo>=1.5.0
+             we can conclude that demo<1.5.0 cannot be used.
+             And because demo>=1.5.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 (the manylinux wheels are tagged for glibc 2.34 or newer) and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
 
-    // Both releases now have manylinux wheels, but their oldest x86-64 tags differ.
+    // Version 1.0.0 now has a manylinux wheel with a higher glibc minimum on x86-64.
     wheel(
         &context,
         "demo",
@@ -902,6 +900,47 @@ fn minimum_libc_direct_url() -> Result<()> {
     error: No solution found when resolving dependencies
       cause: Because only demo==2.0.0 is available and demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for musl 1.2, we can conclude that all versions of demo cannot be used.
              And because your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// Raising the glibc baseline cannot make a direct wheel usable on an older Python version
+/// than its metadata allows.
+#[test]
+fn minimum_libc_direct_wheel_requires_newer_python() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"demo".parse()?, &"1.0.0".parse()?)
+        .tag("py3-none-manylinux_2_34_x86_64")
+        .requires_python(Some(&">=3.13".parse()?))
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = "==3.12.*"
+            dependencies = ["demo"]
+
+            [tool.uv]
+            preview-features = ["minimum-libc-version"]
+            required-environments = ["sys_platform == 'linux'"]
+            minimum-libc-version = {{ glibc = "2.17" }}
+
+            [tool.uv.sources]
+            demo = {{ path = "{filename}" }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because the requested Python version (==3.12.*) does not satisfy Python>=3.13 and demo==1.0.0 depends on Python>=3.13, we can conclude that demo==1.0.0 cannot be used.
+             And because only demo==1.0.0 is available and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The `requires-python` value (==3.12.*) includes Python versions that are not supported by your dependencies (e.g., demo==1.0.0 only supports >=3.13). Consider using a more restrictive `requires-python` value (like >=3.13).
     ");
     Ok(())
 }
