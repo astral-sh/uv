@@ -771,7 +771,7 @@ async fn do_lock(
     );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
-    let existing_lock = if let Some(existing_lock) = existing_lock {
+    let validation = if let Some(existing_lock) = &existing_lock {
         let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
         let database = DistributionDatabase::new(
             &client,
@@ -839,9 +839,10 @@ async fn do_lock(
         None
     };
 
-    match existing_lock {
+    match validation {
         // Resolution from the lockfile succeeded.
-        Some(ValidatedLock::Satisfies(lock)) => {
+        Some(ValidatedLock::Satisfies) => {
+            let lock = existing_lock.expect("validated a lockfile");
             // Print the success message after completing resolution.
             logger.on_complete(lock.len(), start, printer)?;
 
@@ -870,12 +871,9 @@ async fn do_lock(
             .with_first_party_packages(&first_party_packages);
 
             // Determine whether we can reuse the existing package versions.
-            let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
-                ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock, _) => Some(lock),
-                ValidatedLock::Versions(lock, _) => Some(lock),
-                ValidatedLock::Unusable(..) => None,
-            });
+            let versions_lock = existing_lock
+                .as_ref()
+                .filter(|_| validation.as_ref().is_some_and(ValidatedLock::is_usable));
 
             // If an existing lockfile exists, build up a set of preferences.
             let LockedRequirements { preferences, git } = versions_lock
@@ -890,11 +888,10 @@ async fn do_lock(
             }
 
             // Determine whether we can reuse the existing package forks.
-            let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
-                ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock, _) => Some(lock),
-                ValidatedLock::Versions(..) => None,
-                ValidatedLock::Unusable(..) => None,
+            let forks_lock = existing_lock.as_ref().filter(|_| {
+                validation
+                    .as_ref()
+                    .is_some_and(ValidatedLock::can_reuse_forks)
             });
 
             // When we run the same resolution from the lockfile again, we could get a different result the
@@ -998,10 +995,6 @@ async fn do_lock(
             )
             .relative_to(target.install_path())?;
 
-            let (previous, reason) = existing_lock.map_or((None, None), |lock| {
-                let (lock, reason) = lock.into_parts();
-                (Some(lock), reason)
-            });
             let lock = Lock::from_resolution(
                 &resolution,
                 manifest,
@@ -1036,6 +1029,10 @@ async fn do_lock(
                 lock
             };
 
+            let (previous, reason) = match validation {
+                Some(status) => (existing_lock, status.into_mismatch()),
+                None => (None, None),
+            };
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
                 previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
             } else {
