@@ -25,14 +25,14 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           profile: no-debug-nightly
@@ -42,7 +42,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-linux-libc-${{ github.sha }}
           path: |
@@ -59,14 +59,14 @@ jobs:
       # Use `rustc`'s bundled `lld` instead of the system linker.
       RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           profile: no-debug-nightly
@@ -76,7 +76,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-linux-aarch64-${{ github.sha }}
           path: |
@@ -91,7 +91,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -114,7 +114,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add armv7-unknown-linux-gnueabihf
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           profile: armv7-unknown-linux-gnueabihf/no-debug-nightly
@@ -126,7 +126,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target armv7-unknown-linux-gnueabihf --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-linux-armv7-gnueabihf-${{ github.sha }}
           path: |
@@ -143,7 +143,7 @@ jobs:
       # Use `rustc`'s bundled `lld` instead of the system linker.
       RUSTFLAGS: -Z unstable-options -C linker-features=+lld -C link-self-contained=+linker
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -157,7 +157,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add x86_64-unknown-linux-musl
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           profile: x86_64-unknown-linux-musl/no-debug-nightly
@@ -167,7 +167,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target x86_64-unknown-linux-musl --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-linux-musl-${{ github.sha }}
           path: |
@@ -182,15 +182,15 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: astral-sh/github-actions/demudhra@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/github-actions/demudhra@2026.11.16.0
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           profile: no-debug-nightly
@@ -200,7 +200,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-macos-aarch64-${{ github.sha }}
           path: |
@@ -215,8 +215,8 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: astral-sh/github-actions/demudhra@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/github-actions/demudhra@2026.11.16.0
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -225,7 +225,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add x86_64-apple-darwin
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           profile: x86_64-apple-darwin/no-debug-nightly
@@ -240,7 +240,7 @@ jobs:
           test "$(lipo -archs target/x86_64-apple-darwin/no-debug-nightly/uvx)" = x86_64
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-macos-x86_64-${{ github.sha }}
           path: |
@@ -255,7 +255,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -271,7 +271,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           workspace: ${{ env.UV_WORKSPACE }}
@@ -283,7 +283,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-windows-x86_64-${{ github.sha }}
           path: |
@@ -298,7 +298,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -314,7 +314,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           workspace: ${{ env.UV_WORKSPACE }}
@@ -326,7 +326,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-windows-aarch64-${{ github.sha }}
           path: |
@@ -339,7 +339,7 @@ jobs:
     runs-on: github-ubuntu-24.04-x86_64-8
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: "Read MSRV from Cargo.toml"
@@ -351,7 +351,7 @@ jobs:
         run: rustup default ${MSRV}
         env:
           MSRV: ${{ steps.msrv.outputs.value }}
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - run: cargo +${MSRV} build --locked --profile no-debug
@@ -366,7 +366,7 @@ jobs:
     env:
       RUSTC_BOOTSTRAP: 1
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -398,7 +398,7 @@ jobs:
           rustup toolchain install --profile minimal
           rustup target add aarch64-linux-android
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           profile: aarch64-linux-android/no-debug-nightly
@@ -408,7 +408,7 @@ jobs:
         run: cargo build --locked --profile no-debug-nightly -Z checksum-freshness --target aarch64-linux-android --bin uv --bin uvx
 
       - name: "Upload binary"
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: uv-android-aarch64-${{ github.sha }}
           path: |
@@ -421,10 +421,10 @@ jobs:
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Cross build"
@@ -439,7 +439,7 @@ jobs:
           cross build --target x86_64-unknown-freebsd --profile no-debug
 
       - name: Test in Firecracker VM
-        uses: acj/freebsd-firecracker-action@ba4f70408ef1d979acdd7bd36fc4b27e06fe5abe # v0.12.0
+        uses: acj/freebsd-firecracker-action@v0.12.0
         with:
           verbose: false
           checkout: false

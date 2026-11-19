@@ -26,7 +26,7 @@ jobs:
       contents: read
       id-token: write # for the credential broker
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -35,13 +35,13 @@ jobs:
         with:
           enable-cache: true
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           save-if: false
 
       - name: "Get uv token"
         id: token
-        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/simple-token-service@2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -75,7 +75,7 @@ jobs:
           } > "$RUNNER_TEMP/editorialize-changelog-prompt.md"
 
       - name: "Rewrite changelog"
-        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
+        uses: openai/codex-action@v1.14
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.169.0"
@@ -88,7 +88,7 @@ jobs:
 
       - name: "Upload Codex thread"
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: codex-thread-release-prepare-${{ github.run_id }}-${{ github.run_attempt }}
           path: ~/.codex/sessions

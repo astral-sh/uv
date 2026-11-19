@@ -23,13 +23,13 @@ jobs:
       contents: read
       id-token: write # for the credential broker
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: true
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           save-if: false
       - name: Sync Python Releases
@@ -49,7 +49,7 @@ jobs:
 
       - name: "Get uv token"
         id: token
-        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/simple-token-service@2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -59,7 +59,7 @@ jobs:
             pull_requests: write
 
       - name: "Create Pull Request"
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: peter-evans/create-pull-request@v8.1.1
         with:
           token: ${{ steps.token.outputs.token }}
           commit-message: "Sync latest Python releases"
