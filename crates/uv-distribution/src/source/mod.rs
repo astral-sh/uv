@@ -229,7 +229,7 @@ pub(crate) const HASHES: &str = "hashes.msgpack";
 const METADATA: &str = "metadata.msgpack";
 
 /// The directory within each entry under which to store the unpacked source distribution.
-pub(crate) const SOURCE: &str = "src";
+const SOURCE: &str = "src";
 
 impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     /// Initialize a [`SourceDistributionBuilder`] from a [`BuildContext`].

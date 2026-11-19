@@ -27,8 +27,8 @@ use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
     ArchiveHashPolicy, BuildInfo, BuildableSource, BuiltDist, CanonicalFileLocation, Dist, DistRef,
     GitPathBuiltDist, HashCollection, HashValidation, IndexLocations, IndexUrl, InstalledDist,
-    MetadataHashPolicy, Name, RegistrySourceDist, ResolutionRecorder, SourceDist, SourceUrl,
-    VariantsJsonContent, parse_url_hashes,
+    MetadataHashPolicy, Name, ResolutionRecorder, SourceDist, SourceUrl, VariantsJsonContent,
+    parse_url_hashes,
 };
 use uv_extract::dirhash::{DirectoryDigest, HashedFile};
 use uv_extract::hash::Hasher;
@@ -762,55 +762,12 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
         })
     }
 
-    /// A matching locked digest identifies an extracted source revision even after HTTP expiry.
-    fn cached_registry_source(
-        &self,
-        dist: &RegistrySourceDist,
-        hashes: ArchiveHashPolicy<'_>,
-    ) -> Result<Option<PathBuf>, Error> {
-        let cache = self.build_context.cache();
-        if !hashes.requires_validation() || cache.must_revalidate_package(&dist.name) {
-            return Ok(None);
-        }
-        let request = RegistryArtifactRequest::new(
-            &dist.index,
-            &dist.file.location,
-            self.client.index_locations(),
-        )?;
-        let shard = cache.shard(
-            CacheBucket::SourceDistributions,
-            WheelCache::Index(request.index)
-                .wheel_dir(dist.name.as_ref())
-                .join(dist.version.to_string()),
-        );
-        let Some(pointer) = crate::source::HttpRevisionPointer::read_from(
-            shard.entry(crate::source::HTTP_REVISION),
-        )?
-        else {
-            return Ok(None);
-        };
-        let revision = pointer.into_revision();
-        if !hashes.matches(revision.hashes()) {
-            return Ok(None);
-        }
-        let path = shard
-            .shard(revision.id())
-            .entry(crate::source::SOURCE)
-            .into_path_buf();
-        Ok(path.is_dir().then_some(path))
-    }
-
     /// Materialize a source distribution for static inspection without invoking its build backend.
     pub async fn source_tree(
         &self,
         source: &SourceDist,
         hashes: ArchiveHashPolicy<'_>,
     ) -> Result<PathBuf, Error> {
-        if let SourceDist::Registry(dist) = source
-            && let Some(tree) = self.cached_registry_source(dist, hashes)?
-        {
-            return Ok(tree);
-        }
         self.builder.materialize(source, hashes, &self.client).await
     }
 

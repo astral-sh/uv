@@ -9,7 +9,7 @@ use uv_configuration::{
 };
 use uv_dispatch::{BuildDispatch, PlatformState};
 use uv_distribution::LoweredExtraBuildDependencies;
-use uv_distribution_types::{Dist, Name, Resolution, ResolvedDist, SourceDist};
+use uv_distribution_types::{Dist, Resolution, ResolvedDist, SourceDist};
 use uv_install_operations::editable::apply_editable_mode;
 use uv_install_operations::loggers::InstallLogger;
 use uv_install_operations::{BytecodeCompilation, Changelog, InstallationPlan};
@@ -220,14 +220,9 @@ pub async fn sync_from_lock(
     let resolution = apply_editable_mode(resolution, editable);
 
     // Constrain any build requirements marked as `match-runtime = true`.
-    let extra_build_requires = if target.lock().locks_build_dependencies() {
-        extra_build_requires.match_runtime_for(&resolution, |name| {
-            target.lock().contains_build_package(name)
-                || resolution.distributions().any(|dist| dist.name() == name)
-        })?
-    } else {
-        extra_build_requires.match_runtime(&resolution)?
-    };
+    let extra_build_requires = extra_build_requires.match_runtime_for(&resolution, |name| {
+        target.lock().contains_build_package(name)
+    })?;
 
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;

@@ -12,7 +12,9 @@ use uv_distribution_types::{
 use uv_redacted::SafeUrl;
 use uv_types::BuildContext;
 
-use super::{SOURCE, SourceDistributionBuilder, fetch_git_source_tree};
+use super::{
+    HTTP_REVISION, HttpRevisionPointer, SOURCE, SourceDistributionBuilder, fetch_git_source_tree,
+};
 use crate::distribution_database::{ManagedClient, RegistryArtifactRequest};
 use crate::error::Error;
 use crate::hash::ArtifactHashPolicy;
@@ -49,6 +51,12 @@ impl<T: BuildContext> SourceDistributionBuilder<'_, T> {
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
+                if hashes.requires_validation()
+                    && !cache.must_revalidate_package(&dist.name)
+                    && let Some(path) = Self::cached_registry_source(&shard, hashes)?
+                {
+                    return Ok(path);
+                }
                 if request.url.scheme() == "file" {
                     let path = request
                         .url
@@ -143,6 +151,22 @@ impl<T: BuildContext> SourceDistributionBuilder<'_, T> {
                 Ok(shard.entry(SOURCE).into_path_buf())
             }
         }
+    }
+
+    /// A matching locked digest identifies an extracted source revision even after HTTP expiry.
+    fn cached_registry_source(
+        shard: &CacheShard,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<Option<PathBuf>, Error> {
+        let Some(pointer) = HttpRevisionPointer::read_from(shard.entry(HTTP_REVISION))? else {
+            return Ok(None);
+        };
+        let revision = pointer.into_revision();
+        if !hashes.matches(revision.hashes()) {
+            return Ok(None);
+        }
+        let path = shard.shard(revision.id()).entry(SOURCE).into_path_buf();
+        Ok(path.is_dir().then_some(path))
     }
 
     async fn materialize_archive(

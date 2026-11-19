@@ -785,13 +785,11 @@ async fn do_lock(
         preview,
     );
 
-    let lock_build_dependencies = preview.is_enabled(PreviewFeature::LockBuildDependencies)
-        || existing_lock
-            .as_ref()
-            .is_some_and(Lock::locks_build_dependencies);
     let enforced_lock = existing_lock
         .as_ref()
         .filter(|lock| lock.locks_build_dependencies());
+    let lock_build_dependencies =
+        preview.is_enabled(PreviewFeature::LockBuildDependencies) || enforced_lock.is_some();
     let build_dispatch = match (&mode, enforced_lock) {
         (LockMode::Locked(..), Some(lock)) => {
             build_dispatch.with_build_lock(lock, target.install_path())
@@ -801,12 +799,9 @@ async fn do_lock(
 
     // If any of the resolution-determining settings changed, invalidate the lock.
     let validation = if let Some(existing_lock) = &existing_lock {
-        let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
-        let validation_build_dispatch = if let Some(lock) = enforced_lock {
-            validation_build_dispatch.with_build_lock(lock, target.install_path())
-        } else {
-            validation_build_dispatch
-        };
+        let validation_build_dispatch = build_dispatch
+            .fork(&locked_build_hasher)
+            .with_build_lock(existing_lock, target.install_path());
         let database = DistributionDatabase::new(
             &client,
             &validation_build_dispatch,

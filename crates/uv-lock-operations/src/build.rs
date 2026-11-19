@@ -301,11 +301,13 @@ impl BuildResolver<'_> {
         upgrade: &Upgrade,
     ) -> Result<Lock, LockError> {
         let upgrading = previous.map(|lock| (lock, lock.upgrade_packages(upgrade)));
-        if let Some((previous, upgraded)) = &upgrading {
-            lock.retain_build_hashes(previous, upgraded);
-        }
-        lock.complete_registry_hashes(self.client, self.root, self.concurrency.downloads)
-            .await?;
+        lock.complete_registry_hashes(
+            self.client,
+            self.root,
+            self.concurrency.downloads,
+            upgrading.as_ref(),
+        )
+        .await?;
         let mut preferences =
             read_lock_requirements(&lock, self.root, &Upgrade::default())?.preferences;
         if prefer_previous_versions && let Some((previous, upgraded)) = &upgrading {
@@ -426,11 +428,13 @@ impl BuildResolver<'_> {
                     self.index_locations,
                     false,
                 )?;
-                if let Some((previous, upgraded)) = &upgrading {
-                    build.retain_build_hashes(previous, upgraded);
-                }
                 build
-                    .complete_registry_hashes(self.client, self.root, self.concurrency.downloads)
+                    .complete_registry_hashes(
+                        self.client,
+                        self.root,
+                        self.concurrency.downloads,
+                        upgrading.as_ref(),
+                    )
                     .await?;
                 queue.extend(&build, &resolution, self.root)?;
                 resolved.push((

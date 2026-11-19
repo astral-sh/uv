@@ -196,6 +196,20 @@ impl Package {
     }
 }
 
+impl ResolverManifest {
+    fn root_names(&self) -> FxHashSet<&PackageName> {
+        self.members
+            .iter()
+            .chain(
+                self.requirements
+                    .iter()
+                    .chain(self.dependency_groups.values().flatten())
+                    .map(|req| &req.name),
+            )
+            .collect()
+    }
+}
+
 impl BuildGraph {
     pub(super) fn packages(&self) -> impl Iterator<Item = &Package> {
         self.packages.values().flatten()
@@ -219,6 +233,7 @@ impl BuildGraph {
         let mut queue = VecDeque::new();
         let mut candidates = FxHashMap::default();
         let mut scopes: FxHashMap<&PackageId, BTreeSet<&str>> = FxHashMap::default();
+        let manifest_names = manifest.root_names();
         for package in &packages {
             let assigned = scopes.entry(&package.id).or_default();
             if package.universes().is_empty() {
@@ -242,14 +257,7 @@ impl BuildGraph {
                 continue;
             }
             candidates.insert(&package.id, package);
-            if package.id.source.is_implicit_root()
-                || manifest.members.contains(package.name())
-                || manifest
-                    .requirements
-                    .iter()
-                    .chain(manifest.dependency_groups.values().flatten())
-                    .any(|req| req.name == *package.name())
-            {
+            if package.id.source.is_implicit_root() || manifest_names.contains(package.name()) {
                 queue.push_back(&package.id);
             }
         }
@@ -375,7 +383,7 @@ impl Lock {
 
     /// Retain the trusted digest for a known filename. Even a newly advertised index hash must
     /// not authorize a replacement on an unrelated lock update.
-    pub fn retain_build_hashes(&mut self, previous: &Self, upgraded: &FxHashSet<PackageName>) {
+    fn retain_build_hashes(&mut self, previous: &Self, upgraded: &FxHashSet<PackageName>) {
         for package in &mut self.packages {
             if upgraded.contains(package.name())
                 || !matches!(package.id.source, Source::Registry(_))
@@ -407,14 +415,18 @@ impl Lock {
         }
     }
 
-    /// Fill in missing registry hashes before a build graph is authorized for installation.
+    /// Keep previously trusted hashes, then fill in missing registry hashes before installation.
     /// In particular, a local `--find-links` directory does not advertise artifact hashes.
     pub async fn complete_registry_hashes(
         &mut self,
         client: &RegistryClient,
         root: &Path,
         concurrency: usize,
+        previous: Option<&(&Self, FxHashSet<PackageName>)>,
     ) -> Result<(), LockError> {
+        if let Some((previous, upgraded)) = previous {
+            self.retain_build_hashes(previous, upgraded);
+        }
         let mut jobs = Vec::new();
         for package in &mut self.packages {
             let Source::Registry(registry) = &package.id.source else {
@@ -510,18 +522,7 @@ impl Lock {
             let package = &variants[0].0;
             names.entry(package.name()).or_default().push(package);
         }
-        let manifest_names: BTreeSet<_> = self
-            .manifest
-            .members
-            .iter()
-            .chain(
-                self.manifest
-                    .requirements
-                    .iter()
-                    .chain(self.manifest.dependency_groups.values().flatten())
-                    .map(|req| &req.name),
-            )
-            .collect();
+        let manifest_names = self.manifest.root_names();
         let needs_scope = |id: &PackageId| {
             nodes[id].len() > 1
                 || (!self.by_id.contains_key(id) && manifest_names.contains(&id.name))
@@ -542,7 +543,7 @@ impl Lock {
                     let Some(candidates) = names.get(&req.name) else {
                         continue;
                     };
-                    let mut matching = Vec::new();
+                    let mut matching = 0usize;
                     for candidate in candidates {
                         if candidate
                             .id
@@ -550,10 +551,10 @@ impl Lock {
                             .satisfies_requirement_source(&req.source, root)?
                             && Self::package_satisfies_requirement(candidate, req, root)?
                         {
-                            matching.push(candidate);
+                            matching += 1;
                         }
                     }
-                    if matching.len() < 2 {
+                    if matching < 2 {
                         continue;
                     }
                     for package in universe.lock.packages_for_name(&req.name) {
