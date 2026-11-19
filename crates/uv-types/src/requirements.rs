@@ -87,6 +87,11 @@ impl RequestedRequirements {
         &self.requirements
     }
 
+    /// Return the requirements as a mutable slice.
+    pub fn requirements_mut(&mut self) -> &mut [Requirement] {
+        &mut self.requirements
+    }
+
     /// Return whether the dependencies were direct or transitive.
     pub fn direct(&self) -> bool {
         self.direct

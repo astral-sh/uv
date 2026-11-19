@@ -92,7 +92,7 @@ To opt-out of this behavior, use the `--no-editable` option.
 ### Handling of extraneous packages
 
 `uv sync` performs "exact" syncing by default, which means it will remove any packages that are not
-present in the lockfile.
+selected for installation.
 
 To retain extraneous packages, use the `--inexact` flag:
 
@@ -140,7 +140,7 @@ dependencies.
 
 Additional groups can be included or excluded with the `--all-groups`, `--no-default-groups`,
 `--group <name>`, `--only-group <name>`, and `--no-group <name>` options. The semantics of
-`--only-group` are the same as `--only-dev`, the project will not be included. However,
+`--only-group` are the same as `--only-dev`: the project will not be included. However,
 `--only-group` will also exclude default groups.
 
 Group exclusions always take precedence over inclusions, so given the command:

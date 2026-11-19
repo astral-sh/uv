@@ -29,7 +29,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)
@@ -41,7 +41,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -74,7 +74,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--locked"), @"
@@ -90,13 +90,13 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--upgrade"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -105,7 +105,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -138,7 +138,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--upgrade"), @"
@@ -151,7 +151,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -184,7 +184,7 @@ fn lock_exclude_newer_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--refresh"), @"
@@ -223,7 +223,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks"), @"
     exit_code: 0 (success)
@@ -242,12 +242,12 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3W`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P2W` to `P3W`
     Resolved 2 packages in [TIME]
     Updated idna v3.7 -> v3.6
     ");
@@ -263,12 +263,12 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P3W` to `P2W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -282,7 +282,7 @@ fn lock_exclude_newer_older_vs_newer() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--upgrade"), @"
@@ -325,7 +325,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks"), @"
     exit_code: 0 (success)
@@ -337,7 +337,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -371,7 +371,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks")
         .arg("--locked"), @"
@@ -385,13 +385,13 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=2 weeks")
         .arg("--upgrade"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W` for package `idna`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P3W` to `P2W` for package `idna`
     Resolved 2 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -400,7 +400,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -434,7 +434,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=2 weeks")
         .arg("--upgrade"), @"
@@ -447,7 +447,7 @@ fn lock_exclude_newer_package_relative() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -506,7 +506,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -516,7 +516,7 @@ fn lock_exclude_newer_relative_pyproject() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -574,7 +574,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -584,7 +584,7 @@ fn lock_exclude_newer_package_relative_pyproject() -> Result<()> {
     // Should resolve to idna 3.6 (released 2023-11-25, before cutoff of 2024-04-10)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -649,7 +649,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
@@ -664,7 +664,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     // typing-extensions 4.11.0 (per-package cutoff 2024-04-17 is after 4.11.0 release on 2024-04-05)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -713,7 +713,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
@@ -729,7 +729,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
@@ -737,7 +737,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
         .arg("--upgrade"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P3W` to `P2W`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P3W` to `P2W`
     Resolved 3 packages in [TIME]
     Updated idna v3.6 -> v3.7
     ");
@@ -746,14 +746,14 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2 weeks")
         .arg("--exclude-newer-package")
         .arg("typing-extensions=3 days"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P2W` to `P3D` for package `typing-extensions`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P2W` to `P3D` for package `typing-extensions`
     Resolved 3 packages in [TIME]
     ");
 
@@ -761,14 +761,14 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("2024-05-20T00:00:00Z")
         .arg("--exclude-newer-package")
         .arg("typing-extensions=2 weeks"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of exclude newer span
+    Resolving despite existing lockfile: Exclude-newer span removed
     Resolved 3 packages in [TIME]
     ");
 
@@ -777,7 +777,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     // typing-extensions 4.11.0 (relative cutoff 2024-04-17)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -824,14 +824,14 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer")
         .arg("3 weeks")
         .arg("--exclude-newer-package")
         .arg("typing-extensions=2024-04-01T00:00:00Z"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of exclude newer span `P3W`
+    Resolving despite existing lockfile: Exclude-newer span set: P3W
     Resolved 3 packages in [TIME]
     Updated idna v3.7 -> v3.6
     Updated typing-extensions v4.11.0 -> v4.10.0
@@ -842,7 +842,7 @@ fn lock_exclude_newer_relative_global_and_package() -> Result<()> {
     // typing-extensions 4.10.0 (absolute cutoff 2024-04-01 is before 4.11.0 release on 2024-04-05)
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -921,7 +921,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .arg("30days"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P30D`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P1D` to `P30D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -932,7 +932,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .arg("P1D"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P30D` to `P1D`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P30D` to `P1D`
     Resolved 2 packages in [TIME]
     ");
 
@@ -943,7 +943,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .arg("1 week"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P1D` to `P1W`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P1D` to `P1W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -954,7 +954,7 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .arg("1 week ago"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer span from `P1W` to `-P1W`
+    Resolving despite existing lockfile: Exclude-newer span changed from `P1W` to `-P1W`
     Resolved 2 packages in [TIME]
     ");
 
@@ -1034,10 +1034,10 @@ fn lock_exclude_newer_relative_values() -> Result<()> {
         .arg("2006-12-02T02:07:43Z"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of exclude newer span
-      × No solution found when resolving dependencies:
-      ╰─▶ Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
-          And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
+    Resolving despite existing lockfile: Exclude-newer span removed
+    error: No solution found when resolving dependencies
+      cause: Because there are no versions of iniconfig and iniconfig==2.0.0 was published after the exclude newer time, we can conclude that all versions of iniconfig cannot be used.
+             And because your project depends on iniconfig, we can conclude that your project's requirements are unsatisfiable.
 
     hint: `iniconfig` was filtered by `exclude-newer` to only include packages uploaded before 2006-12-02T02:07:43Z. The latest version satisfying the requirement is v2.0.0, published at 2023-01-07T11:08:09.864Z. Consider using `exclude-newer-package` to override the cutoff for this package.
     ");
@@ -1110,7 +1110,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1119,7 +1119,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -1157,7 +1157,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1167,7 +1167,7 @@ fn lock_exclude_newer_relative_no_timestamp_in_lockfile() -> Result<()> {
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -1218,7 +1218,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 2 packages in [TIME]
@@ -1227,7 +1227,7 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     let lock = context.read("uv.lock");
     assert_snapshot!(lock, @r#"
     version = 1
-    revision = 3
+    revision = 5
     requires-python = ">=3.12"
 
     [options]
@@ -1268,15 +1268,15 @@ fn lock_exclude_newer_package_relative_no_timestamp_in_lockfile() -> Result<()> 
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp), @"
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`
-      Caused by: TOML parse error at line 5, column 1
-          |
-        5 | [options]
-          | ^^^^^^^^^
-        data did not match any variant of untagged enum Helper
+      cause: TOML parse error at line 5, column 1
+               |
+             5 | [options]
+               | ^^^^^^^^^
+             missing field `timestamp`
     ");
 
     Ok(())
@@ -1418,7 +1418,7 @@ fn lock_exclude_newer_package_relative_noop_timestamp() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, current_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, current_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks"), @"
     exit_code: 0 (success)
@@ -1440,7 +1440,7 @@ fn lock_exclude_newer_package_relative_noop_timestamp() -> Result<()> {
     uv_snapshot!(context.filters(), context
         .lock()
         .env_remove(EnvVars::UV_EXCLUDE_NEWER)
-        .env(EnvVars::UV_TEST_CURRENT_TIMESTAMP, later_timestamp)
+        .env(EnvVars::UV_INTERNAL__TEST_CURRENT_TIMESTAMP, later_timestamp)
         .arg("--exclude-newer-package")
         .arg("idna=3 weeks"), @"
     exit_code: 0 (success)

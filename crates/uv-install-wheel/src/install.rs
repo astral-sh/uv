@@ -98,7 +98,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     let mut record = read_record(&mut record_file)?;
 
     let (console_scripts, gui_scripts) =
-        parse_scripts(wheel, &dist_info_prefix, None, layout.python_version.1)?;
+        parse_scripts(wheel, &dist_info_prefix, layout.python_version.1)?;
 
     if console_scripts.is_empty() && gui_scripts.is_empty() {
         trace!(?name, "No entrypoints");

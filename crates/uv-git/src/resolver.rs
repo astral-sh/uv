@@ -8,7 +8,7 @@ use papaya::{HashMap, ResizeMode};
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::debug;
 
-use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_cache_key::{GitUpstreamUrl, cache_digest};
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode};
 use uv_git_types::{GitHubRepository, GitOid, GitReference, GitUrl};
 use uv_static::EnvVars;
@@ -33,6 +33,30 @@ pub enum GitResolverError {
     Reqwest(#[from] reqwest::Error),
     #[error(transparent)]
     ReqwestMiddleware(#[from] reqwest_middleware::Error),
+}
+
+impl GitResolverError {
+    /// Return whether this is an expected user-facing failure.
+    pub fn is_user_failure(&self) -> bool {
+        match self {
+            Self::Git(error) => {
+                for cause in error.chain() {
+                    if let Some(error) = cause.downcast_ref::<reqwest::Error>() {
+                        return error.status() == Some(reqwest::StatusCode::NOT_FOUND);
+                    }
+                    if cause.is::<std::io::Error>() {
+                        return false;
+                    }
+                }
+                true
+            }
+            Self::Reqwest(error) => error.status() == Some(reqwest::StatusCode::NOT_FOUND),
+            Self::ReqwestMiddleware(error) => {
+                error.status() == Some(reqwest::StatusCode::NOT_FOUND)
+            }
+            Self::Io(_) | Self::LockedFile(_) | Self::Join(_) => false,
+        }
+    }
 }
 
 /// HTTP settings for fetching a Git repository.
@@ -116,7 +140,8 @@ impl GitResolver {
         }
 
         // If the URL is a GitHub URL, attempt to resolve it via the GitHub API.
-        let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(url.repository())
+        let Some(GitHubRepository { owner, repo }) =
+            GitHubRepository::parse(url.repository().as_url())
         else {
             return Ok(None);
         };
@@ -128,11 +153,14 @@ impl GitResolver {
         }
 
         // Determine the Git reference.
-        let rev = url.reference().as_rev();
+        let reference = url
+            .reference()
+            .as_url_rev()
+            .unwrap_or_else(|| "HEAD".into());
 
         let github_api_base_url = std::env::var(EnvVars::UV_GITHUB_FAST_PATH_URL)
             .unwrap_or("https://api.github.com/repos".to_owned());
-        let github_api_url = format!("{github_api_base_url}/{owner}/{repo}/commits/{rev}");
+        let github_api_url = format!("{github_api_base_url}/{owner}/{repo}/commits/{reference}");
 
         debug!("Querying GitHub for commit at: {github_api_url}");
         let mut request = client.get(&github_api_url);
@@ -164,10 +192,14 @@ impl GitResolver {
         let precise = response.text().await?;
         let precise =
             GitOid::from_str(&precise).map_err(|err| GitResolverError::Git(err.into()))?;
+        let url = url
+            .clone()
+            .with_precise(precise)
+            .map_err(|error| GitResolverError::Git(error.into()))?;
 
         // Insert the resolved URL into the in-memory cache. This ensures that subsequent fetches
         // resolve to the same precise commit.
-        self.insert(RepositoryReference::from(url), precise);
+        self.insert(RepositoryReference::from(&url), precise);
 
         Ok(Some(precise))
     }
@@ -188,7 +220,11 @@ impl GitResolver {
         // single process are consistent.
         let url = {
             if let Some(precise) = self.get(&reference) {
-                Cow::Owned(url.clone().with_precise(precise))
+                Cow::Owned(
+                    url.clone()
+                        .with_precise(precise)
+                        .map_err(|error| GitResolverError::Git(error.into()))?,
+                )
             } else {
                 Cow::Borrowed(url)
             }
@@ -242,13 +278,11 @@ impl GitResolver {
     /// layer. For example: removing `#subdirectory=pkg_dir`-like fragments, and removing `git+`
     /// prefix kinds.
     ///
-    /// This method will only return precise URLs for URLs that have already been resolved via
-    /// [`resolve_precise`], and will return `None` for URLs that have not been resolved _or_
-    /// already have a precise reference.
+    /// Returns a URL if its commit is already known or has been resolved by this resolver.
+    /// Returns `None` for unresolved named or ambiguous references.
     pub fn precise(&self, url: GitUrl) -> Option<GitUrl> {
-        let reference = RepositoryReference::from(&url);
-        let precise = self.get(&reference)?;
-        Some(url.with_precise(precise))
+        let precise = self.get_precise(&url)?;
+        url.with_precise(precise).ok()
     }
 
     /// Returns `true` if the two Git URLs refer to the same precise commit.
@@ -293,8 +327,8 @@ pub struct ResolvedRepositoryReference {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RepositoryReference {
-    /// The URL of the Git repository, with any query parameters and fragments removed.
-    pub url: RepositoryUrl,
+    /// The normalized Git repository URL used as the repository's identity.
+    pub url: GitUpstreamUrl,
     /// The reference to the commit to use, which could be a branch, tag, or revision.
     pub reference: GitReference,
 }

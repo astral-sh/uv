@@ -9,16 +9,19 @@ use memchr::memmem::Finder;
 use serde::Deserialize;
 use thiserror::Error;
 use tracing::instrument;
-use url::Url;
 
 use uv_configuration::NoSources;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 use uv_settings::{GlobalOptions, ResolverInstallerSchema};
 use uv_warnings::warn_user;
-use uv_workspace::pyproject::{ExtraBuildDependency, Sources};
+use uv_workspace::pyproject::{BuildConstraintDependency, ExtraBuildDependency, Sources};
+
+mod discovery;
+
+pub use discovery::{ScriptDiscoveryError, find_scripts};
 
 pub use uv_configuration::ExcludeDependency;
 pub use uv_workspace::pyproject::OverrideDependency;
@@ -33,7 +36,7 @@ pub enum Pep723Item {
     /// A PEP 723 script provided via `stdin`.
     Stdin(Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(Pep723Metadata, DisplaySafeUrl),
+    Remote(Pep723Metadata, SafeUrl),
 }
 
 impl Pep723Item {
@@ -63,7 +66,7 @@ pub enum Pep723ItemRef<'item> {
     /// A PEP 723 script provided via `stdin`.
     Stdin(&'item Pep723Metadata),
     /// A PEP 723 script provided via a remote URL.
-    Remote(&'item Pep723Metadata, &'item Url),
+    Remote(&'item Pep723Metadata, &'item SafeUrl),
 }
 
 impl Pep723ItemRef<'_> {
@@ -356,7 +359,8 @@ impl Pep723Script {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub struct Pep723Metadata {
-    pub dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    #[serde(default)]
+    pub dependencies: Vec<uv_pep508::Requirement<VerbatimParsedUrl>>,
     pub requires_python: Option<VersionSpecifiers>,
     pub tool: Option<Tool>,
     /// The raw unserialized document.
@@ -428,7 +432,7 @@ pub struct ToolUv {
     pub override_dependencies: Option<Vec<OverrideDependency>>,
     pub exclude_dependencies: Option<Vec<ExcludeDependency>>,
     pub constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
-    pub build_constraint_dependencies: Option<Vec<uv_pep508::Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     pub extra_build_dependencies: Option<BTreeMap<PackageName, Vec<ExtraBuildDependency>>>,
     pub sources: Option<BTreeMap<PackageName, Sources>>,
 }
@@ -439,6 +443,10 @@ pub enum Pep723Error {
         "An opening tag (`# /// script`) was found without a closing tag (`# ///`). Ensure that every line between the opening and closing tags (including empty lines) starts with a leading `#`."
     )]
     UnclosedBlock,
+    #[error(
+        "An opening tag (`# /// script`) was found, but the closing tag (`# ///`) has trailing content. Remove the trailing content so the line is exactly `# ///`."
+    )]
+    UnclosedBlockTrailingContent,
     #[error("The script contains multiple PEP 723 metadata blocks")]
     DuplicateBlock,
     #[error("The PEP 723 metadata block is missing from the script.")]
@@ -556,11 +564,29 @@ impl ScriptTag {
         // # ///
         // ```
         //
-        // The latter `///` is the closing pragma
-        let Some(index) = toml.iter().rev().position(|line| *line == "///") else {
-            return Err(Pep723Error::UnclosedBlock);
+        // The latter `///` is the closing pragma. Track malformed terminators while searching, but
+        // continue looking for an exact terminator so trailing comments cannot invalidate it.
+        let mut has_trailing_content = false;
+        let mut closing_index = None;
+
+        for (index, line) in toml.iter().enumerate().rev() {
+            if *line == "///" {
+                closing_index = Some(index + 1);
+                break;
+            }
+
+            if line.starts_with("///") {
+                has_trailing_content = true;
+            }
+        }
+
+        let Some(index) = closing_index else {
+            return Err(if has_trailing_content {
+                Pep723Error::UnclosedBlockTrailingContent
+            } else {
+                Pep723Error::UnclosedBlock
+            });
         };
-        let index = toml.len() - index;
 
         // Discard any lines after the closing `# ///`.
         //
@@ -704,8 +730,12 @@ fn serialize_metadata(metadata: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Pep723Error, Pep723Script, ScriptTag, serialize_metadata};
+    use std::assert_matches;
     use std::str::FromStr;
+
+    use indoc::indoc;
+
+    use crate::{Pep723Error, Pep723Script, ScriptTag, serialize_metadata};
 
     #[test]
     fn missing_space() {
@@ -715,10 +745,10 @@ mod tests {
         # ///
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
     }
 
     #[test]
@@ -732,10 +762,82 @@ mod tests {
         # ]
     "};
 
-        assert!(matches!(
+        assert_matches!(
             ScriptTag::parse(contents.as_bytes()),
             Err(Pep723Error::UnclosedBlock)
-        ));
+        );
+    }
+
+    #[test]
+    fn closing_tag_trailing_whitespace() {
+        let contents = indoc! {"
+            # /// script
+            # requires-python = '>=3.11'
+            # ///\x20
+        "};
+
+        assert_matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingContent)
+        );
+    }
+
+    #[test]
+    fn closing_tag_trailing_content() {
+        let contents = indoc::indoc! {r"
+            # /// script
+            # requires-python = '>=3.11'
+            # /// unexpected
+        "};
+
+        assert_matches!(
+            ScriptTag::parse(contents.as_bytes()),
+            Err(Pep723Error::UnclosedBlockTrailingContent)
+        );
+    }
+
+    #[test]
+    fn closing_tag_followed_by_prefixed_comment() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// documentation
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(
+            actual.postlude,
+            indoc! {r#"
+                # /// documentation
+                print("Hello, world!")
+            "#}
+        );
+    }
+
+    #[test]
+    fn closing_tag_followed_by_trailing_whitespace_comment() {
+        let contents = indoc! {"
+            # /// script
+            # dependencies = []
+            # ///
+            # ///\x20
+            print(\"Hello, world!\")
+        "};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(
+            actual.postlude,
+            indoc! {"
+                # ///\x20
+                print(\"Hello, world!\")
+            "}
+        );
     }
 
     #[test]
@@ -918,13 +1020,35 @@ mod tests {
     }
 
     #[test]
+    fn adjacent_unclosed_second_script_block_is_not_duplicate() {
+        let contents = indoc::indoc! {r#"
+            # /// script
+            # dependencies = []
+            # ///
+            # /// script
+            print("Hello, world!")
+        "#};
+
+        let actual = ScriptTag::parse(contents.as_bytes()).unwrap().unwrap();
+
+        assert_eq!(actual.metadata, "dependencies = []\n");
+        assert_eq!(
+            actual.postlude,
+            indoc! {r#"
+                # /// script
+                print("Hello, world!")
+            "#}
+        );
+    }
+
+    #[test]
     fn other_script_block_is_ignored() {
         let contents = indoc::indoc! {r#"
             # /// script
             # dependencies = ["requests"]
             # ///
 
-            
+
             # /// other
             # /// script
             # ///
@@ -962,7 +1086,10 @@ mod tests {
     #[test]
     fn serialize_metadata_empty() {
         let metadata = "";
-        let expected_output = "# /// script\n# ///\n";
+        let expected_output = indoc! {"
+            # /// script
+            # ///
+        "};
 
         let result = serialize_metadata(metadata);
         assert_eq!(result, expected_output);

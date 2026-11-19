@@ -9,12 +9,14 @@ documentation_.
 1. Em-dashes are okay, but not recommended when using monospace fonts. Use "—", not "--" or "-".
 1. Always wrap em-dashes in spaces, e.g., "hello — world" not "hello—world".
 1. Hyphenate compound words, e.g., use "platform-specific" not "platform specific".
-1. Use backticks to escape: commands, code expressions, package names, and file paths.
+1. If a message ends with a single relevant value, precede it with a colon, e.g.,
+   `This is the value: value`.
+1. Use backticks to escape commands, code expressions, package names, URL, and file paths, except
+   for a value that is after a colon at the end of a message. User-facing summaries may omit
+   backticks.
 1. Use less than and greater than symbols to wrap bare URLs, e.g., `<https://astral.sh>` (unless it
    is an example; then, use backticks).
 1. Avoid bare URLs outside of reference documentation, prefer labels, e.g., `[name](url)`.
-1. If a message ends with a single relevant value, precede it with a colon, e.g.,
-   `This is the value: value`. If the value is a literal, wrap it in backticks.
 1. Markdown files should be wrapped at 100 characters.
 1. Use a space, not an equals sign, for command-line arguments with a value, e.g.
    `--resolution lowest`, not `--resolution=lowest`.

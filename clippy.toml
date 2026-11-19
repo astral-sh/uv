@@ -14,6 +14,7 @@ doc-valid-idents = [
   "AArch64",
   "UV_DEV",
   "UV_FROZEN",
+  "UV_INIT_BUILD_BACKEND",
   "UV_ISOLATED",
   "UV_LOCKED",
   "UV_MANAGED_PYTHON",
@@ -41,6 +42,7 @@ doc-valid-idents = [
 ]
 
 disallowed-types = [
+  { path = "url::Url", reason = "Use `uv_redacted::SafeUrl` for redacted formatting and an explicit serialization policy." },
   "std::fs::DirEntry",
   "std::fs::File",
   "std::fs::OpenOptions",

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileWriteStr, PathChild, PathCreateDir};
+use indoc::{formatdoc, indoc};
 
 use uv_static::EnvVars;
 use uv_test::{copy_dir_ignore, uv_snapshot};
@@ -13,12 +14,17 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str("[tool.uv.workspace]\nmembers = [\"packages/*\"]\n")?;
+        .write_str(indoc! {r#"
+            [tool.uv.workspace]
+            members = ["packages/*"]
+        "#})?;
     let member = context.temp_dir.child("packages/member");
     member.create_dir_all()?;
-    member
-        .child("pyproject.toml")
-        .write_str("[project]\nname = \"member\"\nversion = \"0.1.0\"\n")?;
+    member.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+    "#})?;
 
     uv_snapshot!(context.filters(), context.workspace_list()
         .env(EnvVars::RUST_LOG, "uv_workspace=trace"), @"
@@ -27,10 +33,10 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
     member
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `packages/member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: packages/member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/packages/member
     ");
 
     uv_snapshot!(context.filters(), context.workspace_list()
@@ -41,14 +47,14 @@ fn workspace_list_reuses_settings_discovery() -> Result<()> {
     member
 
     ----- stderr -----
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `packages/member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
-    DEBUG Found workspace root: `[TEMP_DIR]/`
-    TRACE Discovering workspace members for: `[TEMP_DIR]/`
-    TRACE Processing workspace member: `packages/member`
-    DEBUG Adding discovered workspace member: `[TEMP_DIR]/packages/member`
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: packages/member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/packages/member
+    DEBUG Found workspace root: [TEMP_DIR]/
+    TRACE Discovering workspace members for: [TEMP_DIR]/
+    TRACE Processing workspace member: packages/member
+    DEBUG Adding discovered workspace member: [TEMP_DIR]/packages/member
     ");
 
     Ok(())
@@ -257,7 +263,7 @@ fn workspace_list_no_project() {
 /// boundaries.
 #[test]
 fn workspace_list_scripts() -> Result<()> {
-    let mut context = uv_test::test_context!("3.12");
+    let context = uv_test::test_context!("3.12");
 
     context.init().arg("project").assert().success();
     let project = context.temp_dir.child("project");
@@ -271,17 +277,21 @@ fn workspace_list_scripts() -> Result<()> {
     project.child("scripts/nested.py").write_str(script)?;
     project.child(".github/hidden.py").write_str(script)?;
 
-    project
-        .child("tool")
-        .write_str(&format!("#!/usr/bin/env python\n{script}"))?;
+    project.child("tool").write_str(&formatdoc! {"
+        #!/usr/bin/env python
+        {script}
+    "})?;
 
     // Extensionless files without a shebang aren't scanned, even if they're ASCII.
     project.child("no-shebang").write_str(script)?;
 
     // PEP 723 examples in documentation are not Python scripts.
-    project
-        .child("docs/example.md")
-        .write_str(&format!("# Example\n\n{script}\n{script}"))?;
+    project.child("docs/example.md").write_str(&formatdoc! {"
+        # Example
+
+        {script}
+        {script}
+    "})?;
 
     // Regular Python modules are not scripts.
     project
@@ -347,7 +357,7 @@ fn workspace_list_scripts() -> Result<()> {
     // The configured cache is excluded even when it has not been initialized with ignore files.
     let cache = project.child("cache");
     cache.child("script.py").write_str(script)?;
-    context.cache_dir = cache;
+    let context = context.with_cache_dir(cache.path());
     uv_snapshot!(context.filters(), context.workspace_list()
         .arg("--scripts")
         .current_dir(&project), @"
@@ -365,14 +375,14 @@ fn workspace_list_scripts() -> Result<()> {
     Ok(())
 }
 
-/// Explicit script discovery should identify both the invalid script and the workspace root.
+/// Script discovery should warn about invalid metadata and continue listing valid scripts.
 #[test]
 fn workspace_list_scripts_invalid_metadata() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     context
         .temp_dir
         .child("pyproject.toml")
-        .write_str(indoc::indoc! {r#"
+        .write_str(indoc! {r#"
             [project]
             name = "project"
             version = "0.1.0"
@@ -381,8 +391,16 @@ fn workspace_list_scripts_invalid_metadata() -> Result<()> {
         "#})?;
     context
         .temp_dir
+        .child("scripts/valid-script.py")
+        .write_str(indoc! {r"
+            # /// script
+            # dependencies = []
+            # ///
+        "})?;
+    context
+        .temp_dir
         .child("fixtures/invalid-script.py")
-        .write_str(indoc::indoc! {r"
+        .write_str(indoc! {r"
             # /// script
             # dependencies = []
             # ///
@@ -393,12 +411,39 @@ fn workspace_list_scripts_invalid_metadata() -> Result<()> {
         "})?;
 
     uv_snapshot!(context.filters(), context.workspace_list().arg("--scripts"), @"
-    exit_code: 2 (failure)
+    exit_code: 0 (success)
+    ----- stdout -----
+    scripts/valid-script.py
+
     ----- stderr -----
     warning: The `--scripts` option is experimental and may change without warning. Pass `--preview-features workspace-list-scripts` to disable this warning.
-    error: Failed to discover PEP 723 scripts under workspace root `[TEMP_DIR]/`
-      Caused by: Failed to parse PEP 723 script: [TEMP_DIR]/fixtures/invalid-script.py
-      Caused by: The script contains multiple PEP 723 metadata blocks
+    warning: Skipping invalid PEP 723 script `[TEMP_DIR]/fixtures/invalid-script.py`: The script contains multiple PEP 723 metadata blocks
+    ");
+
+    // Invalid TOML should also be skipped, including when the preview feature is enabled.
+    context
+        .temp_dir
+        .child("fixtures/invalid-script.py")
+        .write_str(indoc! {r"
+            # /// script
+            # dependencies = [
+            # ///
+        "})?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .arg("--scripts")
+        .arg("--preview-features")
+        .arg("workspace-list-scripts"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    scripts/valid-script.py
+
+    ----- stderr -----
+    warning: Skipping invalid PEP 723 script `[TEMP_DIR]/fixtures/invalid-script.py`: TOML parse error at line 1, column 17
+      |
+    1 | dependencies = [
+      |                 ^
+    unclosed array, expected `]`
     ");
 
     Ok(())

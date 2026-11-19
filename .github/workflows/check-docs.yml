@@ -1,32 +1,45 @@
 on:
   workflow_call:
 
-permissions: {}
+permissions:
+  contents: read
+
+env:
+  UV_LOCKED: 1
+  UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
 
 jobs:
   docs:
     timeout-minutes: 10
     name: "mkdocs"
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          version: "0.12.1"
+          enable-cache: auto
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.15"
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: "Generate reference documentation"
         run: |
-          cargo dev generate-options-reference
-          cargo dev generate-cli-reference
-          cargo dev generate-env-vars-reference
-          cargo dev generate-preview-features-reference
+          cargo --locked dev generate-options-reference
+          cargo --locked dev generate-cli-reference
+          cargo --locked dev generate-env-vars-reference
+          cargo --locked dev generate-preview-features-reference
 
       - name: "Build docs"
         run: uv run --only-group docs mkdocs build --strict -f mkdocs.yml

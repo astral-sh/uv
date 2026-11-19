@@ -1,0 +1,1043 @@
+use std::sync::Arc;
+
+use rustc_hash::FxHashMap;
+use thiserror::Error;
+use uv_auth::RealmRef;
+#[cfg(test)]
+use uv_pep508::VerbatimUrl;
+use uv_redacted::SafeUrl;
+#[cfg(test)]
+use uv_redacted::policy::Stripped;
+
+#[cfg(test)]
+use crate::ProxyIndex;
+use crate::index_url::PYPI_ARTIFACT_BASE_URL;
+use crate::{
+    CanonicalFileLocation, File, FileLocation, Index, IndexFormat, IndexLocations, IndexName,
+    IndexUrl, ToUrlError, VerbatimFile,
+};
+
+/// An invalid proxy index configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ProxyIndexConfigError {
+    /// The proxy references a canonical Simple API index that is not configured.
+    #[error(
+        "The proxy index references package index `{name}`, which was not found in your configuration"
+    )]
+    MissingCanonicalIndex {
+        /// The name of the missing canonical package index.
+        name: IndexName,
+    },
+
+    /// A proxy index has the same name as another configured index.
+    #[error("Duplicate index name `{name}`: proxy index `{proxy}` conflicts with index `{index}`")]
+    DuplicateIndexName {
+        /// The name used by both the proxy and another index.
+        name: IndexName,
+        /// The proxy index URL, with credentials redacted when displayed.
+        proxy: Box<SafeUrl>,
+        /// The conflicting index URL, with credentials redacted when displayed.
+        index: Box<SafeUrl>,
+    },
+
+    /// A proxy index shares a URL with an ordinary index.
+    #[error("Proxy index `{proxy}` cannot use the same URL as ordinary index `{index}`")]
+    AmbiguousProxyUrl {
+        /// The proxy index URL, with credentials redacted when displayed.
+        proxy: Box<SafeUrl>,
+        /// The ordinary index URL, with credentials redacted when displayed.
+        index: Box<SafeUrl>,
+    },
+
+    /// Two upstream indexes use the same proxy endpoint.
+    #[error(
+        "Proxy index URL `{url}` is ambiguous: it is configured as a proxy for both `{first_index}` and `{second_index}`"
+    )]
+    AmbiguousProxyEndpoint {
+        /// The shared proxy index URL.
+        url: Box<SafeUrl>,
+        /// The first upstream index URL.
+        first_index: Box<SafeUrl>,
+        /// The second upstream index URL.
+        second_index: Box<SafeUrl>,
+    },
+
+    /// More than one proxy references the same canonical package index.
+    #[error(
+        "Each index can have only one proxy, but both `{first_proxy}` and `{second_proxy}` are proxies for `{index}`"
+    )]
+    DuplicateCanonicalIndex {
+        /// The canonical package index with multiple proxy declarations.
+        index: Box<SafeUrl>,
+        /// The first proxy index URL, with credentials redacted when displayed.
+        first_proxy: Box<SafeUrl>,
+        /// The conflicting proxy index URL, with credentials redacted when displayed.
+        second_proxy: Box<SafeUrl>,
+    },
+
+    /// A non-PyPI canonical index must explicitly identify its artifact host.
+    #[error(
+        "Non-PyPI indexes require an `artifact-base-url` when proxied, but `{index}` does not have one configured"
+    )]
+    MissingCanonicalArtifactBase {
+        /// The canonical package index without a configured artifact base.
+        index: Box<SafeUrl>,
+    },
+
+    /// An index or artifact base is not a safe absolute HTTP(S) URL prefix.
+    #[error("Invalid proxy URL mapping `{url}`: {reason}")]
+    InvalidMapping {
+        /// The invalid canonical or physical URL.
+        url: Box<SafeUrl>,
+        /// The reason the URL cannot safely be used as a reversible prefix.
+        reason: &'static str,
+    },
+}
+
+/// An error routing an artifact through a configured proxy index.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ProxyIndexError {
+    /// A proxied artifact URL does not match the configured artifact base.
+    #[error("Artifact URL `{url}` does not match the `artifact-base-url` prefix `{prefix}`")]
+    UnmappedUrl {
+        /// The unmatched canonical or physical artifact URL.
+        url: Box<SafeUrl>,
+        /// The artifact base URL prefix the URL must match.
+        prefix: Box<SafeUrl>,
+    },
+
+    /// A registry artifact location could not be converted to an absolute URL.
+    #[error(transparent)]
+    InvalidArtifactUrl(#[from] ToUrlError),
+}
+
+/// A URL that is safe to use as a reversible route prefix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UrlPrefix(SafeUrl);
+
+impl UrlPrefix {
+    fn new(url: SafeUrl) -> Result<Self, ProxyIndexConfigError> {
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(ProxyIndexConfigError::InvalidMapping {
+                url: Box::new(url),
+                reason: "index and artifact base URLs must use HTTP or HTTPS",
+            });
+        }
+
+        if url.query().is_some() || url.fragment().is_some() {
+            return Err(ProxyIndexConfigError::InvalidMapping {
+                url: Box::new(url),
+                reason: "index and artifact base URLs cannot contain queries or fragments",
+            });
+        }
+
+        Ok(Self(url))
+    }
+
+    fn as_url(&self) -> &SafeUrl {
+        &self.0
+    }
+
+    fn path_suffix<'a>(&self, url: &'a SafeUrl) -> Option<&'a str> {
+        if RealmRef::from(url) != RealmRef::from(self.as_url()) {
+            return None;
+        }
+
+        uv_auth::strip_path_prefix(self.as_url().path(), url.path())
+    }
+}
+
+/// A package index URL that is safe to use as a route prefix.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IndexUrlPrefix(IndexUrl);
+
+impl IndexUrlPrefix {
+    fn new(url: IndexUrl) -> Result<Self, ProxyIndexConfigError> {
+        UrlPrefix::new(url.url().clone())?;
+        Ok(Self(url))
+    }
+
+    fn as_index_url(&self) -> &IndexUrl {
+        &self.0
+    }
+}
+
+/// An artifact URL prefix safe to use when constructing canonical lockfile URLs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CanonicalArtifactUrlPrefix(UrlPrefix);
+
+impl CanonicalArtifactUrlPrefix {
+    fn new(url: SafeUrl) -> Result<Self, ProxyIndexConfigError> {
+        let prefix = UrlPrefix::new(url)?;
+        if !prefix.as_url().username().is_empty() || prefix.as_url().password().is_some() {
+            return Err(ProxyIndexConfigError::InvalidMapping {
+                url: Box::new(prefix.0),
+                reason: "canonical URL prefixes cannot contain credentials",
+            });
+        }
+
+        Ok(Self(prefix))
+    }
+
+    fn as_prefix(&self) -> &UrlPrefix {
+        &self.0
+    }
+}
+
+/// The original and proxy base URLs for package downloads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ArtifactUrlMapping {
+    canonical: CanonicalArtifactUrlPrefix,
+    proxy: UrlPrefix,
+}
+
+impl ArtifactUrlMapping {
+    fn new(canonical: CanonicalArtifactUrlPrefix, proxy: UrlPrefix) -> Self {
+        Self { canonical, proxy }
+    }
+
+    /// Translate a canonical artifact URL to its configured proxy URL.
+    fn to_proxy(&self, url: &CanonicalFileLocation) -> Result<SafeUrl, ProxyIndexError> {
+        Self::rewrite(&url.to_url()?, self.canonical.as_prefix(), &self.proxy)
+    }
+
+    /// Translate a proxy artifact URL to its configured canonical URL.
+    fn to_canonical(&self, url: &SafeUrl) -> Result<SafeUrl, ProxyIndexError> {
+        Self::rewrite(url, &self.proxy, self.canonical.as_prefix())
+    }
+
+    fn rewrite(
+        url: &SafeUrl,
+        prefix: &UrlPrefix,
+        target: &UrlPrefix,
+    ) -> Result<SafeUrl, ProxyIndexError> {
+        let Some(suffix) = prefix.path_suffix(url) else {
+            return Err(ProxyIndexError::UnmappedUrl {
+                url: Box::new(url.clone()),
+                prefix: Box::new(prefix.as_url().clone()),
+            });
+        };
+
+        let mut rewritten = target.as_url().clone();
+        let target_path = target.as_url().path();
+        if !suffix.is_empty() {
+            let base = target_path.strip_suffix('/').unwrap_or(target_path);
+            rewritten.set_path(&format!("{base}/{suffix}"));
+        } else if prefix.as_url().path().ends_with('/') && !target_path.ends_with('/') {
+            rewritten.set_path(&format!("{target_path}/"));
+        }
+        rewritten.set_query(url.query());
+        rewritten.set_fragment(url.fragment());
+        Ok(rewritten)
+    }
+}
+
+/// A validated route from a canonical package index through a configured proxy.
+///
+/// Unlike [`IndexRoute`], this always has a proxy endpoint, artifact URL mapping, and request policy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProxyRoute {
+    canonical: IndexUrlPrefix,
+    url: IndexUrlPrefix,
+    artifact_mapping: ArtifactUrlMapping,
+    index: Arc<Index>,
+}
+
+impl ProxyRoute {
+    fn new(
+        canonical: IndexUrlPrefix,
+        url: IndexUrlPrefix,
+        artifact_mapping: ArtifactUrlMapping,
+        index: Arc<Index>,
+    ) -> Self {
+        Self {
+            canonical,
+            url,
+            artifact_mapping,
+            index,
+        }
+    }
+
+    /// Return the proxy index URL used for requests, authentication, and caches.
+    pub fn effective_url(&self) -> &IndexUrl {
+        self.url.as_index_url()
+    }
+
+    /// Return the proxy endpoint and its request settings.
+    pub fn index(&self) -> &Index {
+        &self.index
+    }
+
+    /// Return the proxy's package download URL prefix.
+    pub fn artifact_base_url(&self) -> &SafeUrl {
+        self.artifact_mapping.proxy.as_url()
+    }
+
+    /// Translate a canonical artifact URL to its configured proxy URL.
+    pub fn artifact_url_for_request(
+        &self,
+        canonical_url: &CanonicalFileLocation,
+    ) -> Result<SafeUrl, ProxyIndexError> {
+        self.artifact_mapping.to_proxy(canonical_url)
+    }
+
+    pub(super) fn canonical_artifact_url(
+        &self,
+        location: &FileLocation,
+    ) -> Result<SafeUrl, ProxyIndexError> {
+        self.artifact_mapping.to_canonical(&location.to_url()?)
+    }
+}
+
+/// A validated route from a canonical package index to the index used for requests.
+///
+/// Without a configured proxy, requests use the canonical index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexRoute {
+    canonical: IndexUrl,
+    proxy: Option<Arc<ProxyRoute>>,
+}
+
+impl IndexRoute {
+    /// Return the original index URL recorded in the lockfile.
+    pub fn canonical(&self) -> &IndexUrl {
+        &self.canonical
+    }
+
+    /// Return whether this index is routed through a configured proxy.
+    #[cfg(test)]
+    fn is_proxied(&self) -> bool {
+        self.proxy.is_some()
+    }
+
+    /// Resolve a Simple API file into the canonical namespace used for identity and persistence.
+    ///
+    /// On a proxy route, relative locations are resolved against the Simple API response URL before
+    /// translation. The returned file cannot be confused with unresolved response metadata.
+    pub fn canonicalize_file(&self, file: VerbatimFile) -> Result<File, ProxyIndexError> {
+        if let Some(proxy) = &self.proxy {
+            File::from_proxy_index(file, proxy)
+        } else {
+            Ok(file.assume_canonical())
+        }
+    }
+}
+
+impl IndexLocations {
+    /// Borrow the configured [`ProxyRoute`] for a canonical index, if any.
+    ///
+    /// The route contains the configured canonical URL, which may differ from `index` in spelling
+    /// or credentials. Use [`Self::route_for`] to retain an owned route with the caller's URL.
+    pub fn proxy_route_for(&self, index: &IndexUrl) -> Option<&ProxyRoute> {
+        self.find_proxy_route(index).map(AsRef::as_ref)
+    }
+
+    fn find_proxy_route(&self, index: &IndexUrl) -> Option<&Arc<ProxyRoute>> {
+        self.routes
+            .iter()
+            .find(|route| route.canonical.as_index_url().is_same_index(index))
+    }
+
+    /// Return an owned route that preserves the caller's canonical index URL.
+    ///
+    /// Prefer [`Self::proxy_route_for`] when the route does not need to outlive these locations.
+    pub fn route_for(&self, index: &IndexUrl) -> IndexRoute {
+        IndexRoute {
+            canonical: index.clone(),
+            proxy: self.find_proxy_route(index).cloned(),
+        }
+    }
+
+    /// Return the configured proxy URL, or the caller's URL for a direct index.
+    pub fn effective_url<'a>(&'a self, index: &'a IndexUrl) -> &'a IndexUrl {
+        self.proxy_route_for(index)
+            .map_or(index, ProxyRoute::effective_url)
+    }
+
+    /// Iterate over the configured proxy routes.
+    pub fn proxy_routes(&self) -> impl Iterator<Item = &ProxyRoute> {
+        self.routes.iter().map(AsRef::as_ref)
+    }
+}
+
+pub(crate) fn build_routes(
+    locations: &IndexLocations,
+) -> Result<Vec<Arc<ProxyRoute>>, ProxyIndexConfigError> {
+    let mut indexes_by_name: FxHashMap<_, _> = locations
+        .configured_indexes()
+        .filter_map(|index| index.name.as_ref().map(|name| (name, index.raw_url())))
+        .collect();
+    let mut routes: Vec<Arc<ProxyRoute>> = Vec::new();
+
+    for configured in locations.proxy_definitions() {
+        let proxy = configured.index.as_ref();
+        let canonical_name = &configured.proxy_for;
+
+        let canonical = locations
+            .configured_indexes()
+            .find(|index| {
+                index.format == IndexFormat::Simple && index.name.as_ref() == Some(canonical_name)
+            })
+            .ok_or_else(|| ProxyIndexConfigError::MissingCanonicalIndex {
+                name: canonical_name.clone(),
+            })?;
+
+        if let Some(route) = routes.iter().find(|route| {
+            route
+                .canonical
+                .as_index_url()
+                .is_same_index(canonical.url())
+        }) {
+            return Err(ProxyIndexConfigError::DuplicateCanonicalIndex {
+                index: Box::new(canonical.url.url().clone()),
+                first_proxy: Box::new(route.effective_url().url().clone()),
+                second_proxy: Box::new(proxy.url.url().clone()),
+            });
+        }
+
+        if let Some(name) = proxy.name.as_ref()
+            && let Some(index) = indexes_by_name.insert(name, proxy.raw_url())
+        {
+            return Err(ProxyIndexConfigError::DuplicateIndexName {
+                name: name.clone(),
+                proxy: Box::new(proxy.raw_url().clone()),
+                index: Box::new(index.clone()),
+            });
+        }
+
+        if let Some(route) = routes
+            .iter()
+            .find(|route| route.effective_url().is_same_index(proxy.url()))
+        {
+            return Err(ProxyIndexConfigError::AmbiguousProxyEndpoint {
+                url: Box::new(proxy.raw_url().clone()),
+                first_index: Box::new(route.canonical.as_index_url().url().clone()),
+                second_index: Box::new(canonical.raw_url().clone()),
+            });
+        }
+
+        if let Some(index) = locations.index_for_url(proxy.url()).or_else(|| {
+            locations
+                .default_index()
+                .filter(|index| index.url().is_same_index(proxy.url()))
+        }) {
+            return Err(ProxyIndexConfigError::AmbiguousProxyUrl {
+                proxy: Box::new(proxy.raw_url().clone()),
+                index: Box::new(index.raw_url().clone()),
+            });
+        }
+
+        let canonical_url = IndexUrlPrefix::new(canonical.url.clone())?;
+        let proxy_url = IndexUrlPrefix::new(proxy.url.clone())?;
+        let canonical_artifact_base = CanonicalArtifactUrlPrefix::new(artifact_base(canonical)?)?;
+        let proxy_artifact_base = UrlPrefix::new(configured.artifact_base_url.clone().into_url())?;
+        let artifact_mapping =
+            ArtifactUrlMapping::new(canonical_artifact_base, proxy_artifact_base);
+        routes.push(Arc::new(ProxyRoute::new(
+            canonical_url,
+            proxy_url,
+            artifact_mapping,
+            Arc::clone(&configured.index),
+        )));
+    }
+
+    Ok(routes)
+}
+
+fn artifact_base(index: &Index) -> Result<SafeUrl, ProxyIndexConfigError> {
+    if let Some(base) = &index.artifact_base_url {
+        return Ok(base.as_url().clone());
+    }
+
+    if index.url().is_pypi() {
+        return Ok(PYPI_ARTIFACT_BASE_URL.clone());
+    }
+
+    Err(ProxyIndexConfigError::MissingCanonicalArtifactBase {
+        index: Box::new(index.url.url().clone()),
+    })
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use http::{HeaderValue, StatusCode};
+    use uv_pypi_types::HashDigests;
+    use uv_small_str::SmallString;
+
+    use crate::IndexStatusCodeStrategy;
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    fn url(value: &str) -> Result<SafeUrl, Box<dyn std::error::Error>> {
+        Ok(SafeUrl::parse(value)?)
+    }
+
+    fn index_url(value: &str) -> Result<IndexUrl, Box<dyn std::error::Error>> {
+        Ok(IndexUrl::from(VerbatimUrl::from_url(url(value)?)))
+    }
+
+    fn locked_location(url: SafeUrl) -> CanonicalFileLocation {
+        CanonicalFileLocation::from_lockfile(url.into())
+    }
+
+    fn response_file(url: SafeUrl) -> VerbatimFile {
+        VerbatimFile {
+            dist_info_metadata: None,
+            filename: SmallString::from("package.whl"),
+            hashes: HashDigests::empty(),
+            requires_python: None,
+            size: None,
+            upload_time_utc_ms: None,
+            location: FileLocation::absolute(url.into()),
+            yanked: None,
+        }
+    }
+
+    fn named_index(
+        name: &str,
+        index: &str,
+        artifact: Option<&str>,
+    ) -> Result<Index, Box<dyn std::error::Error>> {
+        let mut index = Index::from_extra_index_url(index_url(index)?);
+        index.name = Some(name.parse()?);
+        index.artifact_base_url = artifact
+            .map(url)
+            .transpose()?
+            .map(|url| url.with_policy(Stripped));
+        Ok(index)
+    }
+
+    fn named_proxy(
+        name: &str,
+        index: &str,
+        artifact: &str,
+        proxy_for: &str,
+    ) -> Result<ProxyIndex, Box<dyn std::error::Error>> {
+        let mut proxy = ProxyIndex::new(
+            index_url(index)?,
+            proxy_for.parse()?,
+            url(artifact)?.with_policy(Stripped),
+        );
+        proxy.name = Some(name.parse()?);
+        Ok(proxy)
+    }
+
+    pub(crate) fn pypi_proxy() -> Result<ProxyIndex, Box<dyn std::error::Error>> {
+        named_proxy(
+            "socket",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+            "pypi",
+        )
+    }
+
+    pub(crate) fn pypi_index() -> Result<Index, Box<dyn std::error::Error>> {
+        let mut index = Index::from_index_url(index_url("https://pypi.org/simple/")?);
+        index.name = Some("pypi".parse()?);
+        Ok(index)
+    }
+
+    fn pypi_locations(proxy: ProxyIndex) -> Result<IndexLocations, Box<dyn std::error::Error>> {
+        Ok(IndexLocations::new(
+            vec![pypi_index()?],
+            vec![proxy],
+            Vec::new(),
+            false,
+        )?)
+    }
+
+    #[test]
+    fn proxy_simple_route_maps_configured_pypi() -> TestResult {
+        let mut index = pypi_index()?;
+        index.name = Some("pypi-upstream".parse()?);
+        let mut proxy = pypi_proxy()?;
+        proxy.proxy_for = "pypi-upstream".parse()?;
+        let locations = IndexLocations::new(vec![index], vec![proxy], Vec::new(), false)?;
+        let canonical = index_url("https://caller:secret@pypi.org/simple/")?;
+        let route = locations.route_for(&canonical);
+
+        assert!(route.is_proxied());
+        assert_eq!(route.canonical(), &canonical);
+        let borrowed = locations
+            .proxy_route_for(&canonical)
+            .ok_or("missing proxy route")?;
+        assert_eq!(
+            borrowed.effective_url(),
+            &index_url("https://proxy.example.com/simple/")?
+        );
+        assert_eq!(
+            borrowed.canonical.as_index_url(),
+            &index_url("https://pypi.org/simple/")?
+        );
+        assert_eq!(locations.proxy_routes().count(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_route_uses_physical_request_policy() -> TestResult {
+        let canonical = index_url("https://pypi.org/simple")?;
+        let mut canonical_index = Index::from_index_url(canonical.clone());
+        canonical_index.name = Some("pypi".parse()?);
+        canonical_index.ignore_error_codes =
+            Some(vec![serde_json::from_value(serde_json::json!(403))?]);
+        canonical_index.cache_control = Some(crate::IndexCacheControl {
+            api: Some(HeaderValue::from_static("max-age=60")),
+            files: Some(HeaderValue::from_static("max-age=120")),
+        });
+        let mut proxy = pypi_proxy()?;
+        proxy.ignore_error_codes = Some(vec![serde_json::from_value(serde_json::json!(401))?]);
+        proxy.cache_control = Some(crate::IndexCacheControl {
+            api: Some(HeaderValue::from_static("no-cache")),
+            files: Some(HeaderValue::from_static("max-age=3600")),
+        });
+        let endpoint = proxy.url.clone();
+
+        let locations = IndexLocations::new(
+            vec![canonical_index.clone()],
+            vec![proxy],
+            Vec::new(),
+            false,
+        )?;
+
+        assert!(
+            locations
+                .request_policy(&canonical)
+                .ignores_error_code(StatusCode::UNAUTHORIZED)
+        );
+        assert!(
+            !locations
+                .request_policy(&canonical)
+                .ignores_error_code(StatusCode::FORBIDDEN)
+        );
+        assert!(matches!(
+            locations.request_policy(&canonical).status_code_strategy(),
+            IndexStatusCodeStrategy::IgnoreConfiguredErrorCodes { status_codes }
+                if status_codes.iter().any(|code| **code == StatusCode::UNAUTHORIZED)
+        ));
+        assert_eq!(
+            locations
+                .request_policy(&canonical)
+                .simple_api_cache_control(),
+            Some(HeaderValue::from_static("no-cache"))
+        );
+        assert_eq!(
+            locations
+                .request_policy(&canonical)
+                .artifact_cache_control(),
+            Some(HeaderValue::from_static("max-age=3600"))
+        );
+        assert_eq!(
+            locations.request_policy(&endpoint).artifact_cache_control(),
+            Some(HeaderValue::from_static("max-age=3600"))
+        );
+
+        // A proxy without overrides must not inherit the canonical index's cache settings.
+        let locations = IndexLocations::new(
+            vec![canonical_index],
+            vec![pypi_proxy()?],
+            Vec::new(),
+            false,
+        )?;
+        assert_eq!(
+            locations
+                .request_policy(&canonical)
+                .simple_api_cache_control(),
+            None
+        );
+        assert_eq!(
+            locations
+                .request_policy(&canonical)
+                .artifact_cache_control(),
+            None
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_uses_its_endpoints_builtin_status_policy() -> TestResult {
+        let mut proxy = pypi_proxy()?;
+        proxy.url = index_url("https://download.pytorch.org/whl/cu118")?;
+        let locations = pypi_locations(proxy)?;
+        let index = index_url("https://pypi.org/simple")?;
+        let policy = locations.request_policy(&index);
+        assert!(matches!(
+            policy.status_code_strategy(),
+            IndexStatusCodeStrategy::IgnoreBuiltinErrorCodes { status_codes }
+                if status_codes.iter().any(|code| **code == StatusCode::FORBIDDEN)
+        ));
+        assert!(!policy.ignores_error_code(StatusCode::FORBIDDEN));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_flat_index_keeps_identity_route() -> TestResult {
+        let flat = index_url("https://flat.example.com/packages/")?;
+        let locations = IndexLocations::new(
+            vec![pypi_index()?],
+            vec![pypi_proxy()?],
+            vec![Index::from_find_links(flat.clone())],
+            false,
+        )?;
+        let route = locations.route_for(&flat);
+
+        assert!(locations.proxy_route_for(&flat).is_none());
+        assert_eq!(locations.effective_url(&flat), &flat);
+        assert!(!route.is_proxied());
+        assert_eq!(route.canonical(), &flat);
+        let artifact = url("https://flat.example.com/packages/package.whl?download=1#sha256=abc")?;
+        let file = route.canonicalize_file(response_file(artifact.clone()))?;
+        assert_eq!(file.location.to_url()?, artifact);
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_artifact_mapping_preserves_encoded_path_and_query() -> TestResult {
+        let mut proxy = pypi_proxy()?;
+        proxy.artifact_base_url =
+            url("https://proxy.example.com/files%2Fprivate/")?.with_policy(Stripped);
+        let locations = pypi_locations(proxy)?;
+        let route = locations
+            .proxy_route_for(&index_url("https://pypi.org/simple/")?)
+            .ok_or("missing proxy route")?;
+        let canonical = url(
+            "https://files.pythonhosted.org/packages/example%20project/package%2B1.whl?download=1#sha256=abc",
+        )?;
+        let expected = url(
+            "https://proxy.example.com/files%2Fprivate/example%20project/package%2B1.whl?download=1#sha256=abc",
+        )?;
+
+        let canonical = locked_location(canonical);
+        let effective = route.artifact_url_for_request(&canonical)?;
+        assert_eq!(effective, expected);
+        let mut response = response_file(effective);
+        response.dist_info_metadata = Some(HashDigests::empty());
+        response.size = Some(123);
+        response.upload_time_utc_ms = Some(456);
+        let canonicalized = locations
+            .route_for(&index_url("https://pypi.org/simple/")?)
+            .canonicalize_file(response)?;
+        assert_eq!(canonicalized.location, canonical);
+        assert_eq!(canonicalized.dist_info_metadata, Some(HashDigests::empty()));
+        assert_eq!(canonicalized.size, Some(123));
+        assert_eq!(canonicalized.upload_time_utc_ms, Some(456));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_artifact_mapping_requires_a_segment_boundary() -> TestResult {
+        let locations = pypi_locations(pypi_proxy()?)?;
+        let route = locations
+            .proxy_route_for(&index_url("https://pypi.org/simple/")?)
+            .ok_or("missing proxy route")?;
+        for artifact in [
+            "https://files.pythonhosted.org/packages-extra/package.whl",
+            "https://unmapped.example.com/files/package.whl",
+        ] {
+            assert!(matches!(
+                route.artifact_url_for_request(&locked_location(url(artifact)?)),
+                Err(ProxyIndexError::UnmappedUrl { .. })
+            ));
+        }
+        assert!(matches!(
+            File::from_proxy_index(
+                response_file(url("https://proxy.example.com/unknown/package.whl")?),
+                route
+            ),
+            Err(ProxyIndexError::UnmappedUrl { .. })
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_custom_index_uses_both_configured_artifact_bases() -> TestResult {
+        let canonical = named_index(
+            "upstream",
+            "https://canonical-user:canonical-secret@upstream.example.com/simple/",
+            Some("https://artifacts.example.com/distributions/"),
+        )?;
+        let proxy = named_proxy(
+            "mirror",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+            "upstream",
+        )?;
+        let locations =
+            IndexLocations::new(vec![canonical.clone()], vec![proxy], Vec::new(), false)?;
+        let route = locations
+            .proxy_route_for(canonical.url())
+            .ok_or("missing proxy route")?;
+        let canonical_artifact = url("https://artifacts.example.com/distributions/package.whl")?;
+
+        assert_eq!(
+            route.canonical.as_index_url().url().username(),
+            "canonical-user"
+        );
+        assert_eq!(
+            route.canonical.as_index_url().url().password(),
+            Some("canonical-secret")
+        );
+        let canonical_artifact = locked_location(canonical_artifact);
+        assert_eq!(
+            route.artifact_url_for_request(&canonical_artifact)?,
+            url("https://proxy.example.com/files/package.whl")?
+        );
+        assert_eq!(
+            File::from_proxy_index(
+                response_file(url("https://proxy.example.com/files/package.whl")?),
+                route
+            )?
+            .location,
+            canonical_artifact,
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_rejects_missing_upstream_artifact_base_and_duplicate_targets() -> TestResult {
+        let canonical = named_index("upstream", "https://upstream.example.com/simple/", None)?;
+        let proxy = named_proxy(
+            "mirror",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+            "upstream",
+        )?;
+        assert!(matches!(
+            IndexLocations::new(vec![canonical.clone()], vec![proxy], Vec::new(), false),
+            Err(ProxyIndexConfigError::MissingCanonicalArtifactBase { .. })
+        ));
+
+        for name in ["other-proxy", "socket"] {
+            let first = pypi_proxy()?;
+            let second = named_proxy(
+                name,
+                "https://other-proxy.example.com/simple/",
+                "https://other-proxy.example.com/files/",
+                "pypi",
+            )?;
+            assert!(matches!(
+                IndexLocations::new(vec![pypi_index()?], vec![first, second], Vec::new(), false),
+                Err(ProxyIndexConfigError::DuplicateCanonicalIndex { .. })
+            ));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_rejects_duplicate_index_names() -> TestResult {
+        let ordinary = named_index("socket", "https://ordinary.example.com/simple/", None)?;
+        assert!(matches!(
+            IndexLocations::new(vec![pypi_index()?, ordinary], vec![pypi_proxy()?], Vec::new(), false),
+            Err(ProxyIndexConfigError::DuplicateIndexName { name, proxy, index })
+                if name.as_ref() == "socket"
+                    && proxy.as_str() == "https://proxy.example.com/simple/"
+                    && index.as_str() == "https://ordinary.example.com/simple/"
+        ));
+
+        let canonical = named_index(
+            "upstream",
+            "https://upstream.example.com/simple/",
+            Some("https://upstream.example.com/files/"),
+        )?;
+        let duplicate = named_proxy(
+            "socket",
+            "https://other-proxy.example.com/simple/",
+            "https://other-proxy.example.com/files/",
+            "upstream",
+        )?;
+        assert!(matches!(
+            IndexLocations::new(vec![pypi_index()?, canonical], vec![pypi_proxy()?, duplicate], vec![], false),
+            Err(ProxyIndexConfigError::DuplicateIndexName { name, proxy, index })
+                if name.as_ref() == "socket"
+                    && proxy.as_str() == "https://other-proxy.example.com/simple/"
+                    && index.as_str() == "https://proxy.example.com/simple/"
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_requires_a_configured_canonical_index() -> TestResult {
+        let unknown_proxy = named_proxy(
+            "mirror",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+            "missing",
+        )?;
+        let chained_proxy = named_proxy(
+            "other-proxy",
+            "https://other-proxy.example.com/simple/",
+            "https://other-proxy.example.com/files/",
+            "socket",
+        )?;
+        let mut flat =
+            Index::from_find_links(index_url("https://canonical.example.com/packages/")?);
+        flat.name = Some("flat".parse()?);
+        let flat_proxy = named_proxy(
+            "mirror",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+            "flat",
+        )?;
+
+        for (locations, expected_name) in [
+            (
+                IndexLocations::new(vec![pypi_index()?], vec![unknown_proxy], Vec::new(), false),
+                "missing",
+            ),
+            (
+                IndexLocations::new(
+                    vec![pypi_index()?],
+                    vec![pypi_proxy()?, chained_proxy],
+                    Vec::new(),
+                    false,
+                ),
+                "socket",
+            ),
+            (
+                IndexLocations::new(Vec::new(), vec![flat_proxy], vec![flat], false),
+                "flat",
+            ),
+        ] {
+            match locations {
+                Err(ProxyIndexConfigError::MissingCanonicalIndex { name }) => {
+                    assert_eq!(name.as_ref(), expected_name);
+                }
+                result => {
+                    return Err(format!("expected a missing package index, got {result:?}").into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_rejects_canonical_artifact_credentials() -> TestResult {
+        let canonical = named_index(
+            "private",
+            "https://canonical.example.com/simple/",
+            Some("https://user:secret@canonical.example.com/files/"),
+        )?;
+        let proxy = named_proxy(
+            "mirror",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+            "private",
+        )?;
+        let Err(error) = IndexLocations::new(vec![canonical], vec![proxy], Vec::new(), false)
+        else {
+            return Err("canonical artifact credentials were unexpectedly accepted".into());
+        };
+        assert!(matches!(
+            error,
+            ProxyIndexConfigError::InvalidMapping { .. }
+        ));
+        assert!(!error.to_string().contains("secret"));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_preserves_physical_authentication_credentials() -> TestResult {
+        let proxy = named_proxy(
+            "socket",
+            "https://user:secret@proxy.example.com/simple/",
+            "https://artifact-user:artifact-secret@proxy.example.com/files/",
+            "pypi",
+        )?;
+        let locations = pypi_locations(proxy)?;
+        let route = locations
+            .proxy_route_for(&index_url("https://pypi.org/simple/")?)
+            .ok_or("missing proxy route")?;
+        let canonical_artifact =
+            locked_location(url("https://files.pythonhosted.org/packages/package.whl")?);
+        let physical_artifact = route.artifact_url_for_request(&canonical_artifact)?;
+
+        assert_eq!(route.effective_url().url().username(), "user");
+        assert_eq!(route.effective_url().url().password(), Some("secret"));
+        assert_eq!(physical_artifact.username(), "artifact-user");
+        assert_eq!(physical_artifact.password(), Some("artifact-secret"));
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_rejects_unsafe_index_and_artifact_bases() -> TestResult {
+        for physical in [
+            "ftp://proxy.example.com/simple/",
+            "file:///proxy/simple/",
+            "https://proxy.example.com/simple/?download=1",
+            "https://proxy.example.com/simple/#fragment",
+        ] {
+            let proxy = named_proxy(
+                "socket",
+                physical,
+                "https://proxy.example.com/files/",
+                "pypi",
+            )?;
+
+            assert!(
+                matches!(
+                    IndexLocations::new(vec![pypi_index()?], vec![proxy], Vec::new(), false),
+                    Err(ProxyIndexConfigError::InvalidMapping { .. })
+                ),
+                "unsafe proxy URL was accepted: {physical}"
+            );
+        }
+
+        for artifact in [
+            "ftp://proxy.example.com/files/",
+            "https://proxy.example.com/files/?download=1",
+            "https://proxy.example.com/files/#fragment",
+        ] {
+            let proxy = named_proxy(
+                "socket",
+                "https://proxy.example.com/simple/",
+                artifact,
+                "pypi",
+            )?;
+
+            assert!(
+                matches!(
+                    IndexLocations::new(vec![pypi_index()?], vec![proxy], Vec::new(), false),
+                    Err(ProxyIndexConfigError::InvalidMapping { .. })
+                ),
+                "unsafe proxy artifact base was accepted: {artifact}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_index_ignores_proxies_when_indexes_are_disabled() -> TestResult {
+        let canonical = named_index(
+            "upstream",
+            "https://upstream.example.com/simple/",
+            Some("https://upstream.example.com/files/"),
+        )?;
+        let proxy = named_proxy(
+            "mirror",
+            "https://proxy.example.com/simple/",
+            "https://proxy.example.com/files/",
+            "upstream",
+        )?;
+
+        for (locations, expected_canonical) in [
+            (
+                IndexLocations::new(Vec::new(), vec![pypi_proxy()?], Vec::new(), true),
+                index_url("https://pypi.org/simple/")?,
+            ),
+            (
+                IndexLocations::new(vec![canonical.clone()], vec![proxy], Vec::new(), true),
+                canonical.url().clone(),
+            ),
+        ] {
+            let locations = locations?;
+            assert_eq!(locations.proxy_routes().count(), 0);
+            assert!(locations.proxy_route_for(&expected_canonical).is_none());
+        }
+
+        Ok(())
+    }
+}

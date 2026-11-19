@@ -1,0 +1,23 @@
+[project]
+name = "pyx-member-15"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "aws-lambda-powertools==3.27.0",
+    "botocore[crt]==1.42.88",
+    "pyx-member-22",
+    "types-boto3-cloudfront-keyvaluestore",
+]
+
+[project.optional-dependencies]
+aws = [
+    "boto3==1.42.88",
+    "botocore==1.42.88",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

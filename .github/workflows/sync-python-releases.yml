@@ -9,11 +9,16 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   sync:
     if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     permissions:
       contents: read
       id-token: write # for the credential broker
@@ -21,21 +26,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          version: "latest"
           enable-cache: true
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: false
       - name: Sync Python Releases
         run: uv run --locked --python 3.12 --no-build --script fetch-download-metadata.py
-        working-directory: ./crates/uv-python
+        working-directory: ./crates/uv-python-managed
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync Sysconfig Targets
-        run: ./sync_sysconfig_targets.sh
+        run: uv run --only-group=jaq --python 3.12 ./sync_sysconfig_targets.sh
         working-directory: ./crates/uv-dev
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,7 +49,7 @@ jobs:
 
       - name: "Get uv token"
         id: token
-        uses: open-security-tools/ost-simple-sts@3c532a63c9ed6f457ec3e8d7357d1fd631385aa2 # v0.0.2
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -62,9 +66,10 @@ jobs:
           committer: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           author: "astral-automations-bot[bot] <305554984+astral-automations-bot[bot]@users.noreply.github.com>"
           add-paths: |
-            crates/uv-python/download-metadata.json
+            .python-versions
+            crates/uv-python-managed/download-metadata.json
             crates/uv-dev/src/generate_sysconfig_mappings.rs
-            crates/uv-python/src/sysconfig/generated_mappings.rs
+            crates/uv-python-managed/src/sysconfig/generated_mappings.rs
             crates/uv-test/src/lib.rs
           branch: "sync-python-releases"
           title: "Sync latest Python releases"

@@ -19,14 +19,14 @@ pub struct Metadata10 {
 impl Metadata10 {
     /// Parse the [`Metadata10`] from a `PKG-INFO` file, as included in a source distribution.
     pub fn parse_pkg_info(content: &[u8]) -> Result<Self, MetadataError> {
-        let headers = Headers::parse(content)?;
+        let headers = Headers::parse(content);
         let name = PackageName::from_owned(
             headers
-                .get_first_value("Name")
+                .get_first_value("Name")?
                 .ok_or(MetadataError::FieldNotFound("Name"))?,
         )?;
         let version = headers
-            .get_first_value("Version")
+            .get_first_value("Version")?
             .ok_or(MetadataError::FieldNotFound("Version"))?;
         Ok(Self { name, version })
     }

@@ -3,8 +3,9 @@
 use anyhow::Result;
 
 use crate::{
-    generate_cli_reference, generate_env_vars_reference, generate_json_schema,
-    generate_options_reference, generate_preview_features_reference, generate_sysconfig_mappings,
+    generate_cli_reference, generate_dirhash_test_vectors, generate_env_vars_reference,
+    generate_json_schema, generate_options_reference, generate_preview_features_reference,
+    generate_sysconfig_mappings,
 };
 
 #[derive(clap::Args)]
@@ -34,6 +35,7 @@ pub(crate) async fn main(args: &Args) -> Result<()> {
     generate_preview_features_reference::main(&generate_preview_features_reference::Args {
         mode: args.mode,
     })?;
+    generate_dirhash_test_vectors::main(&generate_dirhash_test_vectors::Args { mode: args.mode })?;
     generate_sysconfig_mappings::main(&generate_sysconfig_mappings::Args { mode: args.mode })
         .await?;
     Ok(())

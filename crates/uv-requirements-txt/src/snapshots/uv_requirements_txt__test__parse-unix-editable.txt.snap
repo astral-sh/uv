@@ -12,7 +12,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -31,7 +31,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -46,6 +46,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -72,7 +73,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -91,7 +92,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -106,6 +107,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -132,7 +134,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -151,7 +153,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -166,6 +168,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -192,7 +195,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -211,7 +214,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -226,6 +229,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [
@@ -252,7 +256,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -271,7 +275,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -286,6 +290,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],
@@ -305,7 +310,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -324,7 +329,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -339,6 +344,7 @@ RequirementsTxt {
                                 "./editable[d",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],
@@ -358,7 +364,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -377,7 +383,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -392,6 +398,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],
@@ -411,7 +418,7 @@ RequirementsTxt {
                     url: VerbatimParsedUrl {
                         parsed_url: Directory(
                             ParsedDirectoryUrl {
-                                url: DisplaySafeUrl {
+                                url: SafeUrl {
                                     scheme: "file",
                                     cannot_be_a_base: false,
                                     username: "",
@@ -430,7 +437,7 @@ RequirementsTxt {
                             },
                         ),
                         verbatim: VerbatimUrl {
-                            url: DisplaySafeUrl {
+                            url: SafeUrl {
                                 scheme: "file",
                                 cannot_be_a_base: false,
                                 username: "",
@@ -445,6 +452,7 @@ RequirementsTxt {
                                 "./editable",
                             ),
                             expanded: false,
+                            force_relative: false,
                         },
                     },
                     extras: [],

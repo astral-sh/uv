@@ -19,11 +19,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ inputs.pull_request }}
   cancel-in-progress: true
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   labels:
     if: github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev'
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       contents: read
@@ -43,6 +48,10 @@ jobs:
           path: pull-request
           persist-credentials: false
 
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Collect pull request context"
         working-directory: pull-request
         run: |
@@ -56,6 +65,8 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --limit 1000 \
             --json name,description \
+            | jaq --slurpfile allowed "$GITHUB_WORKSPACE/.github/allowed-pull-request-labels.json" \
+              '[.[] | select(.name as $label | $allowed[0] | index($label))]' \
             > .pull-request-labels.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -63,14 +74,16 @@ jobs:
 
       - name: "Determine pull request labels"
         id: labels
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.169.0"
           working-directory: "${{ github.workspace }}/pull-request"
           codex-home: "${{ github.workspace }}/agents/codex"
+          model: gpt-6.2-sol
+          effort: low
           permission-profile: "pull-request-labels"
           safety-strategy: drop-sudo
           allow-bot-users: "astral-automations-bot[bot]"
@@ -80,7 +93,7 @@ jobs:
   report:
     needs: labels
     if: needs.labels.outputs.result != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     permissions: {}
     steps:
       - name: "Write label recommendations"
@@ -88,21 +101,64 @@ jobs:
         env:
           LABEL_RESULT: ${{ needs.labels.outputs.result }}
 
-  apply:
+  validate:
     needs: labels
     if: >-
       github.repository == 'astral-sh/uv-dev' &&
-      needs.labels.outputs.result != '' &&
-      fromJSON(needs.labels.outputs.result).labels[0] != null
-    runs-on: ubuntu-slim
-    environment: automations
+      needs.labels.outputs.result != ''
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    permissions: {}
+    outputs:
+      labels: ${{ steps.validate.outputs.labels }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
+      - name: "Validate recommended labels"
+        id: validate
+        run: |
+          if ! labels=$(jaq --exit-status --compact-output --slurp \
+            --slurpfile allowed .github/allowed-pull-request-labels.json '
+              select(length == 1)
+              | .[0]
+              | select(type == "object")
+              | .labels
+              | select(type == "array" and length <= 3)
+              | select(length == (unique | length))
+              | select(all(.[];
+                  type == "string"
+                  and (. as $label | $allowed[0] | index($label) != null)))
+            ' <<< "$LABEL_RESULT"); then
+            echo "Codex recommended an invalid or disallowed pull request label." >&2
+            exit 1
+          fi
+
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+        env:
+          LABEL_RESULT: ${{ needs.labels.outputs.result }}
+
+  apply:
+    needs: validate
+    if: >-
+      needs.validate.outputs.labels != '' &&
+      fromJSON(needs.validate.outputs.labels)[0] != null
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 5
     permissions:
       id-token: write # for the repository label credential broker
     steps:
       - name: "Get repository label token"
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -113,14 +169,10 @@ jobs:
       - name: "Apply recommended labels"
         run: |
           # POST adds labels without removing any labels already on the pull request.
-          printf '%s\n' "$LABEL_RESULT" \
-            | jq '{labels}' \
-            | gh api \
-                --method POST \
-                "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
-                --input - \
-                --silent
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/issues/$PULL_REQUEST_NUMBER/labels" \
+            --input - --silent <<< "$LABELS"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
-          LABEL_RESULT: ${{ needs.labels.outputs.result }}
+          LABELS: ${{ needs.validate.outputs.labels }}
           PULL_REQUEST_NUMBER: ${{ inputs.pull_request }}

@@ -6,6 +6,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_client::BaseClientBuilder;
 use uv_configuration::ProxyUrl;
+use uv_redacted::SafeUrl;
 
 #[tokio::test]
 async fn http_proxy() -> Result<()> {
@@ -29,11 +30,8 @@ async fn http_proxy() -> Result<()> {
         .build()?;
 
     // Make a request to the target.
-    let response = client
-        .for_host(&target_server.uri().parse()?)
-        .get(target_server.uri())
-        .send()
-        .await?;
+    let target_url = SafeUrl::parse_relaxed(&target_server.uri())?;
+    let response = client.for_host(&target_url).get(target_url).send().await?;
 
     assert_eq!(response.status(), 200);
 
@@ -70,11 +68,8 @@ async fn no_proxy() -> Result<()> {
         .build()?;
 
     // Make a request to the target.
-    let response = client
-        .for_host(&target_server.uri().parse()?)
-        .get(target_server.uri())
-        .send()
-        .await?;
+    let target_url = SafeUrl::parse_relaxed(&target_server.uri())?;
+    let response = client.for_host(&target_url).get(target_url).send().await?;
 
     assert_eq!(response.status(), 200);
 

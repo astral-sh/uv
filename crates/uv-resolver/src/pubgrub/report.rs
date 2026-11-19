@@ -1,10 +1,12 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::error::Error;
 use std::fmt::Write;
+use std::iter;
 use std::ops::Bound;
 
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use itertools::Itertools;
 use jiff::Timestamp;
 use owo_colors::OwoColorize;
@@ -14,8 +16,7 @@ use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
 use uv_distribution_types::{
-    IncompatibleDist, IncompatibleSource, IncompatibleWheel, Index, IndexCapabilities,
-    IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
+    Index, IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
@@ -24,17 +25,17 @@ use uv_platform_tags::{AbiTag, IncompatibleTag, LanguageTag, PlatformTag, Tags};
 
 use crate::candidate_selector::CandidateSelector;
 use crate::error::{ErrorTree, PrefixMatch};
-use crate::exclude_newer::EffectiveExcludeNewerSource;
 use crate::fork_indexes::ForkIndexes;
 use crate::fork_urls::ForkUrls;
 use crate::prerelease::PrereleaseSelection;
+use crate::prioritized_distribution::{IncompatibleDist, IncompatibleSource, IncompatibleWheel};
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, PubGrubPython, Range};
 use crate::python_requirement::{PythonRequirement, PythonRequirementSource};
 use crate::resolver::{
-    MetadataUnavailable, UnavailableErrorChain, UnavailablePackage, UnavailableReason,
-    UnavailableVersion,
+    MetadataUnavailable, UnavailablePackage, UnavailableReason, UnavailableVersion,
 };
 use crate::{Flexibility, InMemoryIndex, Options, ResolverEnvironment, VersionsResponse};
+use uv_configuration::EffectiveExcludeNewerSource;
 
 type ReportDerived = Derived<PubGrubPackage, Range<Version>, UnavailableReason>;
 
@@ -341,6 +342,15 @@ impl ReportFormatter<PubGrubPackage, Range<Version>, UnavailableReason>
                 }
             }
             External::FromDependencyOf(package, package_set, dependency, dependency_set) => {
+                if package == dependency {
+                    let range = self.compatible_range(package, package_set);
+                    return if range.plural() {
+                        format!("{range} have incompatible dependencies on themselves")
+                    } else {
+                        format!("{range} has an incompatible dependency on itself")
+                    };
+                }
+
                 if package.name_no_root() == dependency.name_no_root() {
                     if let Some(member) = self.format_workspace_member(package) {
                         return format!(
@@ -604,10 +614,10 @@ impl PubGrubReportFormatter<'_> {
     fn format_workspace_member(&self, package: &PubGrubPackage) -> Option<Cow<'static, str>> {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package {
-                name, extra, group, ..
-            } if self.workspace_members.contains(name) => {
-                if self.is_single_project_workspace() && extra.is_none() && group.is_none() {
+            PubGrubPackageInner::Package { name, kind, .. }
+                if self.workspace_members.contains(name) =>
+            {
+                if self.is_single_project_workspace() && kind.is_base() {
                     Some(Cow::Borrowed("your project"))
                 } else {
                     Some(Cow::Owned(format!("{package}")))
@@ -632,10 +642,10 @@ impl PubGrubReportFormatter<'_> {
     fn is_single_project_workspace_member(&self, package: &PubGrubPackage) -> bool {
         match &**package {
             // TODO(zanieb): Improve handling of dev and extra for single-project workspaces
-            PubGrubPackageInner::Package {
-                name, extra, group, ..
-            } if self.workspace_members.contains(name) => {
-                self.is_single_project_workspace() && extra.is_none() && group.is_none()
+            PubGrubPackageInner::Package { name, kind, .. }
+                if self.workspace_members.contains(name) =>
+            {
+                self.is_single_project_workspace() && kind.is_base()
             }
             _ => false,
         }
@@ -841,6 +851,14 @@ impl PubGrubReportFormatter<'_> {
                 }
                 DerivationTree::External(External::NoVersions(package, set)) => {
                     if let Some(name) = package.name_no_root() {
+                        // Check for index wheels discarded because they name a different package.
+                        if !fork_urls.contains_key(name)
+                            && let Some(hint) =
+                                Self::mismatched_wheel_hint(name, index, fork_indexes)
+                        {
+                            output_hints.insert(hint);
+                        }
+
                         // Check for no versions due to pre-release options.
                         if !fork_urls.contains_key(name) {
                             self.prerelease_hint(
@@ -873,7 +891,7 @@ impl PubGrubReportFormatter<'_> {
                                 .exclude_newer
                                 .exclude_newer_package_for_index_with_source(
                                     name,
-                                    index_locations.exclude_newer_for(index.url()),
+                                    index_locations.exclude_newer_for(index.url(), name),
                                 )
                         } else {
                             options
@@ -1043,6 +1061,35 @@ impl PubGrubReportFormatter<'_> {
         exclude_newer_ranges
     }
 
+    /// Report an index entry that was discarded because it named a different project.
+    fn mismatched_wheel_hint(
+        name: &PackageName,
+        index: &InMemoryIndex,
+        fork_indexes: &ForkIndexes,
+    ) -> Option<PubGrubHint> {
+        let response = if let Some(url) = fork_indexes.get(name).map(IndexMetadata::url) {
+            index.explicit().get(&(name.clone(), url.clone()))
+        } else {
+            index.implicit().get(name)
+        }?;
+
+        let VersionsResponse::Found(version_maps) = &*response else {
+            return None;
+        };
+
+        let (actual, index) = version_maps.iter().find_map(|version_map| {
+            Some((
+                version_map.mismatched_wheel_name()?,
+                version_map.index()?.clone(),
+            ))
+        })?;
+        Some(PubGrubHint::MismatchedWheelName {
+            package: name.clone(),
+            actual,
+            index,
+        })
+    }
+
     /// Return the latest version in `set` that is available for resolver error reporting,
     /// along with the earliest known publish date for that version.
     fn exclude_newer_version_hint(
@@ -1123,7 +1170,7 @@ impl PubGrubReportFormatter<'_> {
         let prioritized = candidate.prioritized()?;
 
         match tag {
-            IncompatibleTag::Invalid => None,
+            IncompatibleTag::Invalid | IncompatibleTag::Variant => None,
             IncompatibleTag::Python => {
                 let best = tags.and_then(Tags::python_tag);
                 let tags = prioritized.python_tags().collect::<BTreeSet<_>>();
@@ -1216,13 +1263,17 @@ impl PubGrubReportFormatter<'_> {
             Some(UnavailablePackage::Offline) => {
                 hints.insert(PubGrubHint::Offline);
             }
-            Some(UnavailablePackage::InvalidMetadata(reason)) => {
+            Some(
+                reason @ (UnavailablePackage::InvalidMetadata(_)
+                | UnavailablePackage::InvalidVariantMetadata(_)
+                | UnavailablePackage::InconsistentMetadata(_)),
+            ) => {
                 hints.insert(PubGrubHint::InvalidPackageMetadata {
                     package: name.clone(),
                     reason: reason.clone(),
                 });
             }
-            Some(UnavailablePackage::InvalidStructure(reason)) => {
+            Some(reason @ UnavailablePackage::InvalidStructure(_)) => {
                 hints.insert(PubGrubHint::InvalidPackageStructure {
                     package: name.clone(),
                     reason: reason.clone(),
@@ -1247,6 +1298,13 @@ impl PubGrubReportFormatter<'_> {
                             hints.insert(PubGrubHint::Offline);
                         }
                         MetadataUnavailable::InvalidMetadata(reason) => {
+                            hints.insert(PubGrubHint::InvalidVersionMetadata {
+                                package: name.clone(),
+                                version: version.clone(),
+                                reason: reason.to_string(),
+                            });
+                        }
+                        MetadataUnavailable::InvalidVariantMetadata(reason) => {
                             hints.insert(PubGrubHint::InvalidVersionMetadata {
                                 package: name.clone(),
                                 version: version.clone(),
@@ -1316,19 +1374,53 @@ impl PubGrubReportFormatter<'_> {
             }
         }
 
-        // Add hints due to an index returning an unauthorized response.
+        // Add hints due to an index or its proxy returning an authentication error.
+        Self::authentication_hints(
+            index_locations,
+            index_capabilities,
+            available_indexes,
+            hints,
+        );
+    }
+
+    fn authentication_hints(
+        index_locations: &IndexLocations,
+        index_capabilities: &IndexCapabilities,
+        available_indexes: &FxHashMap<PackageName, BTreeSet<IndexUrl>>,
+        hints: &mut IndexSet<PubGrubHint>,
+    ) {
+        let mut indexes = IndexMap::<IndexUrl, bool>::new();
+
         for index in index_locations.allowed_indexes() {
-            if index_capabilities.unauthorized(&index.url) {
+            indexes
+                .entry(index_locations.effective_url(&index.url).clone())
+                .or_default();
+        }
+        for route in index_locations.proxy_routes() {
+            indexes.entry(route.effective_url().clone()).or_default();
+        }
+
+        for canonical in available_indexes.values().flatten() {
+            if let Some(any_successful_response) =
+                indexes.get_mut(index_locations.effective_url(canonical))
+            {
+                *any_successful_response = true;
+            }
+        }
+
+        for (index, any_successful_response) in indexes {
+            if index_capabilities.unauthorized(&index) {
                 hints.insert(PubGrubHint::UnauthorizedIndex {
-                    index: index.url.clone(),
+                    index: index.clone(),
                 });
             }
-            if index_capabilities.forbidden(&index.url) {
+            if index_capabilities.forbidden(&index) {
                 hints.insert(PubGrubHint::ForbiddenIndex {
-                    index: index.url.clone(),
-                    any_successful_response: available_indexes
-                        .values()
-                        .any(|indexes| indexes.contains(&index.url)),
+                    is_proxy: index_locations
+                        .proxy_routes()
+                        .any(|route| route.effective_url() == &index),
+                    index,
+                    any_successful_response,
                 });
             }
         }
@@ -1445,18 +1537,13 @@ fn requests_prerelease(range: &Range<Version>) -> bool {
             return true;
         }
 
-        let is_pre2 = match end {
+        match end {
             Bound::Included(version) => version.any_prerelease(),
             Bound::Excluded(version) => {
                 version.any_prerelease() && !is_compatible_release_upper_bound(version)
             }
             Bound::Unbounded => false,
-        };
-        if is_pre2 {
-            return true;
         }
-
-        false
     })
 }
 
@@ -1477,6 +1564,14 @@ pub struct ExcludeNewerVersionDetail {
 
 #[derive(Debug, Clone)]
 pub enum PubGrubHint {
+    /// An index listed a wheel for a different project.
+    MismatchedWheelName {
+        package: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        actual: PackageName,
+        // excluded from `PartialEq` and `Hash`
+        index: IndexUrl,
+    },
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///
@@ -1519,13 +1614,13 @@ pub enum PubGrubHint {
     InvalidPackageMetadata {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The structure of a package was invalid (e.g., multiple `.dist-info` directories).
     InvalidPackageStructure {
         package: PackageName,
         // excluded from `PartialEq` and `Hash`
-        reason: UnavailableErrorChain,
+        reason: UnavailablePackage,
     },
     /// The package metadata could not be fetched due to a network error.
     InvalidPackageNetwork {
@@ -1631,6 +1726,8 @@ pub enum PubGrubHint {
         index: IndexUrl,
         // excluded from `PartialEq` and `Hash`
         any_successful_response: bool,
+        // excluded from `PartialEq` and `Hash`
+        is_proxy: bool,
     },
     /// None of the available wheels for a package have a compatible Python language tag (e.g.,
     /// `cp310` in `cp310-abi3-manylinux_2_17_x86_64.whl`).
@@ -1686,6 +1783,9 @@ pub enum PubGrubHint {
 /// `Hash` implementations for [`PubGrubHint`].
 #[derive(PartialEq, Eq, Hash)]
 enum PubGrubHintCore {
+    MismatchedWheelName {
+        package: PackageName,
+    },
     PrereleaseAvailable {
         package: PackageName,
     },
@@ -1773,6 +1873,9 @@ impl From<PubGrubHint> for PubGrubHintCore {
     #[inline]
     fn from(hint: PubGrubHint) -> Self {
         match hint {
+            PubGrubHint::MismatchedWheelName { package, .. } => {
+                Self::MismatchedWheelName { package }
+            }
             PubGrubHint::PrereleaseAvailable { package, .. } => {
                 Self::PrereleaseAvailable { package }
             }
@@ -1868,6 +1971,19 @@ impl Eq for PubGrubHint {}
 impl std::fmt::Display for PubGrubHint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::MismatchedWheelName {
+                package,
+                actual,
+                index,
+            } => {
+                write!(
+                    f,
+                    "The index at `{}` listed a wheel for `{}` when queried for `{}`; the wheel was ignored",
+                    index.without_credentials().cyan(),
+                    actual.cyan(),
+                    package.cyan(),
+                )
+            }
             Self::PrereleaseAvailable {
                 package,
                 version,
@@ -1940,20 +2056,20 @@ impl std::fmt::Display for PubGrubHint {
                 )
             }
             Self::InvalidPackageMetadata { package, reason } => {
-                write!(
-                    f,
-                    "Metadata for `{}` could not be parsed.\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "Metadata for `{}` could not be parsed.", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageStructure { package, reason } => {
-                write!(
-                    f,
-                    "The structure of `{}` was invalid\n{}",
-                    package.cyan(),
-                    textwrap::indent(reason.to_string().as_str(), "  ")
-                )
+                writeln!(f, "The structure of `{}` was invalid", package.cyan())?;
+                for source in iter::successors(reason.source(), |&error| error.source()) {
+                    let message = format!("Caused by: {}", source.to_string().trim());
+                    writeln!(f, "{}", textwrap::indent(&message, "  "))?;
+                }
+                Ok(())
             }
             Self::InvalidPackageNetwork { package, status } => {
                 write!(
@@ -2163,11 +2279,17 @@ impl std::fmt::Display for PubGrubHint {
             Self::ForbiddenIndex {
                 index,
                 any_successful_response,
+                is_proxy,
             } => {
                 if *any_successful_response {
+                    let entry = if *is_proxy {
+                        "[[tool.uv.proxy-index]]"
+                    } else {
+                        "[[tool.uv.index]]"
+                    };
                     write!(
                         f,
-                        "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.index]]` entry to continue searching across indexes.",
+                        "An index ({}) returned a {} error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `{entry}` entry to continue searching across indexes.",
                         index.without_credentials().cyan(),
                         "403 Forbidden".red(),
                     )
@@ -2780,9 +2902,13 @@ fn padded<'a, T: std::fmt::Display + ?Sized>(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use pubgrub::{DefaultStringReporter, Reporter};
-    use uv_distribution_types::RequiresPython;
+    use uv_distribution_types::{IndexName, IndexStatusCodeStrategy, ProxyIndex, RequiresPython};
     use uv_pep508::{MarkerEnvironment, MarkerEnvironmentBuilder};
+    use uv_redacted::SafeUrl;
+    use uv_redacted::policy::Stripped;
 
     use super::*;
 
@@ -2842,6 +2968,155 @@ mod tests {
                 tags: None,
             }
         }
+    }
+
+    #[test]
+    fn proxy_authentication_hints_use_physical_indexes() -> Result<(), Box<dyn std::error::Error>> {
+        let canonical = IndexUrl::from_str(
+            "https://canonical-user:canonical-secret@canonical.example.com/simple",
+        )?;
+        let redacted_canonical = IndexUrl::from_str("https://canonical.example.com/simple")?;
+        let physical =
+            IndexUrl::from_str("https://proxy-user:proxy-secret@proxy.example.com/simple")?;
+        let unrelated = IndexUrl::from_str("https://unrelated.example.com/simple")?;
+
+        let name = IndexName::from_str("canonical")?;
+
+        let mut index = Index::from_extra_index_url(canonical);
+        index.name = Some(name.clone());
+        index.artifact_base_url =
+            Some(SafeUrl::parse("https://canonical.example.com/packages/")?.with_policy(Stripped));
+
+        let mut proxy = ProxyIndex::new(
+            physical.clone(),
+            name,
+            SafeUrl::parse("https://proxy-user:proxy-secret@proxy.example.com/files/")?
+                .with_policy(Stripped),
+        );
+        proxy.name = Some(IndexName::from_str("proxy")?);
+
+        let index_locations = IndexLocations::new(vec![index], vec![proxy], Vec::new(), false)?;
+
+        let index_capabilities = IndexCapabilities::default();
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &physical,
+            &index_capabilities,
+        );
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::FORBIDDEN,
+            &physical,
+            &index_capabilities,
+        );
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &unrelated,
+            &index_capabilities,
+        );
+
+        let available_indexes = FxHashMap::from_iter([
+            (
+                PackageName::from_str("example")?,
+                BTreeSet::from([redacted_canonical]),
+            ),
+            (
+                PackageName::from_str("unrelated")?,
+                BTreeSet::from([unrelated]),
+            ),
+        ]);
+        let mut hints = IndexSet::new();
+
+        PubGrubReportFormatter::authentication_hints(
+            &index_locations,
+            &index_capabilities,
+            &available_indexes,
+            &mut hints,
+        );
+
+        for hint in &hints {
+            let rendered = hint.to_string();
+            assert!(!rendered.contains("canonical-user"));
+            assert!(!rendered.contains("canonical-secret"));
+            assert!(!rendered.contains("proxy-user"));
+            assert!(!rendered.contains("proxy-secret"));
+            if let PubGrubHint::ForbiddenIndex { .. } = hint {
+                insta::with_settings!({ filters => [(r"\x1b\[[0-9;]*m", "")] }, {
+                    insta::assert_snapshot!(rendered, @"An index (https://proxy.example.com/simple) returned a 403 Forbidden error, but uv received a successful response from another request to the index. If the failing package is not present on this index, consider adding `ignore-error-codes = [403]` to the index's `[[tool.uv.proxy-index]]` entry to continue searching across indexes.");
+                });
+            }
+        }
+
+        let hints = hints
+            .iter()
+            .map(|hint| match hint {
+                PubGrubHint::UnauthorizedIndex { index } => Ok((
+                    "unauthorized",
+                    index.without_credentials().to_string(),
+                    None,
+                )),
+                PubGrubHint::ForbiddenIndex {
+                    index,
+                    any_successful_response,
+                    is_proxy: _,
+                } => Ok((
+                    "forbidden",
+                    index.without_credentials().to_string(),
+                    Some(*any_successful_response),
+                )),
+                _ => Err(std::io::Error::other("unexpected authentication hint")),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        insta::assert_debug_snapshot!(hints, @r#"
+        [
+            (
+                "unauthorized",
+                "https://proxy.example.com/simple",
+                None,
+            ),
+            (
+                "forbidden",
+                "https://proxy.example.com/simple",
+                Some(
+                    true,
+                ),
+            ),
+        ]
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn proxy_authentication_hints_respect_no_index() -> Result<(), Box<dyn std::error::Error>> {
+        let physical = IndexUrl::from_str("https://proxy.example.com/simple")?;
+
+        let mut proxy = ProxyIndex::new(
+            physical.clone(),
+            IndexName::from_str("upstream")?,
+            SafeUrl::parse("https://proxy.example.com/files/")?.with_policy(Stripped),
+        );
+        proxy.name = Some(IndexName::from_str("proxy")?);
+
+        let index_locations = IndexLocations::new(Vec::new(), vec![proxy], Vec::new(), true)?;
+        let index_capabilities = IndexCapabilities::default();
+        let _ = IndexStatusCodeStrategy::Default.handle_status_code(
+            StatusCode::UNAUTHORIZED,
+            &physical,
+            &index_capabilities,
+        );
+
+        let mut hints = IndexSet::new();
+        PubGrubReportFormatter::authentication_hints(
+            &index_locations,
+            &index_capabilities,
+            &FxHashMap::default(),
+            &mut hints,
+        );
+
+        assert!(hints.is_empty());
+
+        Ok(())
     }
 
     #[test]

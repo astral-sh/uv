@@ -13,9 +13,17 @@ on:
 
 permissions: {}
 
+env:
+  ACTIONS_CACHE_MODE: none
+  UV_LOCKED: 1
+  UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+
 jobs:
   publish-versions:
-    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # for the credential broker
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     environment:
       name: release
     env:
@@ -28,11 +36,27 @@ jobs:
       - name: "Set branch name"
         run: echo "BRANCH_NAME=update-versions-$VERSION-$(date +%s)" >> $GITHUB_ENV
 
-      - name: "Clone versions repo"
-        run: git clone https://${{ secrets.ASTRAL_VERSIONS_PAT }}@github.com/astral-sh/versions.git astral-versions
+      - name: "Get versions token"
+        id: token
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        with:
+          exchange-url: ${{ secrets.RELEASES_STS_API_URL }}/exchange
+          audience: ${{ secrets.RELEASES_STS_API_URL }}
+          repository: astral-sh/versions
+          permissions: |
+            contents: write
+            pull_requests: write
 
-      - name: "Install uv"
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: "Checkout versions repo"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: astral-sh/versions
+          ref: main
+          path: astral-versions
+          token: ${{ steps.token.outputs.token }}
+          persist-credentials: false
+
+      - uses: $/.github/actions/setup-uv-toolchain
 
       - name: "Update versions"
         env:
@@ -42,8 +66,8 @@ jobs:
       - name: "Commit versions"
         working-directory: astral-versions
         run: |
-          git config user.name "astral-versions-bot"
-          git config user.email "176161322+astral-versions-bot@users.noreply.github.com"
+          git config user.name "astral-releases-bot[bot]"
+          git config user.email "328004183+astral-releases-bot[bot]@users.noreply.github.com"
 
           git checkout -b "$BRANCH_NAME"
           git add -A
@@ -52,13 +76,14 @@ jobs:
       - name: "Create Pull Request"
         working-directory: astral-versions
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_VERSIONS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           pull_request_title="Add uv $VERSION"
 
           gh pr list --state open --json title --jq ".[] | select(.title == \"$pull_request_title\") | .number" | \
             xargs -I {} gh pr close {}
 
+          gh auth setup-git
           git push origin "$BRANCH_NAME"
 
           gh pr create --base main --head "$BRANCH_NAME" \
@@ -70,8 +95,9 @@ jobs:
         if: ${{ !fromJson(inputs.plan).announcement_tag_is_implicit }}
         working-directory: astral-versions
         env:
-          GITHUB_TOKEN: ${{ secrets.ASTRAL_VERSIONS_PAT }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
           # Wait for PR to be created before merging
           sleep 10
-          gh pr merge --squash "$BRANCH_NAME"
+          # Use admin to bypass required review
+          gh pr merge --squash --admin "$BRANCH_NAME"

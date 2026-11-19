@@ -1,7 +1,7 @@
 FROM --platform=$BUILDPLATFORM ubuntu:24.04@sha256:d1e2e92c075e5ca139d51a140fff46f84315c0fdce203eab2807c7e495eff4f9 AS build
 
 ARG UBUNTU_SNAPSHOT=20260301T000000Z
-ARG RUSTUP_VERSION=1.28.1
+ARG RUSTUP_VERSION=1.29.2
 
 ENV HOME="/root"
 WORKDIR $HOME
@@ -46,6 +46,8 @@ RUN rustup toolchain install
 RUN rustup target add $(cat rust_target.txt)
 
 # Build
+# Build the AWS-LC version pinned in Cargo.lock, not a system installation.
+ENV AWS_LC_SYS_USE_SYSTEM=0
 COPY crates crates
 COPY ./Cargo.toml Cargo.toml
 COPY ./Cargo.lock Cargo.lock
@@ -59,7 +61,7 @@ RUN cargo install \
 RUN case "${TARGETPLATFORM}" in \
   "linux/arm64") export JEMALLOC_SYS_WITH_LG_PAGE=16;; \
   esac && \
-  cargo auditable zigbuild --bin uv --bin uvx --target $(cat rust_target.txt) --release
+  cargo auditable zigbuild --locked --bin uv --bin uvx --target $(cat rust_target.txt) --release
 RUN cp target/$(cat rust_target.txt)/release/uv /uv \
   && cp target/$(cat rust_target.txt)/release/uvx /uvx
 # TODO(konsti): Optimize binary size, with a version that also works when cross compiling

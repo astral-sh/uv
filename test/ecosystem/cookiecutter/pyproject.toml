@@ -1,0 +1,225 @@
+[project]
+name = "cookiecutter"
+version = "2.7.1"
+description = "A command-line utility that creates projects from project templates, e.g. creating a Python package project from a Python package project template."
+readme = "README.md"
+authors = [{ name = "Audrey M. Roy Greenfeld", email = "audrey@feldroy.com" }]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python",
+    "Topic :: Software Development",
+]
+keywords = [
+    "cookiecutter",
+    "Python",
+    "projects",
+    "project templates",
+    "Jinja2",
+    "skeleton",
+    "scaffolding",
+    "project directory",
+    "package",
+    "packaging",
+]
+dependencies = [
+    "binaryornot>=0.4.4",
+    "Jinja2>=2.7,<4.0.0",
+    "click>=7.0,<9.0.0",
+    "pyyaml>=5.3.1",
+    "python-slugify>=4.0.0",
+    "requests>=2.23.0",
+    "arrow",
+    "rich",
+]
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/cookiecutter/cookiecutter"
+Documentation = "https://cookiecutter.readthedocs.io"
+Issues = "https://github.com/cookiecutter/cookiecutter/issues"
+Discord = "https://discord.gg/9BrxzPKuEW"
+
+[project.scripts]
+cookiecutter = "cookiecutter.__main__:main"
+
+[dependency-groups]
+dev = [
+    "uv",                       # Is needed by justfile tasks
+    "rust-just>=1.42.3",        # Justfile tasks
+    { include-group = "test" }, # test runner and helpers
+]
+
+docs = [
+    "sphinx",
+    "sphinx_click",
+    "myst_parser",
+    "sphinx_autodoc_typehints",
+    "sphinxcontrib.apidoc",
+    "sphinx_rtd_theme",
+    "sphinx-autobuild",
+]
+
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+    "freezegun",
+]
+
+lint = [
+    "ruff",
+    "safety",
+]
+
+[tool.pytest.ini_options]
+testpaths = "tests"
+addopts = "-vvv --cov-report term-missing --cov=cookiecutter"
+
+[tool.doc8]
+# TODO: Remove current max-line-length ignore in follow-up and adopt black limit.
+# max-line-length = 88
+ignore = ["D001"]
+
+[tool.ruff]
+
+target-version = "py310"
+
+[tool.ruff.lint]
+
+select = [
+    "A", # flake8-builtins
+    #    "ANN", # flake8-annotations
+    "ARG",   # flake8-unused-arguments
+    "ASYNC", # flake8-async
+    "B",     # flake8-bugbear
+    #    "BLE",    # flake8-blind-except
+    "C4", # flake8-comprehensions
+    #    "C90",    # cognitive complexity
+    #    "COM",    # flake8-commas
+    #    "D", # pydocstyle
+    "DTZ", # flake8-datetimez
+    "E",   # pycodestyle errors
+    "EM",  # flake8-errmsg
+    #    "ERA",    # flake8-eradicate
+    "EXE", # flake8-executable
+    "F",   # pyflakes
+    "FA",  # flake8-future-annotations
+    #    "FBT",    # boolean trap
+    "FLY",  # flynt
+    "FURB", # refurb
+    #    "G",      # flake8-logging-format
+    "I",    # isort
+    "ICN",  # flake8-import-conventions
+    "INT",  # flake8-gettext
+    "ISC",  # implicit-str-concat
+    "LOG",  # flake8-logging
+    "N",    # pep8-naming
+    "PERF", # perflint
+    "PGH",  # pygrep-hooks
+    "PIE",  # flake8-pie
+    #    "PL",     # pylint
+    #    "PT",     # flake8-pytest-style
+    #    "PTH",    # flake8-use-pathlib
+    #    "PYI",    # flake8-pyi
+    #    "Q",      # flake8-quotes
+    "RET",  # flake8-return
+    "RSE",  # flake8-raise
+    "RUF",  # Ruff-specific lints
+    "S",    # flake8-bandit
+    "SIM",  # flake8-simplify
+    "SLF",  # flake8-self
+    "SLOT", # flake8-slots
+    #    "T20",    # flake8-print
+    "TCH", # flake8-type-checking
+    "TID", # ban relative imports
+    "TRY", # tryceratops
+    "UP",  # pyupgrade
+    "W",   # pycodestyle warnings
+    "YTT", # flake8-2020
+]
+
+# pydocstyle.convention = "google"
+
+ignore = [
+    "B028",   # No explicit `stacklevel` keyword argument found
+    "COM812", # ignore when using ruff-format
+    "G004",   # Logging statement uses f-string
+    "ISC001", # ignore when using ruff-format
+    "N818",   # Exception name should be named with an Error suffix
+    "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
+    "S404",   # `subprocess` module is possibly insecure
+    "TC003",  # Ignore request to put Iterable into TYPE CHECKING block
+]
+
+exclude = ["tests/**/hooks/*"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "D104", # Missing docstring in public package
+    "D200", # One-line docstring should fit on one line with quotes
+    "S101", # use of assert
+    "S603", # `subprocess` call: check for execution of untrusted input"
+    "S106", # Possible hardcoded password assigned to argument: "password"
+    "S108", # Probable insecure usage of temporary file or directory: "/tmp"
+]
+"cookiecutter/*" = [
+    "S603", # `subprocess` call: check for execution of untrusted input"
+]
+"docs/conf.py" = ["A001", "D100"]
+
+[tool.ruff.format]
+
+quote-style = "preserve"
+exclude = ["tests/hooks-abort-render/hooks/*"]
+
+
+[tool.mypy]
+strict = true
+show_error_codes = true
+files = ["cookiecutter", "tests"]
+exclude = "(?x)(/hooks/ | tests/test-output-folder/)"
+no_implicit_reexport = true
+
+
+[[tool.mypy.overrides]]
+module = [
+    "cookiecutter.prompt",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+]
+disable_error_code = ["no-untyped-def"]
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:"]
+
+[tool.coverage.run]
+omit = [
+    "cookiecutter/__main__.py",
+]
+
+[tool.uv]
+# Treat this repo as an installable *package*, not just a “virtual” project.
+# Result: `uv sync` / `uv run` will install *this library itself* into the venv in
+# editable (meaning: linked to your working tree) mode, not only its dependencies.
+# This enables entry points (meaning: auto-created CLI scripts), plugin discovery,
+# and proper distribution metadata (meaning: standard package info used by tools).
+package = true
+
+[tool.setuptools]
+packages = ["cookiecutter"]

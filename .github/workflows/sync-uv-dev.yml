@@ -11,18 +11,23 @@ concurrency:
   group: sync-uv-dev-main
   cancel-in-progress: false
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   sync:
     name: Sync uv-dev
     if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-slim
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    environment:
+      name: automations
+      deployment: false
     permissions:
       id-token: write # for the credential broker
     steps:
       - name: Get uv-dev token
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

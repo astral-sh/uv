@@ -9,34 +9,46 @@ on:
         type: string
         default: "true"
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 jobs:
   cargo-dev-generate-all:
     timeout-minutes: 10
-    runs-on: ubuntu-latest
-    name: "cargo dev generate-all"
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    name: "check generated files"
+    env:
+      RUSTC_BOOTSTRAP: "1"
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          enable-cache: auto
+      - name: "Install Rust toolchain"
+        run: rustup toolchain install --profile minimal
+
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-      - name: "Generate all"
-        run: cargo dev generate-all --mode dry-run
       - name: "Check sysconfig mappings"
-        run: cargo dev generate-sysconfig-metadata --mode check
+        run: cargo --locked dev generate-sysconfig-metadata --mode check
       - name: "Install Rustfmt"
         run: rustup component add rustfmt
       - name: "Check Packse scenario tests"
-        run: cargo dev generate-scenario-tests --mode check
+        run: cargo --locked dev generate-scenario-tests --mode check
       - name: "Check JSON schema"
-        if: ${{ inputs.schema-changed == 'true' }}
-        run: cargo dev generate-json-schema --mode check
+        env:
+          SCHEMA_MODE: ${{ inputs.schema-changed == 'true' && 'check' || 'dry-run' }}
+        run: cargo --locked dev generate-json-schema --mode "$SCHEMA_MODE" > /dev/null
+      - name: "Check uv-extract dirhash test vectors"
+        run: cargo --locked dev generate-dirhash-test-vectors --mode check

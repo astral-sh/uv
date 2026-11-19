@@ -12,9 +12,9 @@ use clap::Parser;
 use criterion::{Criterion, criterion_group, criterion_main, measurement::WallTime};
 
 use uv::GlobalInitialization;
-use uv::commands::ExitStatus;
 use uv_cache::Cache;
 use uv_cli::Cli;
+use uv_command_support::ExitStatus;
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
 const EXCLUDE_NEWER: &str = "2024-08-08";
@@ -352,6 +352,8 @@ fn run_python_version_cli(workspace_dir: &str, cache_dir: &str, offline: bool) -
     let mut args = vec![
         "uv",
         "run",
+        // The synthetic workspace needs to create and update its own lockfile.
+        "--no-locked",
         "--directory",
         workspace_dir,
         "--cache-dir",

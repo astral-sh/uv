@@ -1,5 +1,8 @@
 # /// script
 # requires-python = ">=3.12"
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
 # ///
 
 """Replace the latest changelog section."""

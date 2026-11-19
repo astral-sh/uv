@@ -13,11 +13,13 @@ use uv_dirs::user_executable_directory;
 use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified};
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
-use uv_normalize::{InvalidNameError, PackageName};
+use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_python::{BrokenLink, Interpreter, PythonEnvironment};
+use uv_python_interpreter::{BrokenLink, Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
+use uv_virtualenv::UpgradePolicy;
+use uv_warnings::warn_user;
 
 pub(crate) use receipt::ToolReceipt;
 pub use tool::{Tool, ToolEntrypoint};
@@ -66,9 +68,9 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error(transparent)]
     LockedFile(#[from] LockedFileError),
-    #[error("Failed to update `uv-receipt.toml` at {0}")]
+    #[error("Failed to update `uv-receipt.toml` at `{0}`")]
     ReceiptWrite(PathBuf, #[source] Box<toml_edit::ser::Error>),
-    #[error("Failed to read `uv-receipt.toml` at {0}")]
+    #[error("Failed to read `uv-receipt.toml` at `{0}`")]
     ReceiptRead(PathBuf, #[source] Box<toml::de::Error>),
     #[error(transparent)]
     VirtualEnvError(#[from] uv_virtualenv::Error),
@@ -77,10 +79,8 @@ pub enum Error {
     #[error("Failed to find a directory to install executables into")]
     NoExecutableDirectory,
     #[error(transparent)]
-    ToolName(#[from] InvalidNameError),
-    #[error(transparent)]
-    EnvironmentError(#[from] uv_python::Error),
-    #[error("Failed to find a receipt for tool `{0}` at {1}")]
+    EnvironmentError(#[from] uv_python_interpreter::PythonEnvironmentError),
+    #[error("Failed to find a receipt for tool `{0}` at `{1}`")]
     MissingToolReceipt(String, PathBuf),
     #[error("Failed to read tool environment packages at `{0}`: {1}")]
     EnvironmentRead(PathBuf, String),
@@ -101,7 +101,6 @@ impl Error {
             | Self::VirtualEnvError(_)
             | Self::EntrypointRead(_)
             | Self::NoExecutableDirectory
-            | Self::ToolName(_)
             | Self::EnvironmentError(_)
             | Self::MissingToolReceipt(_, _)
             | Self::EnvironmentRead(_, _)
@@ -148,6 +147,8 @@ impl InstalledTools {
 
     /// Return the metadata for all installed tools.
     ///
+    /// Directories with invalid package names are skipped with a warning.
+    ///
     /// If a tool is present, but is missing a receipt or the receipt is invalid, the tool will be
     /// included with an error.
     ///
@@ -162,7 +163,13 @@ impl InstalledTools {
             else {
                 continue;
             };
-            let name = PackageName::from_str(name)?;
+            let Ok(name) = PackageName::from_str(name) else {
+                warn_user!(
+                    "Ignoring tool directory `{}` with an invalid package name; move it outside the tool directory, or remove it if no longer needed",
+                    directory.user_display()
+                );
+                continue;
+            };
             let path = directory.join("uv-receipt.toml");
             let contents = match fs_err::read_to_string(&path) {
                 Ok(contents) => contents,
@@ -219,7 +226,7 @@ impl InstalledTools {
         let path = self.tool_dir(name).join("uv-receipt.toml");
 
         debug!(
-            "Adding metadata entry for tool `{name}` at {}",
+            "Adding metadata entry for tool `{name}` at `{}`",
             path.user_display()
         );
 
@@ -246,7 +253,7 @@ impl InstalledTools {
         let environment_path = self.tool_dir(name);
 
         debug!(
-            "Deleting environment for tool `{name}` at {}",
+            "Deleting environment for tool `{name}` at `{}`",
             environment_path.user_display()
         );
 
@@ -276,10 +283,10 @@ impl InstalledTools {
                 );
                 Ok(Some(ToolEnvironment::new(venv, name.clone())))
             }
-            Err(uv_python::Error::MissingEnvironment(_)) => Ok(None),
-            Err(uv_python::Error::Query(uv_python::InterpreterError::NotFound(
-                interpreter_path,
-            ))) => {
+            Err(uv_python_interpreter::PythonEnvironmentError::MissingEnvironment(_)) => Ok(None),
+            Err(uv_python_interpreter::PythonEnvironmentError::Query(
+                uv_python_interpreter::InterpreterError::NotFound(interpreter_path),
+            )) => {
                 warn!(
                     "Ignoring existing virtual environment with missing Python interpreter: {}",
                     interpreter_path.user_display()
@@ -287,15 +294,17 @@ impl InstalledTools {
 
                 Ok(None)
             }
-            Err(uv_python::Error::Query(uv_python::InterpreterError::BrokenLink(BrokenLink {
-                path,
-                unix,
-                venv: _,
-            }))) => {
+            Err(uv_python_interpreter::PythonEnvironmentError::Query(
+                uv_python_interpreter::InterpreterError::BrokenLink(BrokenLink {
+                    path,
+                    unix,
+                    venv: _,
+                }),
+            )) => {
                 if unix {
                     let target_path = fs_err::read_link(&path)?;
                     warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {} -> {}",
+                        "Ignoring existing virtual environment linked to non-existent Python interpreter: `{}` -> `{}`",
                         path.user_display().cyan(),
                         target_path.user_display().cyan(),
                     );
@@ -348,7 +357,7 @@ impl InstalledTools {
             uv_virtualenv::OnExisting::Remove(uv_virtualenv::RemovalReason::ManagedEnvironment),
             false,
             uv_virtualenv::Seed::Disabled,
-            false,
+            UpgradePolicy::Fixed,
         )?;
 
         Ok(venv)

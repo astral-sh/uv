@@ -1,0 +1,15 @@
+[project]
+name = "pyx-member-10"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "pyx-member-22",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+    "urllib3==2.7.0",
+]

@@ -1,0 +1,20 @@
+[project]
+name = "pyx-member-22"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "aws-lambda-powertools==3.27.0",
+    "awslambdaric==4.0.0",
+    "boto3==1.42.88",
+    "pyx-member-29",
+    "sentry-sdk==2.57.0",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "pytest==9.0.3",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

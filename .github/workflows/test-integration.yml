@@ -6,7 +6,10 @@ on:
         required: true
         type: string
 
-permissions: {}
+permissions:
+  contents: read
+
+cache-mode: none
 
 env:
   CARGO_INCREMENTAL: 0
@@ -14,12 +17,13 @@ env:
   CARGO_TERM_COLOR: always
   PYTHON_VERSION: "3.12"
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 jobs:
   integration-test-nushell:
     name: "nushell"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,7 +51,7 @@ jobs:
           echo "${{ github.workspace }}/nu-${nu_tag}-x86_64-unknown-linux-gnu" >> "${GITHUB_PATH}"
 
       - name: Download binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -66,19 +70,20 @@ jobs:
   integration-test-conda:
     name: "conda on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
+      - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
         with:
           miniconda-version: latest
+          channels: defaults
           activate-environment: uv
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -100,17 +105,19 @@ jobs:
     timeout-minutes: 10
     runs-on: macos-15-intel # github-macos-15-x86_64-4
     steps:
+      - uses: astral-sh/github-actions/demudhra@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: conda-incubator/setup-miniconda@8ee1f361103df19b6f8c8655fd3967a8ecb162d5 # v4.0.1
+      - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
         with:
           miniconda-version: latest
+          channels: defaults
           activate-environment: uv
           python-version: "3.12"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-macos-x86_64-${{ inputs.sha }}
 
@@ -135,10 +142,11 @@ jobs:
   integration-test-deadsnakes-39-linux:
     name: "deadsnakes python3.9 on ubuntu"
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - name: "Install python3.9"
         run: |
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
           for i in {1..5}; do
             sudo add-apt-repository ppa:deadsnakes && break || { echo "Attempt $i failed, retrying in 10 seconds..."; sleep 10; }
             if [ $i -eq 5 ]; then
@@ -150,7 +158,7 @@ jobs:
           sudo apt-get install python3.9
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -188,7 +196,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-armv7-gnueabihf-${{ inputs.sha }}
 
@@ -228,7 +236,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -265,18 +273,64 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13t python -c ""
 
-  integration-test-windows-aarch64-implicit:
-    name: "aarch64 windows implicit"
+  integration-test-windows-aarch64-native:
+    name: "aarch64 python on aarch64 windows"
     timeout-minutes: 10
     runs-on: windows-11-arm
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-aarch64-${{ inputs.sha }}
 
-      - name: "Install Python via uv (implicitly select x64)"
+      - name: "Install Python via uv (implicitly select aarch64)"
+        run: |
+          ./uv python install -v 3.13
+
+      - name: "Create a virtual environment (stdlib)"
+        run: |
+          & (./uv python find 3.13) -m venv .venv
+
+      - name: "Check version (stdlib)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Create a virtual environment (uv)"
+        run: |
+          ./uv venv -c -p 3.13 --managed-python
+
+      - name: "Check version (uv)"
+        run: |
+          .venv/Scripts/python --version
+
+      - name: "Check is aarch64"
+        run: |
+          .venv/Scripts/python -c "import sys; exit(1) if 'ARM64' not in sys.version else exit(0)"
+
+      - name: "Check install"
+        run: |
+          ./uv pip install -v anyio
+
+      - name: "Check uv run"
+        run: |
+          ./uv run python -c ""
+          ./uv run -p 3.13 python -c ""
+
+  integration-test-windows-aarch64-emulated:
+    name: "x86-64 python on aarch64 windows"
+    timeout-minutes: 10
+    runs-on: windows-11-arm
+    env:
+      UV_PYTHON_ARCH: x86_64
+
+    steps:
+      - name: "Download binary"
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uv-windows-aarch64-${{ inputs.sha }}
+
+      - name: "Install Python via uv (select x64 from environment)"
         run: |
           ./uv python install -v 3.13
 
@@ -309,50 +363,6 @@ jobs:
           ./uv run python -c ""
           ./uv run -p 3.13 python -c ""
 
-  integration-test-windows-aarch64-explicit:
-    name: "aarch64 windows explicit"
-    timeout-minutes: 10
-    runs-on: windows-11-arm
-
-    steps:
-      - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: uv-windows-aarch64-${{ inputs.sha }}
-
-      - name: "Install Python via uv (explicitly select aarch64)"
-        run: |
-          ./uv python install -v cpython-3.13-windows-aarch64-none
-
-      - name: "Create a virtual environment (stdlib)"
-        run: |
-          & (./uv python find 3.13) -m venv .venv
-
-      - name: "Check version (stdlib)"
-        run: |
-          .venv/Scripts/python --version
-
-      - name: "Create a virtual environment (uv)"
-        run: |
-          ./uv venv -c -p 3.13 --managed-python
-
-      - name: "Check version (uv)"
-        run: |
-          .venv/Scripts/python --version
-
-      - name: "Check is NOT x64"
-        run: |
-          .venv/Scripts/python -c "import sys; exit(1) if 'AMD64' in sys.version else exit(0)"
-
-      - name: "Check install"
-        run: |
-          ./uv pip install -v anyio
-
-      - name: "Check uv run"
-        run: |
-          ./uv run python -c ""
-          ./uv run -p 3.13 python -c ""
-
   integration-test-windows-python-install-manager:
     name: "windows python install manager"
     timeout-minutes: 10
@@ -360,14 +370,14 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
       - name: "Install Python via Python Install manager"
         run: |
           # https://www.python.org/downloads/release/pymanager-250/
-          winget install --accept-package-agreements --accept-source-agreements 9NQ7512CXL7T
+          winget install --source msstore --accept-package-agreements --accept-source-agreements 9NQ7512CXL7T
           # Call Python Install Manager's py.exe by full path to avoid legacy py.exe
           & "$env:LOCALAPPDATA\Microsoft\WindowsApps\py.exe" install 3.14
 
@@ -387,7 +397,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -397,14 +407,14 @@ jobs:
   integration-test-pypy-linux:
     name: "pypy on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -462,7 +472,7 @@ jobs:
   integration-test-python-install-wine:
     name: "python install under wine"
     timeout-minutes: 15
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     env:
       WINEARCH: win64
       WINEDEBUG: -all
@@ -471,12 +481,13 @@ jobs:
     steps:
       - name: "Install Wine"
         run: |
+          sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
           echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends wine wine64
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -500,7 +511,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -555,14 +566,14 @@ jobs:
   integration-test-graalpy-linux:
     name: "graalpy on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -629,7 +640,7 @@ jobs:
 
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -679,14 +690,14 @@ jobs:
   integration-test-pyodide-linux:
     name: "pyodide on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -711,9 +722,14 @@ jobs:
 
       - name: "Create Pyodide virtual environment"
         run: |
-          ./uv venv -p $PYODIDE_PYTHON venv-pyodide
-          source ./venv-pyodide/bin/activate
-          ./uv pip install --extra-index-url=$PYODIDE_INDEX --no-build numpy
+          # The bundled Pyodide index does not include upload dates, so run outside the
+          # repository to avoid applying its exclude-newer setting.
+          PYODIDE_VENV="$RUNNER_TEMP/venv-pyodide"
+          ./uv venv -p "$PYODIDE_PYTHON" "$PYODIDE_VENV"
+          source "$PYODIDE_VENV/bin/activate"
+          ./uv --directory "$RUNNER_TEMP" pip install \
+            --extra-index-url="$PYODIDE_INDEX" \
+            --no-build numpy
           python -c 'import numpy'
 
       - name: "Install Pyodide with uv python"
@@ -740,7 +756,7 @@ jobs:
       PYODIDE_XBUILDENV_PATH: D:\pyodide-xbuildenv
     steps:
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-windows-x86_64-${{ inputs.sha }}
 
@@ -768,14 +784,14 @@ jobs:
   integration-test-termux:
     name: "termux on android"
     timeout-minutes: 15
-    runs-on: ubuntu-24.04
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-24.04' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-musl-${{ inputs.sha }}
 
@@ -790,17 +806,49 @@ jobs:
             ghcr.io/astral-sh/termux-python:latest \
             /entrypoint.sh bash /test-termux.sh
 
+  integration-test-windows-nanoserver:
+    name: "windows nanoserver"
+    timeout-minutes: 15
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Download binary"
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uv-windows-x86_64-${{ inputs.sha }}
+
+      - name: "Start Docker"
+        # Docker can fail to start during runner boot.
+        # https://github.com/actions/runner-images/issues/13729#issuecomment-4183956802
+        run: |
+          if ((Get-Service -Name docker).Status -ne 'Running') {
+            Start-Service -Name docker
+          }
+
+      - name: "Run uv on Windows NanoServer"
+        run: |
+          docker run --rm `
+            -v "${{ github.workspace }}:C:\uv" `
+            mcr.microsoft.com/powershell:lts-nanoserver-ltsc2022 `
+            pwsh -ExecutionPolicy Bypass -File C:\uv\test\integration\windows-nanoserver.ps1
+
   integration-test-github-actions:
     name: "github actions"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      # This job creates and updates test projects without existing lockfiles.
+      UV_LOCKED: 0
     steps:
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12.7"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -850,14 +898,14 @@ jobs:
   integration-test-github-actions-freethreaded:
     name: "free-threaded on github actions"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13t"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -904,7 +952,7 @@ jobs:
           persist-credentials: false
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-musl-${{ inputs.sha }}
 
@@ -912,14 +960,14 @@ jobs:
         uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
         with:
           distribution: Ubuntu-22.04
+          use-cache: false
           wsl-version: ${{ matrix.wsl-version }}
 
       - name: "Install pyenv-win"
         shell: pwsh
         run: |
           Write-Host "Installing pyenv-win..."
-          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/pyenv-win/pyenv-win/master/pyenv-win/install-pyenv-win.ps1" -OutFile "./install-pyenv-win.ps1"
-          .\install-pyenv-win.ps1
+          git clone --depth 1 https://github.com/pyenv-win/pyenv-win.git "$env:USERPROFILE\.pyenv"
 
           # Add pyenv-win to PATH for this session
           $env:PYENV = "$env:USERPROFILE\.pyenv\pyenv-win"
@@ -945,10 +993,53 @@ jobs:
           # Check that we don't fail on `pyenv-win` shims
           ./uv python list -v
 
+  integration-test-public-registries:
+    name: "public registries"
+    timeout-minutes: 10
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    env:
+      PYTHON_VERSION: 3.12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "${{ env.PYTHON_VERSION }}"
+
+      - name: "Download binary"
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uv-linux-libc-${{ inputs.sha }}
+
+      - name: "Prepare binary"
+        run: chmod +x ./uv
+
+      - name: "Run public registry tests"
+        run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always
+        env:
+          UV_TEST_ASTRAL_PKG: transformer-engine
+          UV_TEST_ASTRAL_PUBLIC: "true"
+          UV_TEST_ASTRAL_URL: https://wheels.astral.sh/simple/cu128/
+          UV_TEST_MICROSOFT_PKG: typing-extensions
+          UV_TEST_MICROSOFT_PUBLIC: "true"
+          # TODO: Enable when https://github.com/astral-sh/uv/issues/21349 is fixed.
+          # UV_TEST_MICROSOFT_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_MICROSOFT_URL: https://packagefeedproxy.microsoft.io/pypi/simple
+          UV_TEST_NVIDIA_PKG: nvidia-nvtx-cu12
+          UV_TEST_NVIDIA_PUBLIC: "true"
+          UV_TEST_NVIDIA_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_NVIDIA_URL: https://pypi.nvidia.com/
+          UV_TEST_PYTORCH_PKG: colorama
+          UV_TEST_PYTORCH_PUBLIC: "true"
+          UV_TEST_PYTORCH_REQUIRE_METADATA_RANGE_REQUESTS: "true"
+          UV_TEST_PYTORCH_URL: https://download.pytorch.org/whl/cpu
+
   integration-test-registries:
     name: "registries"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true }}
     environment:
       name: uv-test-registries
@@ -961,12 +1052,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -974,7 +1065,7 @@ jobs:
         run: chmod +x ./uv
 
       - name: "Configure AWS credentials"
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # v6.2.2
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -997,9 +1088,6 @@ jobs:
         with:
           credentials_json: "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}"
 
-      - name: "Set up GCP SDK"
-        uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db"
-
       - name: "Get GCP Artifact Registry token"
         id: get_token
         run: |
@@ -1011,14 +1099,19 @@ jobs:
         run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method env
         env:
           RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
           UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
           UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_AWS_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
           UV_TEST_AWS_USERNAME: aws
+          # TODO: Enable when https://github.com/astral-sh/uv/issues/21349 is fixed.
+          # UV_TEST_AZURE_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
           UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
           UV_TEST_AZURE_USERNAME: dummy
+          UV_TEST_CLOUDSMITH_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
           UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
           UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
@@ -1027,6 +1120,7 @@ jobs:
           UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
           UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
           UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+          UV_TEST_GITLAB_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
           UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
           UV_TEST_GITLAB_USERNAME: token
@@ -1035,14 +1129,19 @@ jobs:
         run: ./uv run --locked --python "${PYTHON_VERSION}" --no-build --script scripts/registries-test.py --uv ./uv --color always --all --auth-method text-store
         env:
           RUST_LOG: uv=debug
+          UV_TEST_ARTIFACTORY_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_ARTIFACTORY_TOKEN: ${{ secrets.UV_TEST_ARTIFACTORY_TOKEN }}
           UV_TEST_ARTIFACTORY_URL: ${{ secrets.UV_TEST_ARTIFACTORY_URL }}
           UV_TEST_ARTIFACTORY_USERNAME: ${{ secrets.UV_TEST_ARTIFACTORY_USERNAME }}
+          UV_TEST_AWS_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AWS_URL: ${{ secrets.UV_TEST_AWS_URL }}
           UV_TEST_AWS_USERNAME: aws
+          # TODO: Enable when https://github.com/astral-sh/uv/issues/21349 is fixed.
+          # UV_TEST_AZURE_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_AZURE_TOKEN: ${{ secrets.UV_TEST_AZURE_TOKEN }}
           UV_TEST_AZURE_URL: ${{ secrets.UV_TEST_AZURE_URL }}
           UV_TEST_AZURE_USERNAME: dummy
+          UV_TEST_CLOUDSMITH_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_CLOUDSMITH_TOKEN }}
           UV_TEST_CLOUDSMITH_URL: ${{ secrets.UV_TEST_CLOUDSMITH_URL }}
           UV_TEST_CLOUDSMITH_USERNAME: ${{ secrets.UV_TEST_CLOUDSMITH_USERNAME }}
@@ -1051,6 +1150,7 @@ jobs:
           UV_TEST_GEMFURY_TOKEN: ${{ secrets.UV_TEST_GEMFURY_TOKEN }}
           UV_TEST_GEMFURY_URL: ${{ secrets.UV_TEST_GEMFURY_URL }}
           UV_TEST_GEMFURY_USERNAME: ${{ secrets.UV_TEST_GEMFURY_USERNAME }}
+          UV_TEST_GITLAB_REQUIRE_METADATA_RANGE_REQUESTS: "true"
           UV_TEST_GITLAB_TOKEN: ${{ secrets.UV_TEST_GITLAB_TOKEN }}
           UV_TEST_GITLAB_URL: ${{ secrets.UV_TEST_GITLAB_URL }}
           UV_TEST_GITLAB_USERNAME: token
@@ -1058,18 +1158,18 @@ jobs:
   integration-uv-build-backend:
     name: "uv_build"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -1079,6 +1179,9 @@ jobs:
           chmod +x ./uvx
 
       - name: "Test uv_build package"
+        env:
+          # This test intentionally builds and installs source distributions.
+          UV_NO_CONFIG: "1"
         run: |
           # Build the Python package, which is not covered by uv's integration tests since they can't depend on having
           # a Python package (only the binary itself is built before running Rust's tests)
@@ -1107,18 +1210,18 @@ jobs:
   cache-test-ubuntu:
     name: "cache on linux"
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ inputs.sha }}
 
@@ -1134,18 +1237,19 @@ jobs:
   cache-test-macos-aarch64:
     name: "cache on macos aarch64"
     timeout-minutes: 10
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
+      - uses: astral-sh/github-actions/demudhra@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-macos-aarch64-${{ inputs.sha }}
 

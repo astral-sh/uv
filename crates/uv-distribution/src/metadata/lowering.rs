@@ -10,11 +10,12 @@ use uv_auth::CredentialsCache;
 use uv_cache::Cache;
 use uv_distribution_filename::DistExtension;
 use uv_distribution_types::{
-    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, Requirement,
-    RequirementSource,
+    Index, IndexCredentialsError, IndexLocations, IndexMetadata, IndexName, Origin, ProxyIndex,
+    Requirement, RequirementScope, RequirementSource,
 };
 use uv_fs::{Simplified, normalize_absolute_path, normalize_path};
 use uv_git_types::{GitLfs, GitReference, GitUrl, GitUrlParseError};
+use uv_macros::DebugNoInline;
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerTree, VerbatimUrl, VersionOrUrl, looks_like_git_repository};
@@ -22,7 +23,8 @@ use uv_pypi_types::{
     ConflictItem, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedUrl, ParsedUrlError,
     VerbatimParsedUrl,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::policy::Raw;
+use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_workspace::pyproject::{PyProjectToml, Source, Sources, WorkspaceReference};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache, WorkspaceError};
 
@@ -195,7 +197,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -240,31 +242,6 @@ impl LoweredRequirement {
                             extra,
                             group,
                         } => {
-                            // Identify the named index from either the project indexes or the workspace indexes,
-                            // in that order.
-                            let Some(index) = locations
-                                .indexes()
-                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
-                                .chain(project_indexes.iter())
-                                .chain(workspace.indexes().iter())
-                                .find(|Index { name, .. }| {
-                                    name.as_ref().is_some_and(|name| *name == index)
-                                })
-                            else {
-                                let hint = missing_index_hint(locations, &index);
-                                return Err(LoweringError::MissingIndex {
-                                    package: requirement.name.clone(),
-                                    index,
-                                    hint,
-                                });
-                            };
-                            if let Some(credentials) = index.credentials()? {
-                                credentials_cache.store_credentials(index.raw_url(), credentials);
-                            }
-                            let index = IndexMetadata {
-                                url: index.url.clone(),
-                                format: index.format,
-                            };
                             let conflict = project_name.and_then(|project_name| {
                                 if let Some(extra) = extra {
                                     Some(ConflictItem::from((project_name.clone(), extra)))
@@ -274,7 +251,22 @@ impl LoweredRequirement {
                                     })
                                 }
                             });
-                            let source = registry_source(requirement, index, conflict);
+                            let project_proxies = workspace
+                                .packages()
+                                .values()
+                                .filter(|member| member.root() == project_dir)
+                                .filter_map(|member| member.pyproject_toml().tool.as_ref())
+                                .filter_map(|tool| tool.uv.as_ref())
+                                .flat_map(|uv| uv.proxy_index.iter().flatten());
+                            let source = registry_source(
+                                requirement,
+                                index,
+                                project_indexes.iter().chain(workspace.indexes()),
+                                project_proxies,
+                                locations,
+                                conflict,
+                                credentials_cache,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace {
@@ -309,6 +301,7 @@ impl LoweredRequirement {
                         groups: Box::new([]),
                         marker,
                         source,
+                        scope: RequirementScope::Global,
                         origin: requirement.origin.clone(),
                     }))
                 }
@@ -391,7 +384,7 @@ impl LoweredRequirement {
                             ..
                         } => {
                             let source = git_source(
-                                git,
+                                git.into_url(),
                                 subdirectory.map(Box::<Path>::from),
                                 path.map(Box::<Path>::from).map(PathBuf::from),
                                 rev,
@@ -431,30 +424,15 @@ impl LoweredRequirement {
                             (source, marker)
                         }
                         Source::Registry { index, marker, .. } => {
-                            let Some(index) = locations
-                                .indexes()
-                                .filter(|index| matches!(index.origin, Some(Origin::Cli)))
-                                .chain(indexes.iter())
-                                .find(|Index { name, .. }| {
-                                    name.as_ref().is_some_and(|name| *name == index)
-                                })
-                            else {
-                                let hint = missing_index_hint(locations, &index);
-                                return Err(LoweringError::MissingIndex {
-                                    package: requirement.name.clone(),
-                                    index,
-                                    hint,
-                                });
-                            };
-                            if let Some(credentials) = index.credentials()? {
-                                credentials_cache.store_credentials(index.raw_url(), credentials);
-                            }
-                            let index = IndexMetadata {
-                                url: index.url.clone(),
-                                format: index.format,
-                            };
-                            let conflict = None;
-                            let source = registry_source(requirement, index, conflict);
+                            let source = registry_source(
+                                requirement,
+                                index,
+                                indexes.iter(),
+                                std::iter::empty(),
+                                locations,
+                                None,
+                                credentials_cache,
+                            )?;
                             (source, marker)
                         }
                         Source::Workspace {
@@ -489,6 +467,7 @@ impl LoweredRequirement {
                         groups: Box::new([]),
                         marker,
                         source,
+                        scope: RequirementScope::Global,
                         origin: requirement.origin.clone(),
                     }))
                 }
@@ -539,6 +518,7 @@ impl LoweredRequirement {
             } else {
                 git_directory_source_from_path(&install_path, git_member)?
             },
+            scope: RequirementScope::Global,
             origin: requirement.origin,
         }))
     }
@@ -551,7 +531,7 @@ impl LoweredRequirement {
 
 /// An error parsing and merging `tool.uv.sources` with
 /// `project.{dependencies,optional-dependencies}`.
-#[derive(Debug, Error)]
+#[derive(DebugNoInline, Error)]
 pub enum LoweringError {
     #[error(
         "`{0}` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `{0} = {{ workspace = true }}`)"
@@ -579,20 +559,28 @@ pub enum LoweringError {
         index: IndexName,
         hint: Option<String>,
     },
+    #[error(
+        "Package `{package}` references proxy index `{index}` in `tool.uv.sources`. Use its upstream index `{upstream}` instead"
+    )]
+    ProxyIndexSource {
+        package: PackageName,
+        index: IndexName,
+        upstream: IndexName,
+    },
     #[error("Workspace members are not allowed in non-workspace contexts")]
     WorkspaceMember,
     #[error(transparent)]
-    InvalidUrl(#[from] DisplaySafeUrlError),
+    InvalidUrl(#[from] SafeUrlError),
     #[error(transparent)]
     IndexCredentials(#[from] IndexCredentialsError),
     #[error(transparent)]
     InvalidVerbatimUrl(#[from] uv_pep508::VerbatimUrlError),
-    #[error("Fragments are not allowed in URLs: `{0}`")]
-    ForbiddenFragment(DisplaySafeUrl),
+    #[error("Fragments are not allowed in URLs: {0}")]
+    ForbiddenFragment(SafeUrl),
     #[error(
         "`{0}` is associated with a URL source, but references a Git repository. Consider using a Git source instead (e.g., `{0} = {{ git = \"{1}\" }}`)"
     )]
-    MissingGitSource(PackageName, DisplaySafeUrl),
+    MissingGitSource(PackageName, SafeUrl),
     #[error("`workspace = false` is not yet supported")]
     WorkspaceFalse,
     #[error(transparent)]
@@ -601,25 +589,25 @@ pub enum LoweringError {
         "Workspace source path `{}` must point to a workspace root (found workspace at `{}`)", path.simplified_display(), root.simplified_display()
     )]
     WorkspaceSourceNotRoot { path: PathBuf, root: PathBuf },
-    #[error("Source with `editable = true` must refer to a local directory, not a file: `{0}`")]
+    #[error("Source with `editable = true` must refer to a local directory, not a file: {0}")]
     EditableFile(String),
-    #[error("Source with `package = true` must refer to a local directory, not a file: `{0}`")]
+    #[error("Source with `package = true` must refer to a local directory, not a file: {0}")]
     PackagedFile(String),
     #[error(
-        "Git repository references local file source, but only directories are supported as transitive Git dependencies: `{0}`"
+        "Git repository references local file source, but only directories are supported as transitive Git dependencies: {0}"
     )]
     GitFile(String),
-    #[error("Git repository references local directory outside the repository: `{0}`")]
+    #[error("Git repository references local directory outside the repository: {0}")]
     GitDirectory(String),
     #[error(transparent)]
     ParsedUrl(#[from] ParsedUrlError),
-    #[error("Path must be UTF-8: `{0}`")]
+    #[error("Path must be UTF-8: {0}")]
     NonUtf8Path(PathBuf),
     #[error(transparent)] // Function attaches the context
     RelativeTo(io::Error),
 }
 
-impl uv_errors::Hint for LoweringError {
+impl uv_errors::Hinted for LoweringError {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingIndex {
@@ -674,7 +662,7 @@ fn missing_index_hint(locations: &IndexLocations, index: &IndexName) -> Option<S
 
 /// Convert a Git source into a [`RequirementSource`].
 fn git_source(
-    git: DisplaySafeUrl,
+    git: SafeUrl,
     subdirectory: Option<Box<Path>>,
     path: Option<PathBuf>,
     rev: Option<String>,
@@ -691,7 +679,7 @@ fn git_source(
     };
 
     // Create a PEP 508-compatible URL.
-    let mut url = DisplaySafeUrl::parse(&format!("git+{git}"))?;
+    let mut url = SafeUrl::parse(&format!("git+{git}"))?;
     if let Some(rev) = reference.as_str() {
         let path = format!("{}@{}", url.path(), rev);
         url.set_path(&path);
@@ -749,12 +737,12 @@ fn git_source(
 /// Convert a URL source into a [`RequirementSource`].
 fn url_source(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    url: DisplaySafeUrl,
+    url: SafeUrl<Raw>,
     subdirectory: Option<Box<Path>>,
 ) -> Result<RequirementSource, LoweringError> {
-    let mut verbatim_url = url.clone();
+    let mut verbatim_url = url.as_url().clone();
     if verbatim_url.fragment().is_some() {
-        return Err(LoweringError::ForbiddenFragment(url));
+        return Err(LoweringError::ForbiddenFragment(url.into_url()));
     }
     if let Some(subdirectory) = subdirectory.as_ref() {
         let subdirectory = subdirectory
@@ -768,7 +756,7 @@ fn url_source(
         Err(..) if looks_like_git_repository(&url) => {
             return Err(LoweringError::MissingGitSource(
                 requirement.name.clone(),
-                url.clone(),
+                url.as_url().clone(),
             ));
         }
         Err(err) => {
@@ -786,12 +774,51 @@ fn url_source(
 }
 
 /// Convert a registry source into a [`RequirementSource`].
-fn registry_source(
+fn registry_source<'a>(
     requirement: &uv_pep508::Requirement<VerbatimParsedUrl>,
-    index: IndexMetadata,
+    name: IndexName,
+    declared_indexes: impl Iterator<Item = &'a Index>,
+    declared_proxies: impl Iterator<Item = &'a ProxyIndex>,
+    locations: &'a IndexLocations,
     conflict: Option<ConflictItem>,
-) -> RequirementSource {
-    match &requirement.version_or_url {
+    credentials_cache: &CredentialsCache,
+) -> Result<RequirementSource, LoweringError> {
+    let Some(index) = locations
+        .indexes()
+        .filter(|index| matches!(index.origin, Some(Origin::Cli)))
+        .chain(declared_indexes)
+        .find(|index| index.name.as_ref() == Some(&name))
+    else {
+        let upstream = locations
+            .proxy_target(&name)
+            .into_iter()
+            .chain(declared_proxies.filter_map(|proxy| {
+                (proxy.name.as_ref() == Some(&name)).then_some(&proxy.proxy_for)
+            }))
+            .next();
+        if let Some(upstream) = upstream {
+            return Err(LoweringError::ProxyIndexSource {
+                package: requirement.name.clone(),
+                index: name,
+                upstream: upstream.clone(),
+            });
+        }
+        let hint = missing_index_hint(locations, &name);
+        return Err(LoweringError::MissingIndex {
+            package: requirement.name.clone(),
+            index: name,
+            hint,
+        });
+    };
+    if let Some(credentials) = index.credentials()? {
+        credentials_cache.store_credentials(index.raw_url(), credentials);
+    }
+    let index = IndexMetadata {
+        url: index.url.clone(),
+        format: index.format,
+    };
+
+    Ok(match &requirement.version_or_url {
         None => RequirementSource::Registry {
             specifier: VersionSpecifiers::empty(),
             index: Some(index),
@@ -807,7 +834,7 @@ fn registry_source(
             index: Some(index),
             conflict,
         },
-    }
+    })
 }
 
 async fn workspace_source(
@@ -1006,7 +1033,7 @@ fn git_directory_source_from_path(
     } else {
         Some(subdirectory.into_owned().into_boxed_path())
     };
-    let url = DisplaySafeUrl::from(ParsedGitDirectoryUrl {
+    let url = SafeUrl::from(ParsedGitDirectoryUrl {
         url: git.clone(),
         subdirectory: subdirectory.clone(),
     });
@@ -1029,7 +1056,7 @@ fn git_archive_source_from_path(
     let install_path = normalize_path(install_path).into_owned();
     let ext = DistExtension::from_path(&install_path)
         .map_err(|err| ParsedUrlError::MissingExtensionPath(install_path.clone(), err))?;
-    let url = DisplaySafeUrl::from(ParsedGitPathUrl {
+    let url = SafeUrl::from(ParsedGitPathUrl {
         url: git.clone(),
         install_path: install_path.clone(),
         ext,

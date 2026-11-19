@@ -13,12 +13,13 @@ use uv_pep440::VersionSpecifiers;
 use uv_pep508::{
     MarkerEnvironment, MarkerTree, RequirementOrigin, VerbatimUrl, VersionOrUrl, marker,
 };
-use uv_redacted::{DisplaySafeUrl, DisplaySafeUrlError};
+use uv_redacted::policy::{Raw, Stripped};
+use uv_redacted::{SafeUrl, SafeUrlError};
 
 use crate::{IndexMetadata, IndexUrl};
 
 use uv_pypi_types::{
-    ConflictItem, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
+    ConflictItem, HashError, Hashes, ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl,
     ParsedGitPathUrl, ParsedPathUrl, ParsedUrl, ParsedUrlError, VerbatimParsedUrl,
 };
 
@@ -29,7 +30,7 @@ enum RequirementError {
     #[error(transparent)]
     ParsedUrlError(#[from] ParsedUrlError),
     #[error(transparent)]
-    UrlParseError(#[from] DisplaySafeUrlError),
+    UrlParseError(#[from] SafeUrlError),
     #[error(transparent)]
     OidParseError(#[from] OidParseError),
     #[error(transparent)]
@@ -54,13 +55,39 @@ pub struct Requirement {
     #[serde(
         skip_serializing_if = "marker::ser::is_empty",
         serialize_with = "marker::ser::serialize",
+        deserialize_with = "MarkerTree::deserialize_dependency",
         default
     )]
     pub marker: MarkerTree,
     #[serde(flatten)]
     pub source: RequirementSource,
     #[serde(skip)]
+    pub scope: RequirementScope,
+    #[serde(skip)]
     pub origin: Option<RequirementOrigin>,
+}
+
+/// Whether a requirement is global or belongs to a package's dependency group.
+#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub enum RequirementScope {
+    #[default]
+    Global,
+    Group {
+        package: PackageName,
+        group: GroupName,
+    },
+}
+
+impl RequirementScope {
+    /// Return the conflict item whose activation makes this requirement visible.
+    pub fn conflict_item(&self) -> Option<ConflictItem> {
+        match self {
+            Self::Global => None,
+            Self::Group { package, group } => {
+                Some(ConflictItem::from((package.clone(), group.clone())))
+            }
+        }
+    }
 }
 
 impl Requirement {
@@ -83,24 +110,36 @@ impl Requirement {
 
     /// Convert to a [`Requirement`] with an absolute path based on the given root.
     #[must_use]
-    pub fn to_absolute(self, path: &Path) -> Self {
+    pub(crate) fn into_absolute(self, path: &Path) -> Self {
         Self {
             source: self.source.into_absolute(path),
             ..self
         }
     }
 
+    /// Set whether this requirement's local source should be represented by a relative path.
+    ///
+    /// When `false`, preserve the original input's path preference. Non-local sources are unchanged.
+    pub fn set_force_relative(&mut self, force_relative: bool) {
+        if let RequirementSource::Path { url, .. } | RequirementSource::Directory { url, .. } =
+            &mut self.source
+            && url.force_relative() != force_relative
+        {
+            *url = url.clone().with_force_relative(force_relative);
+        }
+    }
+
     /// Return the hashes of the requirement, as specified in the URL fragment.
-    pub fn hashes(&self) -> Option<Hashes> {
+    pub fn hashes(&self) -> Result<Option<Hashes>, HashError> {
         let (RequirementSource::Url { ref url, .. } | RequirementSource::Path { ref url, .. }) =
             self.source
         else {
-            return None;
+            return Ok(None);
         };
-        let fragment = url.fragment()?;
-        fragment
-            .split('&')
-            .find_map(|fragment| Hashes::parse_fragment(fragment).ok())
+        let Some(fragment) = url.fragment() else {
+            return Ok(None);
+        };
+        Hashes::parse_url_fragment(fragment)
     }
 
     /// Set the source file containing the requirement.
@@ -121,6 +160,7 @@ impl std::hash::Hash for Requirement {
             groups,
             marker,
             source,
+            scope,
             origin: _,
         } = self;
         name.hash(state);
@@ -128,6 +168,7 @@ impl std::hash::Hash for Requirement {
         groups.hash(state);
         marker.hash(state);
         source.hash(state);
+        scope.hash(state);
     }
 }
 
@@ -139,6 +180,7 @@ impl PartialEq for Requirement {
             groups,
             marker,
             source,
+            scope,
             origin: _,
         } = self;
         let Self {
@@ -147,6 +189,7 @@ impl PartialEq for Requirement {
             groups: other_groups,
             marker: other_marker,
             source: other_source,
+            scope: other_scope,
             origin: _,
         } = other;
         name == other_name
@@ -154,6 +197,7 @@ impl PartialEq for Requirement {
             && groups == other_groups
             && marker == other_marker
             && source == other_source
+            && scope == other_scope
     }
 }
 
@@ -167,6 +211,7 @@ impl Ord for Requirement {
             groups,
             marker,
             source,
+            scope,
             origin: _,
         } = self;
         let Self {
@@ -175,6 +220,7 @@ impl Ord for Requirement {
             groups: other_groups,
             marker: other_marker,
             source: other_source,
+            scope: other_scope,
             origin: _,
         } = other;
         name.cmp(other_name)
@@ -182,6 +228,7 @@ impl Ord for Requirement {
             .then_with(|| groups.cmp(other_groups))
             .then_with(|| marker.cmp(other_marker))
             .then_with(|| source.cmp(other_source))
+            .then_with(|| scope.cmp(other_scope))
     }
 }
 
@@ -232,7 +279,7 @@ impl From<Requirement> for uv_pep508::Requirement<VerbatimParsedUrl> {
                     url,
                 } => Some(VersionOrUrl::Url(VerbatimParsedUrl {
                     parsed_url: ParsedUrl::Archive(ParsedArchiveUrl {
-                        url: location,
+                        url: location.into_url(),
                         subdirectory,
                         ext,
                     }),
@@ -318,6 +365,7 @@ impl From<uv_pep508::Requirement<VerbatimParsedUrl>> for Requirement {
             extras: requirement.extras,
             marker: requirement.marker,
             source,
+            scope: RequirementScope::Global,
             origin: requirement.origin,
         }
     }
@@ -546,7 +594,7 @@ pub enum RequirementSource {
     /// e.g.`foo @ https://example.org/foo-1.0.zip`.
     Url {
         /// The remote location of the archive file, without subdirectory fragment.
-        location: DisplaySafeUrl,
+        location: SafeUrl<Raw>,
         /// For source distributions, the path to the distribution if it is not in the archive
         /// root.
         subdirectory: Option<Box<Path>>,
@@ -634,7 +682,7 @@ impl RequirementSource {
             },
             ParsedUrl::Archive(archive) => Self::Url {
                 url,
-                location: archive.url,
+                location: archive.url.with_policy(Raw),
                 subdirectory: archive.subdirectory,
                 ext: archive.ext,
             },
@@ -652,7 +700,7 @@ impl RequirementSource {
                 url,
             } => Some(VerbatimParsedUrl {
                 parsed_url: ParsedUrl::Archive(ParsedArchiveUrl::from_source(
-                    location.clone(),
+                    location.as_url().clone(),
                     subdirectory.clone(),
                     *ext,
                 )),
@@ -747,7 +795,7 @@ impl RequirementSource {
                 ext,
                 url,
             } => Ok(Self::Path {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
+                install_path: try_relative_to_if(&install_path, path, url.prefers_relative())?
                     .into_boxed_path(),
                 ext,
                 url,
@@ -759,7 +807,7 @@ impl RequirementSource {
                 url,
                 ..
             } => Ok(Self::Directory {
-                install_path: try_relative_to_if(&install_path, path, !url.was_given_absolute())?
+                install_path: try_relative_to_if(&install_path, path, url.prefers_relative())?
                     .into_boxed_path(),
                 editable,
                 r#virtual,
@@ -875,7 +923,7 @@ enum RequirementSourceWire {
     Git { git: String },
     /// Ex) `source = { url = "<https://example.org/foo-1.0.zip>" }`
     Direct {
-        url: DisplaySafeUrl,
+        url: SafeUrl<Raw>,
         subdirectory: Option<PortablePathBuf>,
     },
     /// Ex) `source = { path = "/home/ferris/iniconfig-2.0.0-py3-none-any.whl" }`
@@ -890,7 +938,7 @@ enum RequirementSourceWire {
     Registry {
         #[serde(skip_serializing_if = "VersionSpecifiers::is_empty", default)]
         specifier: VersionSpecifiers,
-        index: Option<DisplaySafeUrl>,
+        index: Option<SafeUrl<Stripped>>,
         conflict: Option<ConflictItem>,
     },
 }
@@ -903,10 +951,7 @@ impl From<RequirementSource> for RequirementSourceWire {
                 index,
                 conflict,
             } => {
-                let index = index.map(|index| index.url.into_url()).map(|mut index| {
-                    index.remove_credentials();
-                    index
-                });
+                let index = index.map(|index| index.url.into_url());
                 Self::Registry {
                     specifier,
                     index,
@@ -954,6 +999,9 @@ impl From<RequirementSource> for RequirementSourceWire {
 
                 // Put the requested reference in the query.
                 match git.reference() {
+                    GitReference::Commit(commit) => {
+                        url.query_pairs_mut().append_pair("rev", commit.as_str());
+                    }
                     GitReference::Branch(branch) => {
                         url.query_pairs_mut().append_pair("branch", branch.as_str());
                     }
@@ -968,9 +1016,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     GitReference::DefaultBranch => {}
                 }
 
-                // Put the precise commit in the fragment.
-                if let Some(precise) = git.precise() {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {
@@ -999,6 +1047,9 @@ impl From<RequirementSource> for RequirementSourceWire {
 
                 // Put the requested reference in the query.
                 match git.reference() {
+                    GitReference::Commit(commit) => {
+                        url.query_pairs_mut().append_pair("rev", commit.as_str());
+                    }
                     GitReference::Branch(branch) => {
                         url.query_pairs_mut().append_pair("branch", branch.as_str());
                     }
@@ -1018,9 +1069,9 @@ impl From<RequirementSource> for RequirementSourceWire {
                     url.query_pairs_mut().append_pair("lfs", "true");
                 }
 
-                // Put the precise commit in the fragment.
-                if let Some(precise) = git.precise() {
-                    url.set_fragment(Some(&precise.to_string()));
+                // Put the resolved commit in the fragment.
+                if let Some(commit) = git.resolved_commit() {
+                    url.set_fragment(Some(commit.as_str()));
                 }
 
                 Self::Git {
@@ -1074,7 +1125,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 conflict,
             }),
             RequirementSourceWire::Git { git } => {
-                let mut repository = DisplaySafeUrl::parse(&git)?;
+                let mut repository = SafeUrl::parse(&git)?;
 
                 let mut reference = GitReference::DefaultBranch;
                 let mut subdirectory: Option<PortablePathBuf> = None;
@@ -1106,7 +1157,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 repository.remove_credentials();
 
                 // Create a PEP 508-compatible URL.
-                let mut url = DisplaySafeUrl::parse(&format!("git+{repository}"))?;
+                let mut url = SafeUrl::parse(&format!("git+{repository}"))?;
                 if let Some(rev) = reference.as_url_rev() {
                     let path = format!("{}@{}", url.path(), rev);
                     url.set_path(&path);
@@ -1149,7 +1200,7 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
                 let location = url.clone();
 
                 // Create a PEP 508-compatible URL.
-                let mut url = url;
+                let mut url = url.into_url();
                 if let Some(subdirectory) = &subdirectory {
                     url.set_fragment(Some(&format!("subdirectory={subdirectory}")));
                 }
@@ -1213,11 +1264,12 @@ impl TryFrom<RequirementSourceWire> for RequirementSource {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::path::PathBuf;
 
     use uv_pep508::{MarkerTree, VerbatimUrl};
 
-    use crate::{Requirement, RequirementSource};
+    use crate::{Requirement, RequirementScope, RequirementSource};
 
     #[test]
     fn roundtrip() {
@@ -1231,6 +1283,7 @@ mod tests {
                 index: None,
                 conflict: None,
             },
+            scope: RequirementScope::Global,
             origin: None,
         };
 
@@ -1254,12 +1307,28 @@ mod tests {
                 r#virtual: Some(false),
                 url: VerbatimUrl::from_absolute_path(path).unwrap(),
             },
+            scope: RequirementScope::Global,
             origin: None,
         };
 
         let raw = toml::to_string(&requirement).unwrap();
         let deserialized: Requirement = toml::from_str(&raw).unwrap();
         assert_eq!(requirement, deserialized);
+    }
+
+    #[test]
+    fn roundtrip_git_commit() -> Result<(), Box<dyn Error>> {
+        let raw = "git = \"https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979\"\n";
+        let source: RequirementSource = toml::from_str(raw)?;
+        assert_eq!(toml::to_string(&source)?, raw);
+
+        // A redundant precise fragment denotes the same requirement as the full commit revision.
+        let resolved: RequirementSource = toml::from_str(
+            "git = \"https://example.com/repository?rev=0dacfd662c64cb4ceb16e6cf65a157a8b715b979#0dacfd662c64cb4ceb16e6cf65a157a8b715b979\"",
+        )?;
+        assert_eq!(source, resolved);
+
+        Ok(())
     }
 
     #[test]
@@ -1280,6 +1349,7 @@ mod tests {
             groups: Box::new([]),
             marker: MarkerTree::TRUE,
             source,
+            scope: RequirementScope::Global,
             origin: None,
         };
         assert_eq!(

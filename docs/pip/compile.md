@@ -1,9 +1,9 @@
 # Locking environments
 
-Locking is to take a dependency, e.g., `ruff`, and write an exact version to use to a file. When
-working with many dependencies, it is useful to lock the exact versions so the environment can be
-reproduced. Without locking, the versions of dependencies could change over time, when using a
-different tool, or across platforms.
+Locking a dependency, e.g., `ruff`, means writing the exact version to use to a file. When working
+with many dependencies, locking exact versions makes it possible to reproduce the environment.
+Without locking, the versions of dependencies could change over time, when using a different tool,
+or across platforms.
 
 ## Locking requirements
 
@@ -18,8 +18,8 @@ To lock dependencies declared in a `pyproject.toml`:
 $ uv pip compile pyproject.toml -o requirements.txt
 ```
 
-Note by default the `uv pip compile` output is just displayed and `--output-file` / `-o` argument is
-needed to write to a file.
+By default, `uv pip compile` displays its output. Use the `--output-file` / `-o` argument to write
+it to a file.
 
 To lock dependencies declared in a `requirements.in`:
 
@@ -162,11 +162,11 @@ append them to those specified in the constraints file.
 Similar to `constraints`, but specifically for build-time dependencies, including those required
 when building runtime dependencies.
 
-Build constraint files are `requirements.txt`-like files that only control the _version_ of a
-build-time requirement. However, including a package in a build constraints file will _not_ trigger
-its installation at build time; instead, constraints apply only when the package is required as a
-direct or transitive build-time dependency. Build constraints can be used to add bounds to
-dependencies that are not explicitly declared as build-time dependencies of the current project.
+Build constraint files are `requirements.txt`-like files that constrain build-time requirements.
+However, including a package in a build constraints file will _not_ trigger its installation at
+build time; instead, constraints apply only when the package is required as a direct or transitive
+build-time dependency. Build constraints can be used to add bounds to dependencies that are not
+explicitly declared as build-time dependencies of the current project.
 
 For example, if a package defines its build dependencies as follows:
 
@@ -185,6 +185,22 @@ setuptools==75.0.0
 
 uv will also read `build-constraint-dependencies` from the `pyproject.toml` at the workspace root,
 and append them to those specified in the build constraints file.
+
+To require hashes for build dependencies, add them to a build constraints file:
+
+```requirements title="build-constraints.txt"
+setuptools==83.0.0 --hash=sha256:29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3
+```
+
+Then pass the file with `--require-build-hashes`:
+
+```console
+$ uv pip compile requirements.in --build-constraint build-constraints.txt --require-build-hashes
+```
+
+This option only applies to build dependencies. To check runtime dependencies with `uv pip install`
+or `uv pip sync`, use `--require-hashes`. For details and limitations, see
+[project build dependency hashes](../concepts/projects/build.md#project-build-dependency-hashes).
 
 ## Overriding dependency versions
 

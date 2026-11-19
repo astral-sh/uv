@@ -23,7 +23,13 @@ pub(crate) async fn list_packages(
     let client = RegistryClientBuilder::new(
         BaseClientBuilder::default()
             .read_timeout(environment.http_read_timeout)
-            .connect_timeout(environment.http_connect_timeout),
+            .connect_timeout(environment.http_connect_timeout)
+            .metadata_range_request(
+                environment
+                    .require_metadata_range_requests
+                    .unwrap_or_default()
+                    .into(),
+            ),
         cache,
     )
     .build()?;

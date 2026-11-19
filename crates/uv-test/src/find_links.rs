@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use indoc::formatdoc;
 use wiremock::{Request, ResponseTemplate};
 
 use crate::http_server::{HttpServer, content_type_for_filename};
@@ -100,7 +101,12 @@ fn handle_request(
             .map(|filename| format!("<a href=\"{server_uri}/{filename}\">{filename}</a>"))
             .collect::<Vec<_>>()
             .join("\n");
-        let html = format!("<!DOCTYPE html>\n<html><body>\n{links}\n</body></html>");
+        let html = formatdoc! {"
+            <!DOCTYPE html>
+            <html><body>
+            {links}
+            </body></html>
+        "};
         return ResponseTemplate::new(200).set_body_raw(html, "text/html");
     }
 

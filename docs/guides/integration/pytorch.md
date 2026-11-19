@@ -128,6 +128,8 @@ We recommend the use of `explicit = true` to ensure that the index is _only_ use
 `torchvision`, and other PyTorch-related packages, as opposed to generic dependencies like `jinja2`,
 which should continue to be sourced from the default index (PyPI).
 
+<!-- TODO(tk): Show `uv add --index <name>` once index-by-name is stable. -->
+
 Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desired index:
 
 === "CPU-only"
@@ -383,7 +385,7 @@ with the choice toggled by a user-provided extra (e.g., `uv sync --extra cpu` vs
 `uv sync --extra cu130`).
 
 With `tool.uv.sources`, you can use extra markers to specify the desired index for each enabled
-extra. For example, the following configuration would use PyTorch's CPU-only for
+extra. For example, the following configuration would use PyTorch's CPU-only builds for
 `uv sync --extra cpu` and CUDA-enabled builds for `uv sync --extra cu130`:
 
 ```toml

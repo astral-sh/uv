@@ -1,0 +1,86 @@
+[project]
+name = "llm"
+version = "0.32a3"
+description = "CLI utility and Python library for interacting with Large Language Models from organizations like OpenAI, Anthropic and Gemini plus local models installed on your own machine."
+readme = { file = "README.md", content-type = "text/markdown" }
+authors = [
+    { name = "Simon Willison" },
+]
+license = "Apache-2.0"
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    "click",
+    "condense-json>=0.1.3",
+    "openai>=2.32.0",
+    "click-default-group>=1.2.3",
+    "sqlite-utils>=3.37",
+    "sqlite-migrate>=0.1a2",
+    "pydantic>=2.0.0",
+    "PyYAML",
+    "pluggy",
+    "python-ulid",
+    "setuptools",
+    "pip",
+    "pyreadline3; sys_platform == 'win32'",
+    "puremagic",
+]
+
+[dependency-groups]
+dev = [
+    "build",
+    "click>=8.2.0",
+    "pytest",
+    "numpy",
+    "pytest-httpx>=0.33.0",
+    "pytest-asyncio",
+    "cogapp",
+    "mypy>=1.10.0",
+    "black>=26.3.1",
+    "pytest-recording",
+    "ruff",
+    "syrupy",
+    "types-click",
+    "types-PyYAML",
+    "types-setuptools",
+    "llm-echo==0.3a3",
+    # docs
+    "sphinx==7.2.6",
+    "furo==2023.9.10",
+    "sphinx-autobuild",
+    "sphinx-copybutton",
+    "sphinx-markdown-builder==0.6.8",
+    "myst-parser",
+]
+
+[project.urls]
+Homepage = "https://github.com/simonw/llm"
+Documentation = "https://llm.datasette.io/"
+Issues = "https://github.com/simonw/llm/issues"
+CI = "https://github.com/simonw/llm/actions"
+Changelog = "https://github.com/simonw/llm/releases"
+
+[project.scripts]
+llm = "llm.cli:cli"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["llm*"]

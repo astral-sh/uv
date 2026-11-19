@@ -17,19 +17,18 @@ export CARGO_TARGET_DIR=/tmp/target
 # Copy workspace to a writable location.
 cp -r /source /workspace
 
-# Normalize all crate versions to 0.0.0 so a uv version bump does not change
+# Normalize local crate versions to 0.0.0 so a uv version bump does not change
 # the binaries, as the crate version is part of cargo's Strict Version Hash
 # which is embedded in the output.
-find /workspace -name Cargo.toml -exec sed -i 's/^version = .*/version = "0.0.0"/' {} +
-sed -i -E 's/version = "[^"]+"(, path = ")/version = "0.0.0"\1/g' /workspace/Cargo.toml
+/workspace/scripts/normalize-trampoline-versions.py
 
 # The working directory must be the trampoline crate so cargo picks up
 # `.cargo/config.toml`, which enables build-std.
 cd /workspace/crates/uv-trampoline
 
-cargo +"$TOOLCHAIN" xwin build --xwin-arch x86 --release --target i686-pc-windows-msvc
-cargo +"$TOOLCHAIN" xwin build --release --target x86_64-pc-windows-msvc
-cargo +"$TOOLCHAIN" xwin build --release --target aarch64-pc-windows-msvc
+cargo +"$TOOLCHAIN" xwin build --locked --xwin-arch x86 --release --target i686-pc-windows-msvc
+cargo +"$TOOLCHAIN" xwin build --locked --release --target x86_64-pc-windows-msvc
+cargo +"$TOOLCHAIN" xwin build --locked --release --target aarch64-pc-windows-msvc
 
 for arch in i686 x86_64 aarch64; do
     for variant in console gui; do

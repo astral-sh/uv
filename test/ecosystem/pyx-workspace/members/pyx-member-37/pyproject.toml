@@ -1,0 +1,17 @@
+[project]
+name = "pyx-member-37"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "pyx-member-29",
+    "sentry-sdk==2.57.0",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "inline-snapshot==0.32.6",
+    "pyx-member-33",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

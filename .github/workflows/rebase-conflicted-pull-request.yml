@@ -9,6 +9,10 @@ on:
       base-ref:
         required: true
         type: string
+      base-previous-sha:
+        required: false
+        type: string
+        default: ""
       head-ref:
         required: true
         type: string
@@ -21,14 +25,21 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   rebase:
     name: "Rebase pull request #${{ inputs.number }}"
     runs-on: depot-ubuntu-24.04-4
-    environment: automations
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      base_sha: ${{ steps.prepare.outputs.base_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,7 +50,7 @@ jobs:
         run: rustup show
 
       - name: Restore Rust cache
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           prefix-key: v1-rust-workspace
           cache-workspace-crates: "true"
@@ -48,14 +59,23 @@ jobs:
       - name: Prepare Rust dependencies
         run: cargo fetch --locked
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          tool: cargo-nextest
+          enable-cache: auto
+
+      - name: "Install cargo nextest"
+        env:
+          UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/cargo-tools
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: |
+          uv sync --only-dev
+          echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
 
       - name: Prepare pull request branch
+        id: prepare
         env:
           BASE_REF: ${{ inputs.base-ref }}
+          BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
           HEAD_REF: ${{ inputs.head-ref }}
           HEAD_SHA: ${{ inputs.head-sha }}
           HEAD_REPOSITORY: ${{ inputs.head-repository }}
@@ -71,10 +91,16 @@ jobs:
             exit 1
           fi
 
+          if [ -n "$BASE_PREVIOUS_SHA" ] && { ! [[ "$BASE_PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || ! git merge-base --is-ancestor "$BASE_PREVIOUS_SHA" "$HEAD_SHA"; }; then
+            echo "The stacked pull request does not contain its previous base; refusing to rebase it." >&2
+            exit 1
+          fi
+
           git checkout --detach "$HEAD_SHA"
           git config user.name "astral-automations-bot[bot]"
           git config user.email "305554984+astral-automations-bot[bot]@users.noreply.github.com"
-          git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}" > /dev/null
+          base_sha=$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}")
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
 
       - name: Enable Linux user namespaces for bubblewrap
         run: |
@@ -89,14 +115,15 @@ jobs:
           fi
 
       - name: Rebase pull request
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           BASE_REF: ${{ inputs.base-ref }}
+          BASE_PREVIOUS_SHA: ${{ inputs.base-previous-sha }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
-          model: gpt-5.6-sol
+          codex-version: "0.169.0"
+          model: gpt-6.2-sol
           effort: high
           codex-home: "${{ runner.temp }}/codex-home"
           permission-profile: "pull-request-rebase"
@@ -122,7 +149,7 @@ jobs:
           git bundle create "$RUNNER_TEMP/rebased.bundle" "refs/remotes/origin/$BASE_REF..HEAD"
 
       - name: Upload rebased pull request
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rebased-pull-request-${{ inputs.number }}-${{ inputs.head-sha }}
           path: ${{ runner.temp }}/rebased.bundle
@@ -133,8 +160,10 @@ jobs:
   push:
     name: "Push rebased pull request #${{ inputs.number }}"
     needs: rebase
-    runs-on: ubuntu-slim
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -146,7 +175,7 @@ jobs:
           persist-credentials: false
 
       - name: Download rebased pull request
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: rebased-pull-request-${{ inputs.number }}-${{ inputs.head-sha }}
           path: ${{ runner.temp }}/rebased-pull-request
@@ -155,9 +184,16 @@ jobs:
         id: import
         env:
           BASE_REF: ${{ inputs.base-ref }}
+          BASE_SHA: ${{ needs.rebase.outputs.base_sha }}
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
         run: |
+          current_base_sha=$(git rev-parse --verify "refs/remotes/origin/$BASE_REF^{commit}")
+          if [ "$current_base_sha" != "$BASE_SHA" ]; then
+            echo "The pull request base changed from $BASE_SHA to $current_base_sha; skipping the stale rebase."
+            exit 0
+          fi
+
           bundle="$RUNNER_TEMP/rebased-pull-request/rebased.bundle"
           git bundle verify "$bundle"
           git -c core.hooksPath=/dev/null fetch --no-tags "$bundle" HEAD
@@ -172,7 +208,8 @@ jobs:
 
       - name: Get pull request head token
         id: token
-        uses: open-security-tools/ost-simple-sts@9e012247e07c39080fb6a832dbfbcfeacebc19c4
+        if: steps.import.outputs.head_sha != ''
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -183,6 +220,7 @@ jobs:
             workflows: write
 
       - name: Push rebased pull request
+        if: steps.import.outputs.head_sha != ''
         env:
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"

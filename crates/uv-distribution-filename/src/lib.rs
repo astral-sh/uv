@@ -12,6 +12,7 @@ pub use extension::{
     DistExtension, ExtensionError, LegacySourceDistExtension, SourceDistExtension,
 };
 pub use source_dist::{SourceDistFilename, SourceDistFilenameError};
+pub use variant_label::{InvalidVariantLabel, VariantLabel};
 pub use wheel::{WheelFilename, WheelFilenameError};
 
 mod build_tag;
@@ -20,6 +21,7 @@ mod expanded_tags;
 mod extension;
 mod source_dist;
 mod splitter;
+mod variant_label;
 mod wheel;
 mod wheel_tag;
 
@@ -58,6 +60,12 @@ impl DistFilename {
     ) -> Result<Self, DistFilenameError> {
         match DistExtension::from_path(filename) {
             Ok(DistExtension::Wheel) => match WheelFilename::from_hint(filename, package_name) {
+                Ok(filename) if filename.name != *package_name => {
+                    Err(DistFilenameError::WheelNameMismatch {
+                        expected: package_name.clone(),
+                        actual: filename.name,
+                    })
+                }
                 Ok(filename) => Ok(Self::WheelFilename(filename)),
                 Err(err) => Err(DistFilenameError::InvalidWheel(err)),
             },
@@ -76,12 +84,17 @@ impl DistFilename {
     /// Source dist filenames can be ambiguous, e.g. `a-1-1.tar.gz`. Without knowing the package name, we assume that
     /// source dist filename version doesn't contain minus (the version is normalized).
     pub fn try_from_normalized_filename(filename: &str) -> Option<Self> {
-        if let Ok(filename) = WheelFilename::from_str(filename) {
-            Some(Self::WheelFilename(filename))
-        } else if let Ok(filename) = SourceDistFilename::parsed_normalized_filename(filename) {
-            Some(Self::SourceDistFilename(filename))
-        } else {
-            None
+        // Check the extension first to avoid allocating the error.
+        match DistExtension::from_path(filename) {
+            Ok(DistExtension::Wheel) => WheelFilename::from_str(filename)
+                .ok()
+                .map(Self::WheelFilename),
+            Ok(DistExtension::Source(_)) => {
+                SourceDistFilename::parsed_normalized_filename(filename)
+                    .ok()
+                    .map(Self::SourceDistFilename)
+            }
+            Err(_) => None,
         }
     }
 
@@ -137,6 +150,12 @@ pub enum DistFilenameError {
     /// The filename has a `.whl` extension but is otherwise an invalid wheel filename.
     #[error(transparent)]
     InvalidWheel(#[from] WheelFilenameError),
+    /// The wheel filename identifies a different package from the requested registry project.
+    #[error("wheel name `{actual}` does not match expected name `{expected}`")]
+    WheelNameMismatch {
+        expected: PackageName,
+        actual: PackageName,
+    },
     /// The filename has a source distribution extension but is otherwise invalid.
     #[error(transparent)]
     InvalidSourceDist(#[from] SourceDistFilenameError),
@@ -144,6 +163,7 @@ pub enum DistFilenameError {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::str::FromStr;
 
     use uv_normalize::PackageName;
@@ -161,8 +181,9 @@ mod tests {
         // is rejected because it has no recognized distribution extension.
         let name = PackageName::from_str("my-package").unwrap();
         let err = DistFilename::try_from_filename_with_reason("0.1.0", &name).unwrap_err();
-        assert!(
-            matches!(err, DistFilenameError::NoRecognizedExtension(_)),
+        assert_matches!(
+            err,
+            DistFilenameError::NoRecognizedExtension(_),
             "unexpected error variant: {err:?}"
         );
         let rendered = err.to_string();
@@ -178,8 +199,9 @@ mod tests {
         // similarly rejected with the no-extension reason rather than silently swallowing it.
         let name = PackageName::from_str("my-package").unwrap();
         let err = DistFilename::try_from_filename_with_reason("", &name).unwrap_err();
-        assert!(
-            matches!(err, DistFilenameError::NoRecognizedExtension(_)),
+        assert_matches!(
+            err,
+            DistFilenameError::NoRecognizedExtension(_),
             "unexpected error variant: {err:?}"
         );
     }
@@ -191,8 +213,9 @@ mod tests {
         let name = PackageName::from_str("my-package").unwrap();
         let err =
             DistFilename::try_from_filename_with_reason("not-a-wheel.whl", &name).unwrap_err();
-        assert!(
-            matches!(err, DistFilenameError::InvalidWheel(_)),
+        assert_matches!(
+            err,
+            DistFilenameError::InvalidWheel(_),
             "unexpected error variant: {err:?}"
         );
     }
@@ -202,5 +225,33 @@ mod tests {
         let name = PackageName::from_str("my-package").unwrap();
         let parsed = DistFilename::try_from_filename("my_package-0.1.0-py3-none-any.whl", &name);
         assert!(parsed.is_some(), "expected wheel to parse successfully");
+    }
+
+    #[test]
+    fn try_from_filename_rejects_mismatched_wheel() {
+        let name = PackageName::from_str("my-package").unwrap();
+        let err = DistFilename::try_from_filename_with_reason(
+            "other_package-0.1.0-py3-none-any.whl",
+            &name,
+        )
+        .unwrap_err();
+        assert_matches!(err, DistFilenameError::WheelNameMismatch { .. });
+        assert_eq!(
+            err.to_string(),
+            "wheel name `other-package` does not match expected name `my-package`"
+        );
+    }
+
+    #[test]
+    fn try_from_filename_accepts_normalized_wheel_name() {
+        let name = PackageName::from_str("my-package").unwrap();
+        for filename in [
+            "My_Package-0.1.0-py3-none-any.whl",
+            "my.package-0.1.0-py3-none-any.whl",
+            "my__package-0.1.0-py3-none-any.whl",
+        ] {
+            let parsed = DistFilename::try_from_filename_with_reason(filename, &name).unwrap();
+            assert_eq!(parsed.name(), &name);
+        }
     }
 }

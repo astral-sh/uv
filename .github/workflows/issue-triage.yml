@@ -1,5 +1,6 @@
 # Analyze newly opened issues and persist their triage context.
 name: "issue-triage"
+run-name: Issue context for ${{ github.event.issue.number || inputs.issue }}
 
 on:
   issues:
@@ -13,11 +14,16 @@ on:
 
 permissions: {}
 
+env:
+  UV_LOCKED: 1
+
 jobs:
   initialize-context:
     if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     permissions:
       contents: read
@@ -25,10 +31,15 @@ jobs:
       issues: read
     outputs:
       issue-context: ${{ steps.issue.outputs.context }}
+      prompt-title: ${{ steps.issue.outputs.prompt-title }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
 
       - name: "Collect issue context"
         id: issue
@@ -38,23 +49,19 @@ jobs:
             --json number,title,body,author,url \
             > "$RUNNER_TEMP/issue.json"
 
-          if ! jq --exit-status \
-            --arg repository "$GITHUB_REPOSITORY" \
-            '.url | startswith("https://github.com/\($repository)/issues/")' \
-            "$RUNNER_TEMP/issue.json" > /dev/null; then
-            echo "The issue must belong to $GITHUB_REPOSITORY." >&2
-            exit 1
-          fi
-
-          jq --raw-output '"context=\(tojson)"' \
-            "$RUNNER_TEMP/issue.json" >> "$GITHUB_OUTPUT"
+          jaq -er --arg repository "$GITHUB_REPOSITORY" '
+            if .url | startswith("https://github.com/\($repository)/issues/") then
+              "context=\(tojson)", "prompt-title=\(.title | gsub("[\r\n]+"; " "))"
+            else error("The issue must belong to \($repository).")
+            end
+          ' "$RUNNER_TEMP/issue.json" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
 
       - name: "Get issue context token"
         id: token
-        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -68,15 +75,14 @@ jobs:
 
       - name: "Initialize issue context"
         run: |
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue.json")"
-          branch="issue/$issue_number"
+          branch="issue/$ISSUE_NUMBER"
 
           git init --quiet "$RUNNER_TEMP/issue-context"
           cd "$RUNNER_TEMP/issue-context"
           git remote add origin \
             "https://x-access-token:${GH_TOKEN}@github.com/astral-sh/uv-dev.git"
 
-          gh issue develop "$issue_number" \
+          gh issue develop "$ISSUE_NUMBER" \
             --repo "$GITHUB_REPOSITORY" \
             --branch-repo astral-sh/uv-dev \
             --base issue/base \
@@ -95,16 +101,19 @@ jobs:
           git \
             -c user.name="astral-automations-bot[bot]" \
             -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
-            commit --message "Initialize issue context for $GITHUB_REPOSITORY#$issue_number"
+            commit --message "Initialize issue context"
           git push origin "HEAD:refs/heads/$branch"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE_NUMBER: ${{ fromJSON(steps.issue.outputs.context).number }}
 
   triage:
     needs: initialize-context
     if: github.repository == 'astral-sh/uv'
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 15
     permissions:
       contents: read
@@ -120,33 +129,33 @@ jobs:
       - name: "Prepare issue triage"
         run: |
           printf '%s\n' "$ISSUE_CONTEXT" > .issue-triage-event.json
-          issue_number="$(jq --raw-output '.number' .issue-triage-event.json)"
 
           git init --quiet "$RUNNER_TEMP/issue-context"
           git -C "$RUNNER_TEMP/issue-context" fetch --quiet --depth 1 \
             https://github.com/astral-sh/uv-dev.git \
-            "refs/heads/issue/$issue_number"
+            "refs/heads/issue/$ISSUE_NUMBER"
           git -C "$RUNNER_TEMP/issue-context" checkout --quiet FETCH_HEAD
 
           {
-            printf 'Issue triage for #%s: %s\n\n' \
-              "$issue_number" \
-              "$(jq -r '.title | gsub("[\r\n]+"; " ")' .issue-triage-event.json)"
+            printf 'Issue triage for #%s: %s\n\n' "$ISSUE_NUMBER" "$PROMPT_TITLE"
             cat agents/prompts/triage-issue.md
           } > "$RUNNER_TEMP/triage-issue-prompt.md"
         env:
           ISSUE_CONTEXT: ${{ needs.initialize-context.outputs.issue-context }}
+          ISSUE_NUMBER: ${{ fromJSON(needs.initialize-context.outputs.issue-context).number }}
+          PROMPT_TITLE: ${{ needs.initialize-context.outputs.prompt-title }}
 
       - name: "Triage issue"
         id: triage
-        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TMPDIR: ${{ runner.temp }}
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          codex-version: "0.146.0"
+          codex-version: "0.169.0"
           codex-home: "agents/codex"
+          model: gpt-6.2-sol
           effort: high
           permission-profile: "issue-triage"
           safety-strategy: drop-sudo
@@ -156,7 +165,7 @@ jobs:
 
       - name: "Upload issue context"
         if: steps.triage.outputs.final-message != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: issue-triage-context-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/issue-context/README.md
@@ -165,7 +174,7 @@ jobs:
 
       - name: "Upload Codex thread"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: codex-thread-issue-${{ fromJSON(needs.initialize-context.outputs.issue-context).number }}
           path: agents/codex/sessions
@@ -175,8 +184,10 @@ jobs:
   context:
     needs: triage
     if: needs.triage.outputs.result != ''
-    runs-on: ubuntu-latest
-    environment: automations
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    environment:
+      name: automations
+      deployment: false
     timeout-minutes: 10
     concurrency:
       group: issue-context-${{ fromJSON(needs.triage.outputs.issue-context).number }}
@@ -185,7 +196,7 @@ jobs:
       id-token: write # for the uv-dev issue-context credential broker
     steps:
       - name: "Download issue context"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: issue-triage-context-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/issue-context-update
@@ -193,15 +204,15 @@ jobs:
       - name: "Prepare issue context"
         run: |
           printf '%s\n' "$ISSUE_CONTEXT" > "$RUNNER_TEMP/issue.json"
-          printf '%s\n' "$TRIAGE_RESULT" | jq '.' > "$RUNNER_TEMP/triage.json"
+          printf '%s\n' "$TRIAGE_RESULT" > "$RUNNER_TEMP/triage.json"
           printf '%s\n%s\n%s\n' '```json' "$TRIAGE_RESULT" '```' >> "$GITHUB_STEP_SUMMARY"
         env:
           ISSUE_CONTEXT: ${{ needs.triage.outputs.issue-context }}
-          TRIAGE_RESULT: ${{ needs.triage.outputs.result }}
+          TRIAGE_RESULT: ${{ toJSON(fromJSON(needs.triage.outputs.result)) }}
 
       - name: "Get issue context token"
         id: token
-        uses: open-security-tools/ost-simple-sts@974a63a2daaaa40f7c6dec40d334f3da4421469e
+        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -211,8 +222,7 @@ jobs:
 
       - name: "Persist issue context"
         run: |
-          issue_number="$(jq --raw-output '.number' "$RUNNER_TEMP/issue.json")"
-          branch="issue/$issue_number"
+          branch="issue/$ISSUE_NUMBER"
 
           git init --quiet "$RUNNER_TEMP/issue-context"
           cd "$RUNNER_TEMP/issue-context"
@@ -233,13 +243,14 @@ jobs:
           git \
             -c user.name="astral-automations-bot[bot]" \
             -c user.email="305554984+astral-automations-bot[bot]@users.noreply.github.com" \
-            commit --message "Update issue context for $GITHUB_REPOSITORY#$issue_number"
+            commit --message "Update issue context"
           git push origin "HEAD:refs/heads/$branch"
 
           printf 'Issue context: https://github.com/astral-sh/uv-dev/tree/%s\n' "$branch" \
             >> "$GITHUB_STEP_SUMMARY"
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
+          ISSUE_NUMBER: ${{ fromJSON(needs.triage.outputs.issue-context).number }}
 
   reproduce-bug:
     needs: [triage, context]
@@ -257,5 +268,32 @@ jobs:
     with:
       issue: ${{ inputs.issue || github.event.issue.number }}
       issue-type: ${{ fromJSON(needs.triage.outputs.result).type }}
-      runner: ubuntu-latest
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    secrets: inherit
+
+  fix-bug:
+    needs:
+      - triage
+      - reproduce-bug
+    if: >-
+      needs.triage.outputs.result != '' &&
+      fromJSON(needs.triage.outputs.result).type == 'bug' &&
+      needs.reproduce-bug.outputs.result != '' &&
+      fromJSON(needs.reproduce-bug.outputs.result).reproduction == 'reproducible' &&
+      needs.reproduce-bug.outputs.pull-request != ''
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      issues: read
+    uses: $/.github/workflows/fix-bug.yml
+    with:
+      issue: ${{ inputs.issue || github.event.issue.number }}
+      issue-number: ${{ needs.reproduce-bug.outputs.issue-number }}
+      reproduction-result: ${{ needs.reproduce-bug.outputs.result }}
+      reproduction-thread-artifact-id: ${{ needs.reproduce-bug.outputs.thread-artifact-id }}
+      parent-pull-request: ${{ needs.reproduce-bug.outputs.pull-request }}
+      parent-head-ref: ${{ needs.reproduce-bug.outputs.head-ref }}
+      parent-head-sha: ${{ needs.reproduce-bug.outputs.head-sha }}
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     secrets: inherit

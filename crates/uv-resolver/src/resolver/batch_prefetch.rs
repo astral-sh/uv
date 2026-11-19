@@ -4,16 +4,16 @@ use std::sync::Arc;
 use itertools::Itertools;
 use pubgrub::Term;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tokio::sync::mpsc::Sender;
 use tracing::{debug, trace};
+use uv_resolver_types::PackageNodeKind;
 
 use crate::candidate_selector::CandidateSelector;
+use crate::prioritized_distribution::CompatibleDist;
 use crate::pubgrub::{PubGrubPackage, PubGrubPackageInner, Range};
-use crate::resolver::Request;
-use crate::{
-    InMemoryIndex, PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse,
-};
-use uv_distribution_types::{CompatibleDist, Identifier, IndexCapabilities, IndexMetadata};
+use crate::resolver::requests::{MetadataRequest, MetadataRequests};
+use crate::version_map::VersionMap;
+use crate::{PythonRequirement, ResolveError, ResolverEnvironment, VersionsResponse};
+use uv_distribution_types::{IndexCapabilities, IndexMetadata};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_pep508::MarkerTree;
@@ -56,23 +56,17 @@ pub(crate) struct BatchPrefetcher {
 #[derive(Clone)]
 pub(crate) struct BatchPrefetcherRunner {
     capabilities: IndexCapabilities,
-    index: InMemoryIndex,
-    request_sink: Sender<Request>,
+    requests: MetadataRequests,
 }
 
 impl BatchPrefetcher {
-    pub(crate) fn new(
-        capabilities: IndexCapabilities,
-        index: InMemoryIndex,
-        request_sink: Sender<Request>,
-    ) -> Self {
+    pub(crate) fn new(capabilities: IndexCapabilities, requests: MetadataRequests) -> Self {
         Self {
             tried_versions: FxHashMap::default(),
             last_prefetch: FxHashMap::default(),
             prefetch_runner: BatchPrefetcherRunner {
                 capabilities,
-                index,
-                request_sink,
+                requests,
             },
         }
     }
@@ -91,8 +85,7 @@ impl BatchPrefetcher {
     ) -> Result<(), ResolveError> {
         let PubGrubPackageInner::Package {
             name,
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**next
         else {
@@ -106,19 +99,11 @@ impl BatchPrefetcher {
         let total_prefetch = min(num_tried, 50);
 
         // This is immediate, we already fetched the version map.
-        let versions_response = if let Some(index) = index {
-            self.prefetch_runner
-                .index
-                .explicit()
-                .wait_blocking(&(name.clone(), index.url().clone()))
-                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
-        } else {
-            self.prefetch_runner
-                .index
-                .implicit()
-                .wait_blocking(name)
-                .map_err(|_| ResolveError::UnregisteredTask(name.to_string()))?
-        };
+        let versions_response = self
+            .prefetch_runner
+            .requests
+            .request_package(name, index)?
+            .wait();
 
         let phase = BatchPrefetchStrategy::Compatible {
             compatible: current_range.clone(),
@@ -146,8 +131,7 @@ impl BatchPrefetcher {
         // Only track base packages, no virtual packages from extras.
         let PubGrubPackageInner::Package {
             name,
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**package
         else {
@@ -165,8 +149,7 @@ impl BatchPrefetcher {
     fn should_prefetch(&self, next: &PubGrubPackage) -> (usize, bool) {
         let PubGrubPackageInner::Package {
             name,
-            extra: None,
-            group: None,
+            kind: PackageNodeKind::Base,
             marker: MarkerTree::TRUE,
         } = &**next
         else {
@@ -228,9 +211,11 @@ impl BatchPrefetcherRunner {
                     compatible,
                     previous,
                 } => {
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &compatible, version_map, env)
-                    {
+                    let candidate =
+                        selector.select_no_preference(name, &compatible, version_map, env);
+                    VersionMap::check_proxy_mapping_errors(version_map)?;
+
+                    if let Some(candidate) = candidate {
                         let compatible =
                             compatible.difference(&Range::singleton(candidate.version().clone()));
                         phase = BatchPrefetchStrategy::Compatible {
@@ -262,9 +247,10 @@ impl BatchPrefetcherRunner {
                             }
                         };
                     }
-                    if let Some(candidate) =
-                        selector.select_no_preference(name, &range, version_map, env)
-                    {
+                    let candidate = selector.select_no_preference(name, &range, version_map, env);
+                    VersionMap::check_proxy_mapping_errors(version_map)?;
+
+                    if let Some(candidate) = candidate {
                         phase = BatchPrefetchStrategy::InOrder {
                             previous: candidate.version().clone(),
                         };
@@ -287,7 +273,7 @@ impl BatchPrefetcherRunner {
 
             // Avoid prefetching built distributions that don't support _either_ PEP 658 (`.metadata`)
             // or range requests.
-            if !(wheel.file.dist_info_metadata
+            if !(wheel.file.dist_info_metadata.is_some()
                 || self.capabilities.supports_range_requests(&wheel.index))
             {
                 debug!("Abandoning prefetch for {wheel} due to missing registry capabilities");
@@ -312,10 +298,8 @@ impl BatchPrefetcherRunner {
             );
             prefetch_count += 1;
 
-            if self.index.distributions().register(dist.distribution_id()) {
-                let request = Request::from(dist);
-                self.request_sink.blocking_send(request)?;
-            }
+            self.requests
+                .enqueue_metadata(MetadataRequest::Resolved(dist))?;
         }
 
         match prefetch_count {

@@ -1,3 +1,7 @@
+// Keep the allocator crate linked so its global allocator is installed.
+#[cfg(feature = "performance-memory-allocator")]
+extern crate uv_performance_memory_allocator;
+
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -68,7 +72,7 @@ async fn main() -> ExitCode {
     if let Err(err) = result {
         trace!("Error trace: {err:?}");
         let err = err.context("uv-dev failed");
-        uv_errors::write_error_chain(err.as_ref(), uv_errors::Hints::none())
+        uv_errors::write_error_chain(err.as_ref(), &uv_errors::Hints::none())
             .expect("writing to stderr should not fail");
         ExitCode::FAILURE
     } else {

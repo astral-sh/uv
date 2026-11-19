@@ -2,22 +2,21 @@
 
 use reqwest_middleware::ClientWithMiddleware;
 use tracing::{debug, trace};
-use url::Url;
 use uv_client::BaseClient;
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
 
 use crate::trusted_publishing::{
-    Audience, MintTokenRequest, PublishToken, TrustedPublishingError, TrustedPublishingService,
-    decode_oidc_token,
+    Audience, BurnTokenRequest, MintTokenRequest, PublishToken, TrustedPublishingError,
+    TrustedPublishingService, TrustedPublishingToken, decode_oidc_token,
 };
 
 pub(crate) struct PyPIPublishingService<'a> {
     client: &'a ClientWithMiddleware,
-    registry: &'a DisplaySafeUrl,
+    registry: &'a SafeUrl,
 }
 
 impl<'a> PyPIPublishingService<'a> {
-    pub(crate) fn new(registry: &'a DisplaySafeUrl, client: &'a BaseClient) -> Self {
+    pub(crate) fn new(registry: &'a SafeUrl, client: &'a BaseClient) -> Self {
         Self {
             client: client.for_host(registry).raw_client(),
             registry,
@@ -30,6 +29,37 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         self.client
     }
 
+    async fn burn_token(
+        &self,
+        token: &TrustedPublishingToken,
+    ) -> Result<(), TrustedPublishingError> {
+        // Prefer HTTPS for token revocation; allow HTTP only in test builds.
+        let scheme = if cfg!(feature = "test") {
+            self.registry.scheme()
+        } else {
+            "https"
+        };
+        let burn_token_url = SafeUrl::parse(&format!(
+            "{}://{}/_/oidc/burn-token",
+            scheme,
+            self.registry.authority()
+        ))?;
+        debug!(
+            "Requesting revocation of the trusted publishing upload token at `{burn_token_url}`"
+        );
+        self.client
+            .post(burn_token_url.clone().into_unsafe_url())
+            .json(&BurnTokenRequest { token })
+            .send()
+            .await
+            .map_err(|err| TrustedPublishingError::ReqwestMiddleware(burn_token_url.clone(), err))?
+            .error_for_status()
+            .map_err(|err| TrustedPublishingError::Reqwest(burn_token_url, err))?;
+
+        // PyPI returns HTTP 202 regardless of whether the token was revoked.
+        Ok(())
+    }
+
     async fn audience(&self) -> Result<String, super::TrustedPublishingError> {
         // `pypa/gh-action-pypi-publish` uses `netloc` (RFC 1808), which is deprecated for authority
         // (RFC 3986).
@@ -39,15 +69,15 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         } else {
             "https"
         };
-        let audience_url = DisplaySafeUrl::parse(&format!(
+        let audience_url = SafeUrl::parse(&format!(
             "{}://{}/_/oidc/audience",
             scheme,
             self.registry.authority()
         ))?;
-        debug!("Querying the trusted publishing audience from {audience_url}");
+        debug!("Querying the trusted publishing audience from `{audience_url}`");
         let response = self
             .client
-            .get(Url::from(audience_url.clone()))
+            .get(audience_url.clone().into_unsafe_url())
             .send()
             .await
             .map_err(|err| TrustedPublishingError::ReqwestMiddleware(audience_url.clone(), err))?;
@@ -71,18 +101,18 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
         } else {
             "https"
         };
-        let mint_token_url = DisplaySafeUrl::parse(&format!(
+        let mint_token_url = SafeUrl::parse(&format!(
             "{}://{}/_/oidc/mint-token",
             scheme,
             self.registry.authority()
         ))?;
-        debug!("Querying the trusted publishing upload token from {mint_token_url}");
+        debug!("Querying the trusted publishing upload token from `{mint_token_url}`");
         let mint_token_payload = MintTokenRequest {
             token: oidc_token.reveal().to_string(),
         };
         let response = self
             .client
-            .post(Url::from(mint_token_url.clone()))
+            .post(mint_token_url.clone().into_unsafe_url())
             .json(&mint_token_payload)
             .send()
             .await
@@ -110,7 +140,7 @@ impl TrustedPublishingService for PyPIPublishingService<'_> {
                     Err(TrustedPublishingError::TokenRejected(
                         status,
                         String::from_utf8_lossy(&body).to_string(),
-                        claims,
+                        Box::new(claims),
                     ))
                 }
                 None => {

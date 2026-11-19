@@ -2,28 +2,32 @@
 //! Cargo is dual-licensed under either Apache 2.0 or MIT, at the user's choice.
 //! Source: <https://github.com/rust-lang/cargo/blob/e1ebce1035f9b53bb46a55bd4b0ecf51e24c6458/src/cargo/ops/cargo_clean.rs#L324>
 
+use std::fs::Metadata;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use tracing::debug;
+use uv_fs::PhysicalSpaceError;
 
 use crate::CleanReporter;
 
-/// The storage accounting used when removing cache entries.
+/// How to estimate reclaimed storage when removing cache entries.
 #[derive(Debug, Clone, Copy, Default)]
-pub enum RemovalMode {
-    /// Report the logical size of the removed files.
+pub enum RemovalAccounting {
+    /// Estimate reclaimed storage from ordinary filesystem metadata.
     #[default]
-    Logical,
-    /// Report the exclusively owned physical storage reclaimed by the removed files.
-    Physical,
+    Coarse,
+    /// Inspect filesystem allocation and sharing where supported.
+    Fine,
 }
 
 /// A builder for a [`Remover`] that can remove files and directories.
 #[derive(Default)]
 pub(crate) struct Remover {
     reporter: Option<Box<dyn CleanReporter>>,
-    removal_mode: RemovalMode,
+    removal_accounting: RemovalAccounting,
 }
 
 impl Remover {
@@ -36,8 +40,8 @@ impl Remover {
     }
 
     /// Set the storage accounting used before each file is removed.
-    pub(crate) fn with_removal_mode(mut self, removal_mode: RemovalMode) -> Self {
-        self.removal_mode = removal_mode;
+    pub(crate) fn with_removal_accounting(mut self, removal_accounting: RemovalAccounting) -> Self {
+        self.removal_accounting = removal_accounting;
         self
     }
 
@@ -48,9 +52,58 @@ impl Remover {
         path: impl AsRef<Path>,
         skip_locked_file: bool,
     ) -> io::Result<Removal> {
-        let mut removal = Removal::new(self.removal_mode);
+        let mut removal = Removal::new(self.removal_accounting);
         removal.rm_rf(path.as_ref(), self.reporter.as_deref(), skip_locked_file)?;
         Ok(removal)
+    }
+}
+
+/// Estimate the storage reclaimed by removing a non-directory entry.
+#[cfg(unix)]
+fn file_size(metadata: &Metadata) -> u64 {
+    if metadata.nlink() == 1 {
+        metadata.blocks().saturating_mul(512)
+    } else {
+        0
+    }
+}
+
+/// Estimate the storage reclaimed by removing a non-directory entry.
+#[cfg(not(unix))]
+fn file_size(metadata: &Metadata) -> u64 {
+    metadata.len()
+}
+
+/// The estimated physical space reclaimed by a cache removal.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum PhysicalBytes {
+    /// Physical accounting was disabled or unsupported.
+    #[default]
+    Unavailable,
+    /// Every removed file contributed a measurement.
+    Measured(u64),
+    /// Some files could not be measured.
+    LowerBound(u64),
+}
+
+impl PhysicalBytes {
+    fn mark_incomplete(&mut self) {
+        if let Self::Measured(bytes) = *self {
+            *self = Self::LowerBound(bytes);
+        }
+    }
+
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Unavailable, _) | (_, Self::Unavailable) => Self::Unavailable,
+            (Self::Measured(left), Self::Measured(right)) => {
+                Self::Measured(left.saturating_add(right))
+            }
+            (Self::LowerBound(left), Self::Measured(right) | Self::LowerBound(right))
+            | (Self::Measured(left), Self::LowerBound(right)) => {
+                Self::LowerBound(left.saturating_add(right))
+            }
+        }
     }
 }
 
@@ -61,44 +114,48 @@ pub struct Removal {
     pub num_files: u64,
     /// The number of directories removed.
     pub num_dirs: u64,
-    /// The logical number of bytes removed.
-    ///
-    /// Note: this will both over-count bytes removed for hard-linked files, and under-count
-    /// bytes in general since it's a measure of the exact byte size (as opposed to the block size).
-    pub logical_bytes: u64,
-    /// The exclusively owned physical file data reclaimed by the removal, when available.
-    pub physical_bytes: Option<u64>,
-    /// Whether any removed entries could not be measured, making the physical count a lower bound.
-    pub physical_bytes_incomplete: bool,
+    /// The coarse estimate of the number of bytes occupied by the removed files.
+    pub coarse_bytes: u64,
+    /// The fine-grained estimate of reclaimed physical file data.
+    pub physical_bytes: PhysicalBytes,
 }
 
 impl Removal {
     /// Create an empty removal summary with the requested storage accounting.
-    pub(crate) fn new(removal_mode: RemovalMode) -> Self {
+    pub(crate) fn new(removal_accounting: RemovalAccounting) -> Self {
         Self {
-            physical_bytes: match removal_mode {
-                RemovalMode::Logical => None,
-                RemovalMode::Physical => Some(0),
+            physical_bytes: match removal_accounting {
+                RemovalAccounting::Coarse => PhysicalBytes::Unavailable,
+                RemovalAccounting::Fine => PhysicalBytes::Measured(0),
             },
             ..Self::default()
         }
     }
 
     /// Account for a file while its current sharing state can still be inspected.
-    fn add_file(&mut self, path: &Path, metadata: &std::fs::Metadata) {
-        self.logical_bytes += metadata.len();
+    fn add_file(&mut self, path: &Path, metadata: &Metadata) {
+        self.coarse_bytes += file_size(metadata);
 
-        if let Some(physical_bytes) = self.physical_bytes {
+        if let PhysicalBytes::Measured(total) | PhysicalBytes::LowerBound(total) =
+            &mut self.physical_bytes
+        {
             match uv_fs::physical_space(path, metadata) {
-                Ok(physical) => {
-                    self.physical_bytes = Some(physical_bytes.saturating_add(physical));
+                Ok(bytes) => {
+                    *total = total.saturating_add(bytes);
                 }
-                Err(error) => {
+                Err(PhysicalSpaceError::UnsupportedFilesystem) => {
                     debug!(
-                        "Failed to measure physical space for {}: {error}",
+                        "Fine-grained space accounting is unsupported for `{}`; falling back to coarse accounting",
                         path.display()
                     );
-                    self.physical_bytes_incomplete = true;
+                    self.physical_bytes = PhysicalBytes::Unavailable;
+                }
+                Err(PhysicalSpaceError::UnmeasurableFile(error)) => {
+                    debug!(
+                        "Failed to measure physical space for `{}`: {error}",
+                        path.display()
+                    );
+                    self.physical_bytes.mark_incomplete();
                 }
             }
         }
@@ -134,10 +191,10 @@ impl Removal {
                         } else {
                             remove_file(&path)?;
                         }
-                    },
+                    }
                     _ => {
                         remove_file(&path)?;
-                    },
+                    }
                 }
             } else {
                 remove_file(&path)?;
@@ -167,7 +224,7 @@ impl Removal {
 
             let entry = entry?;
 
-            // Remove the exclusive lock last.
+            // Keep the root lock in place for other uv processes.
             if skip_locked_file
                 && entry.file_name() == ".lock"
                 && entry
@@ -192,7 +249,7 @@ impl Removal {
                 self.num_files += 1;
                 remove_dir(entry.path())?;
             } else if entry.file_type().is_dir() {
-                // Remove the directory with the exclusive lock last.
+                // Keep the root directory containing the lock, too.
                 if skip_locked_file && entry.path() == path.as_ref() {
                     continue;
                 }
@@ -209,8 +266,8 @@ impl Removal {
                 // Remove the file.
                 if let Ok(metadata) = entry.metadata() {
                     self.add_file(entry.path(), &metadata);
-                } else if self.physical_bytes.is_some() {
-                    self.physical_bytes_incomplete = true;
+                } else {
+                    self.physical_bytes.mark_incomplete();
                 }
                 remove_file(entry.path())?;
             }
@@ -228,12 +285,8 @@ impl std::ops::AddAssign for Removal {
     fn add_assign(&mut self, other: Self) {
         self.num_files += other.num_files;
         self.num_dirs += other.num_dirs;
-        self.logical_bytes += other.logical_bytes;
-        self.physical_bytes = self
-            .physical_bytes
-            .zip(other.physical_bytes)
-            .map(|(left, right)| left.saturating_add(right));
-        self.physical_bytes_incomplete |= other.physical_bytes_incomplete;
+        self.coarse_bytes += other.coarse_bytes;
+        self.physical_bytes = self.physical_bytes.combine(other.physical_bytes);
     }
 }
 
@@ -311,5 +364,20 @@ fn remove_dir_all(path: &Path) -> io::Result<()> {
             fs_err::remove_dir_all(path)
         }
         Err(err) => Err(err),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PhysicalBytes::{LowerBound, Measured, Unavailable};
+
+    #[test]
+    fn combine_physical_bytes() {
+        assert_eq!(Measured(2).combine(Measured(3)), Measured(5));
+        assert_eq!(LowerBound(2).combine(Measured(3)), LowerBound(5));
+        assert_eq!(Measured(2).combine(LowerBound(3)), LowerBound(5));
+        assert_eq!(LowerBound(2).combine(LowerBound(3)), LowerBound(5));
+        assert_eq!(LowerBound(2).combine(Unavailable), Unavailable);
+        assert_eq!(Unavailable.combine(Measured(3)), Unavailable);
     }
 }

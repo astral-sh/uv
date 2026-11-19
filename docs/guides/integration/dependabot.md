@@ -27,8 +27,8 @@ updates:
 
 ## Dependency cooldown
 
-If you use [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is recommended to
-also set the equivalent
+If you use the [`exclude-newer`](../../reference/settings.md#exclude-newer) option, it is
+recommended to also set the equivalent
 [`cooldown`](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cooldown-)
 option in Dependabot, to avoid ending up with pull requests where uv would not be able to lock the
 dependencies.

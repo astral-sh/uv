@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Fetch latest python-build-standalone tag
-latest_tag=$(curl -fsSL -H "Accept: application/json" https://github.com/astral-sh/python-build-standalone/releases/latest | jq -r .tag_name)
+latest_tag=$(curl -fsSL -H "Accept: application/json" https://github.com/astral-sh/python-build-standalone/releases/latest | jaq -r .tag_name)
 
 # Validate we got a tag name back
 if [[ -z "${latest_tag}" ]]; then

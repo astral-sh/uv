@@ -1,0 +1,64 @@
+name: "Set up uv for toolchain commands"
+description: "Install uv and optionally add a locked dependency group to PATH."
+
+inputs:
+  enable-cache:
+    description: "Cache uv dependencies from the checkout (true or auto), or run setup in the action directory (false)."
+    default: "false"
+  save-cache:
+    description: "Whether setup-uv saves the uv cache after the run."
+    default: "auto"
+  group:
+    description: "Dependency group from the workflow revision to put on PATH."
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Select uv release"
+      id: release
+      shell: bash
+      run: |
+        case "$RUNNER_OS/$RUNNER_ARCH" in
+          Linux/X64)
+            uv_version="0.13.7"
+            uv_checksum="c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+            ;;
+          macOS/ARM64)
+            uv_version="0.13.7"
+            uv_checksum="81b811b57e4624df7ed3aac148e0359100d9962f3d9dce00aec533dc2e086731"
+            ;;
+          Windows/X64)
+            uv_version="0.13.7"
+            uv_checksum="0cdc5b38fe5a8168ed6a25814f5ba43c21d313dd3187314fccb37b7cec46e021"
+            ;;
+          *)
+            echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
+            exit 1
+            ;;
+        esac
+        {
+          echo "version=$uv_version"
+          echo "checksum=$uv_checksum"
+        } >> "$GITHUB_OUTPUT"
+
+    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        version: ${{ steps.release.outputs.version }}
+        checksum: ${{ steps.release.outputs.checksum }}
+        enable-cache: ${{ inputs.enable-cache }}
+        save-cache: ${{ inputs.save-cache }}
+        working-directory: ${{ inputs.enable-cache == 'false' && github.action_path || github.workspace }}
+
+    - name: "Set up toolchain group"
+      if: inputs.group != ''
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      env:
+        TOOLCHAIN_GROUP: ${{ inputs.group }}
+        # Keep the tools outside both the checkout and the sandbox's writable temporary directory.
+        UV_PROJECT_ENVIRONMENT: ${{ github.action_path }}/.venv
+      run: |
+        # A writable uv cache must not provide a hard link to an executable on PATH.
+        uv sync --locked --only-group "$TOOLCHAIN_GROUP" --python 3 --link-mode copy
+        echo "$UV_PROJECT_ENVIRONMENT/${{ runner.os == 'Windows' && 'Scripts' || 'bin' }}" >> "$GITHUB_PATH"

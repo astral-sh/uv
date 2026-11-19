@@ -57,8 +57,6 @@ The benchmark script itself has a several requirements:
 
 - A local uv release build (`cargo build --release`).
 - An installation of the production `uv` binary in your path.
-- The [`hyperfine`](https://github.com/sharkdp/hyperfine) command-line tool installed on your
-  system.
 
 To benchmark resolution against pip-compile, Poetry, and PDM:
 

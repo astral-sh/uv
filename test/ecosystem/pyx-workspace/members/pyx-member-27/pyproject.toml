@@ -1,0 +1,31 @@
+[project]
+name = "pyx-member-27"
+version = "0.1.0"
+requires-python = "==3.14.*"
+dependencies = [
+    "aiohttp==3.14.1",
+    "boto3==1.42.88",
+    "botocore==1.42.88",
+    "cryptography==48.0.1",
+    "greenlet==3.4.0",
+    "packaging-legacy==23.0.post0",
+    "pyx-member-06",
+    "pyx-member-23",
+    "pyx-member-24[aws]",
+    "pyx-member-28[aws]",
+    "pyx-member-32",
+    "rich==14.3.2",
+    "sqlalchemy==2.0.49",
+    "stripe==14.5.0a1",
+    "tqdm==4.67.3",
+    "trove-classifiers==2026.1.14.14",
+    "types-boto3[s3]==1.42.88",
+    "workos==5.46.0",
+]
+
+[dependency-groups]
+dev = [
+    "deptry==0.25.1",
+    "ruff==0.15.18",
+    "ty==0.0.51",
+]

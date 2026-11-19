@@ -9,11 +9,12 @@ description: A guide to using uv in GitLab CI/CD, including installation, settin
 ## Using the uv image
 
 Astral provides [Docker images](docker.md#available-images) with uv preinstalled.
-Select a variant that is suitable for your workflow.
+Use a variant with a shell, such as the Debian-based image below, so GitLab Runner can execute the
+job's `script`.
 
 ```yaml title=".gitlab-ci.yml"
 variables:
-  UV_VERSION: "0.12.3"
+  UV_VERSION: "0.13.9"
   PYTHON_VERSION: "3.12"
   BASE_LAYER: trixie-slim
   # GitLab CI creates a separate mountpoint for the build directory,
@@ -25,17 +26,6 @@ uv:
   script:
     # your `uv` commands
 ```
-
-!!! note
-
-    If you are using a distroless image, you have to specify the entrypoint:
-    ```yaml
-    uv:
-      image:
-        name: ghcr.io/astral-sh/uv:$UV_VERSION
-        entrypoint: [""]
-      # ...
-    ```
 
 ## Caching
 
@@ -69,8 +59,8 @@ If using the `uv pip` interface instead of the uv project interface, uv requires
 environment by default. To allow installing packages into the system environment, use the `--system`
 flag on all uv invocations or set the `UV_SYSTEM_PYTHON` variable.
 
-The `UV_SYSTEM_PYTHON` variable can be defined in at different scopes. You can read more about
-how [variables and their precedence works in GitLab here](https://docs.gitlab.com/ee/ci/variables/)
+The `UV_SYSTEM_PYTHON` variable can be defined at different scopes. You can read more about
+how [variables and their precedence works in GitLab here](https://docs.gitlab.com/ee/ci/variables/).
 
 Opt-in for the entire workflow by defining it at the top level:
 

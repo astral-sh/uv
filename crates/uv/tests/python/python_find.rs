@@ -1,3 +1,7 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
+use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
 use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
@@ -7,6 +11,130 @@ use uv_platform::{Arch, Os};
 use uv_static::EnvVars;
 
 use uv_test::{uv_snapshot, venv_bin_path};
+
+#[test]
+fn python_find_default_arch() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_python_sources();
+    let arch = Arch::from_env().to_string();
+    let os = Os::from_env();
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12\n")?;
+
+    // A version pin uses the architecture specified by the environment variable.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, "wasm32"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for any-3.12-any-wasm32-any in [PYTHON SOURCES]
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, &arch), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+    // An empty value leaves the architecture unrestricted.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, ""), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::UV_PYTHON_ARCH, "invalid"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to parse environment variable `UV_PYTHON_ARCH` with invalid value `invalid`: Unknown architecture: invalid
+    ");
+
+    // An architecture-qualified request and an explicit interpreter path take precedence.
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32")
+        .arg(format!("cpython-3.12-{os}-{arch}")), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+    let python = context
+        .python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, &arch)
+        .output()?;
+    let python = String::from_utf8(python.stdout)?;
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32")
+        .arg(python.trim()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    Ok(())
+}
+
+#[test]
+fn python_default_arch_existing_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_python_sources();
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "example"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str("3.12\n")?;
+
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--offline")
+        .env(EnvVars::UV_PYTHON_ARCH, "wasm32"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for any-3.12-any-wasm32-any in [PYTHON SOURCES]
+    ");
+
+    Ok(())
+}
+
+/// Workspace discovery warnings should retain the parse diagnostic, unless warnings are disabled.
+#[test]
+fn python_find_warning_chain() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = 42
+            version = "0.1.0"
+        "#})?;
+
+    // Bypass settings discovery so this exercises the workspace discovery warning.
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-config"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+
+    ----- stderr -----
+    warning: Failed to parse: pyproject.toml
+      cause: TOML parse error at line 2, column 8
+               |
+             2 | name = 42
+               |        ^^
+             invalid type: integer `42`, expected a string
+    ");
+    uv_snapshot!(context.filters(), context.python_find().arg("--no-config").arg("--quiet"), @"exit_code: 0 (success)");
+    Ok(())
+}
 
 #[test]
 fn python_find() {
@@ -124,6 +252,109 @@ fn python_find_skips_download_metadata_when_python_is_found() {
     ----- stdout -----
     [PYTHON-3.12]
     ");
+}
+
+#[test]
+#[cfg(unix)]
+fn python_find_cached_launcher_override() {
+    let context = uv_test::test_context!("3.12");
+    let other_venv = context.temp_dir.child("other");
+
+    context
+        .venv()
+        .arg("--python")
+        .arg("3.12")
+        .arg(other_venv.path())
+        .assert()
+        .success();
+
+    let requested_python = venv_bin_path(&other_venv).join("python3");
+    let override_python = venv_bin_path(&context.venv).join("python3");
+
+    // `PYTHONEXECUTABLE` makes the requested `other` interpreter report `.venv`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(&requested_python)
+        .env(EnvVars::PYTHONEXECUTABLE, &override_python), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    // Without `PYTHONEXECUTABLE`, this should return `other`, not the cached `.venv`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(&requested_python)
+        .env_remove(EnvVars::PYTHONEXECUTABLE), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/other/bin/python3
+    ");
+}
+
+/// Removing `pyvenv.cfg` makes a Unix venv executable run as its base interpreter.
+#[test]
+#[cfg(unix)]
+fn python_find_refreshes_interpreter_after_pyvenv_cfg_removal() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_python_sources();
+    let bin = venv_bin_path(&context.venv);
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    fs_err::remove_file(context.venv.child("pyvenv.cfg"))?;
+
+    // Exploit Python being unable to tell a system interpreter from a venv without `pyvenv.cfg`.
+    // Once a fresh query sees the file is gone, the executable shows up in `uv python find --system`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12.[X]
+    ");
+
+    Ok(())
+}
+
+/// Creating `pyvenv.cfg` makes the same Unix executable report a virtual environment.
+#[test]
+#[cfg(unix)]
+fn python_find_refreshes_interpreter_after_pyvenv_cfg_creation() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_python_sources();
+    let bin = venv_bin_path(&context.venv);
+    let config = context.venv.child("pyvenv.cfg");
+    let saved_config = context.venv.child("pyvenv.cfg.saved");
+    fs_err::rename(&config, &saved_config)?;
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12.[X]
+    ");
+
+    fs_err::rename(&saved_config, &config)?;
+
+    // The cache entry recorded the config as missing. A fresh query sees the restored config,
+    // identifies the executable as a virtual environment, and excludes it from `--system`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    Ok(())
 }
 
 #[test]
@@ -613,6 +844,144 @@ fn python_find_venv() {
     }
 }
 
+#[test]
+fn python_find_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+
+    context.venv().arg("external").assert().success();
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str("external\r\n")?;
+
+    // A redirect is usable without enabling preview.
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/external/[BIN]/[PYTHON]
+
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    ");
+
+    // Enabling the feature silences the warning.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/external/[BIN]/[PYTHON]
+    ");
+
+    // An explicit system selection overrides the redirect.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    // `uv pip` uses the same discovery when no virtual environment is activated.
+    uv_snapshot!(context.filters(), context.pip_list().env_remove(EnvVars::VIRTUAL_ENV), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Using Python 3.12.[X] environment at: external
+    ");
+
+    // A redirect in a child directory can point to a sibling environment using `..`.
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    context.venv().arg("other").assert().success();
+    child.child(".venv").write_str("../other\n")?;
+    uv_snapshot!(context.filters(), context.python_find()
+        .current_dir(&child).arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/other/[BIN]/[PYTHON]
+    ");
+
+    // A missing target is ignored when searching for Python.
+    redirect.write_str("missing\n")?;
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    // A missing target is an error when a virtual environment is required.
+    uv_snapshot!(context.filters(), context.pip_install().arg("--no-index").arg("anyio")
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Broken virtual environment `[TEMP_DIR]/missing`: missing `pyvenv.cfg`
+    ");
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn python_find_venv_executable_precedence() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let python = context.interpreter();
+    let python3 = python.with_file_name("python3");
+
+    // Prefer `python` when discovering an environment or requesting it by directory.
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .env(EnvVars::VIRTUAL_ENV, context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    // An explicit executable path is still used as given.
+    uv_snapshot!(context.filters(), context.python_find().arg(&python3), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    // Discover environments containing only `python`.
+    fs_err::remove_file(&python3)?;
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python
+    ");
+
+    // Discover environments containing only `python3`.
+    fs_err::os::unix::fs::symlink(fs_err::canonicalize(&python)?, &python3)?;
+    fs_err::remove_file(&python)?;
+    uv_snapshot!(context.filters(), context.python_find().arg(context.venv.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/bin/python3
+    ");
+
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn python_find_unsupported_version() {
@@ -689,7 +1058,7 @@ fn python_find_venv_invalid() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
-      Caused by: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
+      cause: Python interpreter not found at `[VENV]/[BIN]/[PYTHON]`
     ");
 
     // Unless the virtual environment is not active
@@ -820,7 +1189,7 @@ fn python_find_script() {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("foo.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/foo-[HASH]
     Resolved in [TIME]
     Checked in [TIME]
     ");
@@ -828,7 +1197,7 @@ fn python_find_script() {
     uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/environments-v2/foo-[HASH]/[BIN]/[PYTHON]
+    [CACHE_DIR]/environments-[VERSION]/foo-[HASH]/[BIN]/[PYTHON]
     ");
 }
 
@@ -858,7 +1227,10 @@ fn python_find_script_no_environment() {
 
 #[test]
 fn python_find_script_python_not_found() {
-    let context = uv_test::test_context_with_versions!(&[]).with_filtered_python_sources();
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_env(EnvVars::UV_PYTHON_PREFERENCE, "only-managed")
+        .with_env(EnvVars::UV_INTERNAL__TEST_PYTHON_MANAGED, "");
+    context.temp_dir.child(".python-version").touch().unwrap();
 
     let script = context.temp_dir.child("foo.py");
 
@@ -873,10 +1245,42 @@ fn python_find_script_python_not_found() {
     uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    No interpreter found in [PYTHON SOURCES]
+    error: No interpreter found in virtual environments or managed installations
 
     hint: A managed Python download is available, but Python downloads are set to 'never'
     ");
+}
+
+#[cfg(unix)]
+#[test]
+fn python_find_script_interpreter_error_chain() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    context.temp_dir.child("foo.py").write_str(indoc! {r"
+        # /// script
+        # dependencies = []
+        # ///
+    "})?;
+    let python = context.temp_dir.child("broken-python");
+    python.write_str(indoc! {r"
+        #!/bin/sh
+        printf 'interpreter probe failed\n' >&2
+        exit 42
+    "})?;
+    fs_err::set_permissions(&python, std::fs::Permissions::from_mode(0o755))?;
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_str(python.path().to_str().expect("UTF-8 fixture path"))?;
+    uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py").arg("-q"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from provided path at `broken-python`
+      cause: Querying Python at `[TEMP_DIR]/broken-python` failed with exit status exit status: 42
+
+             [stderr]
+             interpreter probe failed
+    ");
+    Ok(())
 }
 
 #[test]
@@ -899,7 +1303,7 @@ fn python_find_script_no_such_version() {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("foo.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/foo-[HASH]
     Resolved in [TIME]
     Checked in [TIME]
     ");
@@ -907,7 +1311,7 @@ fn python_find_script_no_such_version() {
     script
         .write_str(indoc! {r#"
             # /// script
-            # requires-python = ">=3.15"
+            # requires-python = ">=3.16"
             # dependencies = []
             # ///
         "#})
@@ -916,7 +1320,7 @@ fn python_find_script_no_such_version() {
     uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    No interpreter found for Python >=3.15 in [PYTHON SOURCES]
+    error: No interpreter found for Python >=3.16 in [PYTHON SOURCES]
     ");
 }
 
@@ -973,8 +1377,8 @@ fn python_find_path() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from provided path at `bar`
-      Caused by: Failed to query Python interpreter at `[TEMP_DIR]/bar`
-      Caused by: [PERMISSION DENIED]
+      cause: Failed to query Python interpreter at `[TEMP_DIR]/bar`
+      cause: [PERMISSION DENIED]
     ");
 
     // No interpreter at a file that does not exist
@@ -992,7 +1396,6 @@ fn python_find_freethreaded_313() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1026,7 +1429,6 @@ fn python_find_freethreaded_314() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
@@ -1084,79 +1486,211 @@ fn python_find_freethreaded_314() {
 
 #[test]
 #[cfg(feature = "test-python-managed")]
+#[cfg(unix)]
+fn python_find_version_range_installation_key_order() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_latest_python_versions()
+        .with_filtered_python_sources()
+        .with_managed_python_dirs()
+        .with_filtered_python_install_bin()
+        .with_filtered_exe_suffix();
+
+    context.python_install().arg("3.15t").assert().success();
+    context.python_install().arg("3.15").assert().success();
+
+    // Managed installations have their own deterministic ordering.
+    uv_snapshot!(context.filters(), context.python_find().arg("==3.15.*"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/python3.15
+    ");
+
+    // Equally preferred search-path executables use the ordering of their queried installation
+    // keys, rather than the order returned by the filesystem.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("==3.15.*")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [BIN]/python3.15
+    ");
+
+    // Listing installed interpreters exercises the parallel query strategy within the same group.
+    uv_snapshot!(context.filters(), context.python_list()
+        .arg("==3.15.*")
+        .arg("--only-installed")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, context.bin_dir.path())
+        .env(EnvVars::UV_PYTHON_INSTALL_DIR, context.temp_dir.child("missing-managed").path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    cpython-3.15.[LATEST]-[PLATFORM]                 [BIN]/python3.15 -> managed/cpython-3.15-[PLATFORM]/[INSTALL-BIN]/python3.15
+    cpython-3.15.[LATEST]+freethreaded-[PLATFORM]    [BIN]/python3.15t -> managed/cpython-3.15+freethreaded-[PLATFORM]/[INSTALL-BIN]/python3.15t
+    ");
+
+    // Interpreter metadata, rather than the executable name, determines whether a build is
+    // free-threaded.
+    let misleading_names = context.temp_dir.child("misleading-names");
+    misleading_names.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15t"),
+        misleading_names.join("python3.15"),
+    )
+    .unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        misleading_names.join("python3.15t"),
+    )
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("==3.15.*")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, misleading_names.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/misleading-names/python3.15t
+    ");
+
+    context.python_install().arg("3.14").assert().success();
+
+    // Preferred executable names must remain ahead of newer minor-version fallback candidates.
+    let preferred_names = context.temp_dir.child("preferred-names");
+    preferred_names.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.14"),
+        preferred_names.join("python3"),
+    )
+    .unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        preferred_names.join("python3.15"),
+    )
+    .unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15t"),
+        preferred_names.join("python3.15t"),
+    )
+    .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg(">=3.14,<3.16")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, preferred_names.path()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/preferred-names/python3
+    ");
+
+    // Installation-key ordering must not override the order of directories on the search path.
+    let first_directory = context.temp_dir.child("first");
+    first_directory.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15t"),
+        first_directory.join("python3.15t"),
+    )
+    .unwrap();
+
+    let second_directory = context.temp_dir.child("second");
+    second_directory.create_dir_all().unwrap();
+    fs_err::os::unix::fs::symlink(
+        context.bin_dir.path().join("python3.15"),
+        second_directory.join("python3.15"),
+    )
+    .unwrap();
+
+    let search_path = std::env::join_paths([first_directory.path(), second_directory.path()])
+        .expect("The test directories should form a valid search path");
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("==3.15.*")
+        .arg("--python-preference")
+        .arg("system")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, search_path), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/first/python3.15t
+    ");
+}
+
+#[test]
+#[cfg(feature = "test-python-managed")]
 fn python_find_prerelease_version_specifiers() {
     let context = uv_test::test_context_with_versions!(&[])
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    context.python_install().arg("3.14.0rc2").assert().success();
-    context.python_install().arg("3.14.0rc3").assert().success();
+    context.python_install().arg("3.13.0rc2").assert().success();
+    context.python_install().arg("3.13.0rc3").assert().success();
 
-    // `>=3.14` should allow pre-release versions
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14").arg("--resolve-links"), @"
+    // `>=3.13` should allow pre-release versions
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.13").arg("--resolve-links"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
-    warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
+    warning: You're using a pre-release version of Python (3.13.0rc3) but a stable version is available. Use `uv python upgrade 3.13` to upgrade.
     ");
 
-    // `>3.14rc2` should not match rc2
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2").arg("--resolve-links"), @"
+    // `>3.13.0rc2` should not match rc2
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.13.0rc2").arg("--resolve-links"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
-    // `>3.14rc3` should not match rc3
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc3"), @"
+    // `>3.13.0rc3` should not match rc3
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.13.0rc3"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No interpreter found for Python >3.14.0rc3 in [PYTHON SOURCES]
+    error: No interpreter found for Python >3.13.0rc3 in [PYTHON SOURCES]
     ");
 
-    // `>=3.14.0rc3` should match rc3
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14.0rc3").arg("--resolve-links"), @"
+    // `>=3.13.0rc3` should match rc3
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.13.0rc3").arg("--resolve-links"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
-    // `<3.14.0rc3` should match rc2
-    uv_snapshot!(context.filters(), context.python_find().arg("<3.14.0rc3").arg("--resolve-links"), @"
+    // `<3.13.0rc3` should match rc2
+    uv_snapshot!(context.filters(), context.python_find().arg("<3.13.0rc3").arg("--resolve-links"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0rc2-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
-    // `<=3.14.0rc3` should match rc3
-    uv_snapshot!(context.filters(), context.python_find().arg("<=3.14.0rc3").arg("--resolve-links"), @"
+    // `<=3.13.0rc3` should match rc3
+    uv_snapshot!(context.filters(), context.python_find().arg("<=3.13.0rc3").arg("--resolve-links"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0rc3-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
     // Install the stable version
-    context.python_install().arg("3.14.0").assert().success();
+    context.python_install().arg("3.13.0").assert().success();
 
-    // `>=3.14` should prefer stable
-    uv_snapshot!(context.filters(), context.python_find().arg(">=3.14").arg("--resolve-links"), @"
+    // `>=3.13` should prefer stable
+    uv_snapshot!(context.filters(), context.python_find().arg(">=3.13").arg("--resolve-links"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 
-    // `>3.14rc2` should prefer stable
-    uv_snapshot!(context.filters(), context.python_find().arg(">3.14.0rc2").arg("--resolve-links"), @"
+    // `>3.13.0rc2` should prefer stable
+    uv_snapshot!(context.filters(), context.python_find().arg(">3.13.0rc2").arg("--resolve-links"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 }
 
@@ -1167,38 +1701,37 @@ fn python_find_prerelease_with_patch_request() {
         .with_filtered_python_keys()
         .with_filtered_python_sources()
         .with_managed_python_dirs()
-        .with_python_download_cache()
         .with_filtered_python_install_bin()
         .with_filtered_python_names()
         .with_filtered_exe_suffix();
 
-    // Install 3.14.0rc3
-    context.python_install().arg("3.14.0rc3").assert().success();
+    // Install 3.13.0rc3
+    context.python_install().arg("3.13.0rc3").assert().success();
 
     // When no `.0` patch version is included, we'll allow selection of a pre-release
-    uv_snapshot!(context.filters(), context.python_find().arg("3.14"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
 
     ----- stderr -----
-    warning: You're using a pre-release version of Python (3.14.0rc3) but a stable version is available. Use `uv python upgrade 3.14` to upgrade.
+    warning: You're using a pre-release version of Python (3.13.0rc3) but a stable version is available. Use `uv python upgrade 3.13` to upgrade.
     ");
 
     // When `.0` is explicitly included, we will require a stable release
-    uv_snapshot!(context.filters(), context.python_find().arg("3.14.0"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13.0"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: No interpreter found for Python 3.14.0 in [PYTHON SOURCES]
+    error: No interpreter found for Python 3.13.0 in [PYTHON SOURCES]
     ");
 
-    // Install 3.14.0 stable
-    context.python_install().arg("3.14.0").assert().success();
+    // Install 3.13.0 stable
+    context.python_install().arg("3.13.0").assert().success();
 
-    uv_snapshot!(context.filters(), context.python_find().arg("3.14.0"), @"
+    uv_snapshot!(context.filters(), context.python_find().arg("3.13.0"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [TEMP_DIR]/managed/cpython-3.14.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
+    [TEMP_DIR]/managed/cpython-3.13.0-[PLATFORM]/[INSTALL-BIN]/[PYTHON]
     ");
 }
 

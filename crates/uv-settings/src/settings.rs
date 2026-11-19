@@ -6,29 +6,29 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    BuildIsolation, ExcludeDependency, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
-    ProxyUrl, Reinstall, RequiredVersion, TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    AddBoundsKind, AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage,
+    ForkStrategy, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode,
+    PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple,
+    TrustedHost, TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
-    ConfigSettings, ExtraBuildVariables, Index, IndexLocations, IndexUrl, IndexUrlError, Origin,
-    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, StaticMetadata,
+    ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
+    Index, IndexLocations, IndexUrl, IndexUrlError, MinimumLibcVersion, Origin,
+    PackageConfigSettings, PipExtraIndex, PipFindLinks, PipIndex, ProxyIndex,
+    ProxyIndexConfigError, StaticMetadata,
 };
 use uv_install_wheel::LinkMode;
-use uv_macros::{CombineOptions, OptionsMetadata};
+use uv_macros::{CombineOptions, DeserializeUntagged, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
 use uv_preview::{MaybePreviewFeature, Preview};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
-use uv_python::{PythonDownloads, PythonPreference, PythonVersion};
-use uv_redacted::DisplaySafeUrl;
-use uv_resolver::{
-    AnnotationStyle, ExcludeNewerOverride, ExcludeNewerPackage, ExcludeNewerSpan,
-    ExcludeNewerValue, ForkStrategy, PrereleaseMode, PrereleasePackage, ResolutionMode,
-    serialize_exclude_newer_package_with_spans,
-};
+use uv_python_types::{PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonVersion};
+use uv_redacted::SafeUrl;
 use uv_torch::TorchMode;
-use uv_workspace::pyproject::{ExtraBuildDependencies, OverrideDependency};
-use uv_workspace::pyproject_mut::AddBoundsKind;
+use uv_workspace::pyproject::{
+    BuildConstraintDependency, ExtraBuildDependencies, OverrideDependency,
+};
 
 use crate::{EnvironmentOptions, FilesystemOptions};
 
@@ -123,7 +123,7 @@ pub struct Options {
     /// determine whether any files have changed.
     ///
     /// Cache keys can also include version control information. For example, if a project uses
-    /// `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true }, { file = "pyproject.toml" }]`
+    /// `setuptools_scm` to read its version from a Git commit, you can specify `cache-keys = [{ git = { commit = true } }, { file = "pyproject.toml" }]`
     /// to include the current Git commit hash in the cache key (in addition to the
     /// `pyproject.toml`). Git tags are also supported via `cache-keys = [{ git = { commit = true, tags = true } }]`.
     ///
@@ -157,13 +157,16 @@ pub struct Options {
     pub constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
-    pub build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    pub build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub environments: Option<SupportedEnvironments>,
 
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub required_environments: Option<SupportedEnvironments>,
+
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -557,6 +560,7 @@ fn rebase_indexes(
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct InstallerOptions {
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -581,6 +585,7 @@ pub struct InstallerOptions {
 #[derive(Debug, Clone, Default, CombineOptions)]
 pub struct IndexOptions {
     pub index: Option<Vec<Index>>,
+    pub proxy_index: Option<Vec<ProxyIndex>>,
     pub index_url: Option<PipIndex>,
     pub extra_index_url: Option<Vec<PipExtraIndex>>,
     pub no_index: Option<bool>,
@@ -602,10 +607,13 @@ impl IndexOptions {
     }
 }
 
-impl From<IndexOptions> for IndexLocations {
-    fn from(value: IndexOptions) -> Self {
+impl TryFrom<IndexOptions> for IndexLocations {
+    type Error = ProxyIndexConfigError;
+
+    fn try_from(value: IndexOptions) -> Result<Self, Self::Error> {
         let IndexOptions {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -619,6 +627,7 @@ impl From<IndexOptions> for IndexLocations {
                 .chain(extra_index_url.into_iter().flatten().map(Index::from))
                 .chain(index_url.into_iter().map(Index::from))
                 .collect(),
+            proxy_index.into_iter().flatten().collect(),
             find_links.into_iter().flatten().map(Index::from).collect(),
             no_index.unwrap_or_default(),
         )
@@ -629,6 +638,7 @@ impl From<IndexOptions> for PipOptions {
     fn from(value: IndexOptions) -> Self {
         let IndexOptions {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -637,6 +647,7 @@ impl From<IndexOptions> for PipOptions {
 
         Self {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -664,6 +675,7 @@ pub struct ResolverOptions {
     pub link_mode: Option<LinkMode>,
     pub torch_backend: Option<TorchMode>,
     pub upgrade: Option<Upgrade>,
+    pub require_build_hashes: Option<bool>,
     pub build_isolation: Option<BuildIsolation>,
     pub no_build: Option<bool>,
     pub no_build_package: Option<Vec<PackageName>>,
@@ -697,6 +709,7 @@ pub struct ResolverInstallerOptions {
     pub dependency_metadata: Option<Vec<StaticMetadata>>,
     pub config_settings: Option<ConfigSettings>,
     pub config_settings_package: Option<PackageConfigSettings>,
+    pub require_build_hashes: Option<bool>,
     pub build_isolation: Option<BuildIsolation>,
     pub extra_build_dependencies: Option<ExtraBuildDependencies>,
     pub extra_build_variables: Option<ExtraBuildVariables>,
@@ -727,6 +740,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         let ResolverInstallerSchema {
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -740,6 +754,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            require_build_hashes,
             no_build_isolation,
             no_build_isolation_package,
             extra_build_dependencies,
@@ -763,6 +778,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
         Self {
             indexes: IndexOptions {
                 index,
+                proxy_index,
                 index_url,
                 extra_index_url,
                 no_index,
@@ -777,6 +793,7 @@ impl From<ResolverInstallerSchema> for ResolverInstallerOptions {
             dependency_metadata,
             config_settings,
             config_settings_package,
+            require_build_hashes,
             build_isolation: BuildIsolation::from_args(
                 no_build_isolation,
                 no_build_isolation_package.into_iter().flatten().collect(),
@@ -865,6 +882,28 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub index: Option<Vec<Index>>,
+    /// The proxy indexes to use when resolving and downloading packages.
+    ///
+    /// `proxy-for` names a configured upstream index, `url` sets the proxy's Simple API URL, and
+    /// `artifact-base-url` sets its package download URL prefix. uv records upstream URLs in
+    /// lockfiles.
+    #[option(
+        default = "\"[]\"",
+        value_type = "dict",
+        example = r#"
+            [[tool.uv.index]]
+            name = "pypi"
+            url = "https://pypi.org/simple/"
+            default = true
+
+            [[tool.uv.proxy-index]]
+            name = "socket"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/"
+            proxy-for = "pypi"
+        "#
+    )]
+    pub proxy_index: Option<Vec<ProxyIndex>>,
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
@@ -1071,6 +1110,26 @@ pub struct ResolverInstallerSchema {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+
+    /// Require hashes for all build dependencies.
+    ///
+    /// uv checks hashes provided in `build-constraint-dependencies` when downloading build
+    /// dependencies. Enable this setting to require a hash for every build dependency, including
+    /// transitive dependencies. You can also provide hashes as URL fragments in
+    /// `build-system.requires`. Hashes returned by a build backend do not count.
+    ///
+    /// Hashes are not required for the `uv_build` backend bundled in uv. When build isolation is
+    /// disabled, build dependencies must already be installed and their hashes are not checked.
+    /// Already-installed packages and previously built wheels are not checked.
+    ///
+    /// This setting also applies to `uv pip` commands, where it can be overridden in `[tool.uv.pip]`.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = "require-build-hashes = true"
+    )]
+    pub require_build_hashes: Option<bool>,
+
     /// Disable isolation when building source distributions for a specific package.
     ///
     /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -1250,8 +1309,9 @@ pub struct ResolverInstallerSchema {
     /// Don't build source distributions.
     ///
     /// When enabled, uv will reuse cached wheels from previously built source distributions, but
-    /// operations that require building a source distribution will exit with an error. uv may
-    /// still build editable requirements, and their build backends may run arbitrary Python code.
+    /// operations that require building a source distribution will exit with an error. First-party
+    /// packages, such as projects in the workspace, will still be built. uv will also still build
+    /// editable requirements, and their build backends may run arbitrary Python code.
     #[option(
         default = "false",
         value_type = "bool",
@@ -1261,6 +1321,8 @@ pub struct ResolverInstallerSchema {
     )]
     pub no_build: Option<bool>,
     /// Don't build source distributions for a specific package.
+    ///
+    /// First-party packages, such as projects in the workspace, will still be built.
     #[option(
         default = "[]",
         value_type = "list[str]",
@@ -1352,6 +1414,38 @@ pub struct PythonInstallMirrors {
         "#
     )]
     pub pypy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed GraalPy installations.
+    ///
+    /// By default, managed GraalPy installations are downloaded from [GitHub](https://github.com/oracle/graalpython/releases).
+    /// This variable can be set to a mirror URL to use a different source for GraalPy installations.
+    /// The provided URL will replace `https://github.com/oracle/graalpython/releases/download` in, e.g., `https://github.com/oracle/graalpython/releases/download/graal-24.2.2/graalpy-24.2.2-macos-aarch64.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            graalpy-install-mirror = "https://github.com/oracle/graalpython/releases/download"
+        "#
+    )]
+    pub graalpy_install_mirror: Option<String>,
+    /// Mirror URL to use for downloading managed Pyodide installations.
+    ///
+    /// By default, managed Pyodide installations are downloaded from [GitHub](https://github.com/pyodide/pyodide/releases).
+    /// This variable can be set to a mirror URL to use a different source for Pyodide installations.
+    /// The provided URL will replace `https://github.com/pyodide/pyodide/releases/download` in, e.g., `https://github.com/pyodide/pyodide/releases/download/0.29.5/xbuildenv-0.29.5.tar.gz`.
+    ///
+    /// Distributions can be read from a local directory by using the `file://` URL scheme.
+    #[option(
+        default = "None",
+        value_type = "str",
+        uv_toml_only = true,
+        example = r#"
+            pyodide-install-mirror = "https://github.com/pyodide/pyodide/releases/download"
+        "#
+    )]
+    pub pyodide_install_mirror: Option<String>,
 
     /// URL pointing to JSON of custom Python installations.
     #[option(
@@ -1366,11 +1460,23 @@ pub struct PythonInstallMirrors {
 }
 
 impl PythonInstallMirrors {
+    /// Return the mirrors to use for managed Python downloads.
+    pub fn mirrors(&self) -> PythonDownloadMirrors<'_> {
+        PythonDownloadMirrors {
+            cpython: self.python_install_mirror.as_deref(),
+            pypy: self.pypy_install_mirror.as_deref(),
+            graalpy: self.graalpy_install_mirror.as_deref(),
+            pyodide: self.pyodide_install_mirror.as_deref(),
+        }
+    }
+
     #[must_use]
     pub fn combine(self, other: Self) -> Self {
         Self {
             python_install_mirror: self.python_install_mirror.or(other.python_install_mirror),
             pypy_install_mirror: self.pypy_install_mirror.or(other.pypy_install_mirror),
+            graalpy_install_mirror: self.graalpy_install_mirror.or(other.graalpy_install_mirror),
+            pyodide_install_mirror: self.pyodide_install_mirror.or(other.pyodide_install_mirror),
             python_downloads_json_url: self
                 .python_downloads_json_url
                 .or(other.python_downloads_json_url),
@@ -1464,6 +1570,9 @@ pub struct PipOptions {
     #[serde(skip)]
     #[cfg_attr(feature = "schemars", schemars(skip))]
     pub index: Option<Vec<Index>>,
+    #[serde(skip)]
+    #[cfg_attr(feature = "schemars", schemars(skip))]
+    pub proxy_index: Option<Vec<ProxyIndex>>,
     /// The URL of the Python package index (by default: <https://pypi.org/simple>).
     ///
     /// Accepts either a repository compliant with [PEP 503](https://peps.python.org/pep-0503/)
@@ -1609,6 +1718,18 @@ pub struct PipOptions {
         "#
     )]
     pub no_build_isolation: Option<bool>,
+    /// Require hashes for all build dependencies in `uv pip` commands.
+    ///
+    /// Overrides `require-build-hashes` in `[tool.uv]`. This does not require hashes for runtime
+    /// dependencies; use `require-hashes` for those.
+    #[option(
+        default = "false",
+        value_type = "bool",
+        example = r#"
+            require-build-hashes = true
+        "#
+    )]
+    pub require_build_hashes: Option<bool>,
     /// Disable isolation when building source distributions for a specific package.
     ///
     /// Assumes that the packages' build dependencies specified by [PEP 518](https://peps.python.org/pep-0518/)
@@ -2213,6 +2334,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
         Self {
             indexes: IndexOptions {
                 index: value.index,
+                proxy_index: value.proxy_index,
                 index_url: value.index_url,
                 extra_index_url: value.extra_index_url,
                 no_index: value.no_index,
@@ -2227,6 +2349,7 @@ impl From<ResolverInstallerSchema> for ResolverOptions {
             dependency_metadata: value.dependency_metadata,
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
+            require_build_hashes: value.require_build_hashes,
             exclude_newer: value.exclude_newer,
             exclude_newer_package: value.exclude_newer_package,
             link_mode: value.link_mode,
@@ -2261,6 +2384,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
     fn from(value: ResolverInstallerSchema) -> Self {
         Self {
             index: value.index,
+            proxy_index: value.proxy_index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
@@ -2300,6 +2424,7 @@ impl From<ResolverInstallerSchema> for InstallerOptions {
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 pub struct ToolOptions {
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -2314,6 +2439,7 @@ pub struct ToolOptions {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    require_build_hashes: Option<bool>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2334,6 +2460,7 @@ pub struct ToolOptions {
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct ToolOptionsWire {
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -2348,6 +2475,7 @@ pub struct ToolOptionsWire {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     build_isolation: Option<BuildIsolation>,
+    require_build_hashes: Option<bool>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
     exclude_newer: Option<ExcludeNewerOverride>,
@@ -2374,6 +2502,12 @@ impl From<ResolverInstallerOptions> for ToolOptions {
                     .map(Index::with_promoted_auth_policy)
                     .collect()
             }),
+            proxy_index: value.indexes.proxy_index.map(|proxies| {
+                proxies
+                    .into_iter()
+                    .map(ProxyIndex::with_promoted_auth_policy)
+                    .collect()
+            }),
             index_url: value.indexes.index_url,
             extra_index_url: value.indexes.extra_index_url,
             no_index: value.indexes.no_index,
@@ -2388,6 +2522,7 @@ impl From<ResolverInstallerOptions> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2425,6 +2560,7 @@ impl From<ToolOptionsWire> for ToolOptions {
 
         Self {
             index: value.index,
+            proxy_index: value.proxy_index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
@@ -2439,6 +2575,7 @@ impl From<ToolOptionsWire> for ToolOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2474,6 +2611,7 @@ impl From<ToolOptions> for ToolOptionsWire {
 
         Self {
             index: value.index,
+            proxy_index: value.proxy_index,
             index_url: value.index_url,
             extra_index_url: value.extra_index_url,
             no_index: value.no_index,
@@ -2488,6 +2626,7 @@ impl From<ToolOptions> for ToolOptionsWire {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer,
@@ -2511,6 +2650,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
         Self {
             indexes: IndexOptions {
                 index: value.index,
+                proxy_index: value.proxy_index,
                 index_url: value.index_url,
                 extra_index_url: value.extra_index_url,
                 no_index: value.no_index,
@@ -2526,6 +2666,7 @@ impl From<ToolOptions> for ResolverInstallerOptions {
             config_settings: value.config_settings,
             config_settings_package: value.config_settings_package,
             build_isolation: value.build_isolation,
+            require_build_hashes: value.require_build_hashes,
             extra_build_dependencies: value.extra_build_dependencies,
             extra_build_variables: value.extra_build_variables,
             exclude_newer: value.exclude_newer,
@@ -2569,6 +2710,7 @@ struct OptionsWire {
     // #[serde(flatten)]
     // top_level: ResolverInstallerOptions
     index: Option<Vec<Index>>,
+    proxy_index: Option<Vec<ProxyIndex>>,
     index_url: Option<PipIndex>,
     extra_index_url: Option<Vec<PipExtraIndex>>,
     no_index: Option<bool>,
@@ -2587,6 +2729,7 @@ struct OptionsWire {
     config_settings: Option<ConfigSettings>,
     config_settings_package: Option<PackageConfigSettings>,
     no_build_isolation: Option<bool>,
+    require_build_hashes: Option<bool>,
     no_build_isolation_package: Option<Vec<PackageName>>,
     extra_build_dependencies: Option<ExtraBuildDependencies>,
     extra_build_variables: Option<ExtraBuildVariables>,
@@ -2610,11 +2753,13 @@ struct OptionsWire {
     // install_mirror: PythonInstallMirrors,
     python_install_mirror: Option<String>,
     pypy_install_mirror: Option<String>,
+    graalpy_install_mirror: Option<String>,
+    pyodide_install_mirror: Option<String>,
     python_downloads_json_url: Option<String>,
 
     // #[serde(flatten)]
     // publish: PublishOptions
-    publish_url: Option<DisplaySafeUrl>,
+    publish_url: Option<SafeUrl>,
     trusted_publishing: Option<TrustedPublishing>,
     check_url: Option<IndexUrl>,
 
@@ -2632,9 +2777,10 @@ struct OptionsWire {
     override_dependencies: Option<Vec<OverrideDependency>>,
     exclude_dependencies: Option<Vec<ExcludeDependency>>,
     constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
-    build_constraint_dependencies: Option<Vec<Requirement<VerbatimParsedUrl>>>,
+    build_constraint_dependencies: Option<Vec<BuildConstraintDependency>>,
     environments: Option<SupportedEnvironments>,
     required_environments: Option<SupportedEnvironments>,
+    minimum_libc_version: Option<MinimumLibcVersion>,
 
     // NOTE(charlie): These fields should be kept in-sync with `ToolUv` in
     // `crates/uv-workspace/src/pyproject.rs`. The documentation lives on that struct.
@@ -2670,11 +2816,14 @@ impl TryFrom<OptionsWire> for Options {
             python_downloads,
             python_install_mirror,
             pypy_install_mirror,
+            graalpy_install_mirror,
+            pyodide_install_mirror,
             python_downloads_json_url,
             concurrent_downloads,
             concurrent_builds,
             concurrent_installs,
             index,
+            proxy_index,
             index_url,
             extra_index_url,
             no_index,
@@ -2693,6 +2842,7 @@ impl TryFrom<OptionsWire> for Options {
             config_settings,
             config_settings_package,
             no_build_isolation,
+            require_build_hashes,
             no_build_isolation_package,
             exclude_newer,
             exclude_newer_package,
@@ -2718,6 +2868,7 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             conflicts,
             publish_url,
             trusted_publishing,
@@ -2758,6 +2909,7 @@ impl TryFrom<OptionsWire> for Options {
             },
             top_level: ResolverInstallerSchema {
                 index,
+                proxy_index,
                 index_url,
                 extra_index_url,
                 no_index,
@@ -2772,6 +2924,7 @@ impl TryFrom<OptionsWire> for Options {
                 config_settings,
                 config_settings_package,
                 no_build_isolation,
+                require_build_hashes,
                 no_build_isolation_package,
                 extra_build_dependencies,
                 extra_build_variables,
@@ -2800,9 +2953,12 @@ impl TryFrom<OptionsWire> for Options {
             build_constraint_dependencies,
             environments,
             required_environments,
+            minimum_libc_version,
             install_mirrors: PythonInstallMirrors {
                 python_install_mirror,
                 pypy_install_mirror,
+                graalpy_install_mirror,
+                pyodide_install_mirror,
                 python_downloads_json_url,
             },
             conflicts,
@@ -2837,7 +2993,7 @@ pub struct PublishOptions {
             publish-url = "https://test.pypi.org/legacy/"
         "#
     )]
-    pub publish_url: Option<DisplaySafeUrl>,
+    pub publish_url: Option<SafeUrl>,
 
     /// Configure trusted publishing.
     ///
@@ -2924,7 +3080,7 @@ pub struct AuditOptions {
             malware-check-url = "https://example.com"
         "#
     )]
-    pub malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check_url: Option<SafeUrl>,
 
     /// A list of vulnerability IDs to ignore during auditing.
     ///
@@ -2959,7 +3115,7 @@ pub struct MalwareCheckSettings {
     /// Whether the malware check is enabled.
     pub enabled: bool,
     /// The OSV-shaped service URL to use for malware checks.
-    pub malware_check_url: Option<DisplaySafeUrl>,
+    pub malware_check_url: Option<SafeUrl>,
 }
 
 impl MalwareCheckSettings {
@@ -2984,27 +3140,15 @@ impl MalwareCheckSettings {
 }
 
 /// Represents the `preview-features` configuration option.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, DeserializeUntagged)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "schemars", schemars(untagged))]
+#[serde(expecting = "a boolean or a list of preview feature names")]
 pub enum PreviewFeaturesOption {
+    #[untagged(bool)]
     Toggle(bool),
+    #[untagged(seq)]
     Features(Vec<MaybePreviewFeature>),
-}
-
-// A derived `#[serde(untagged)]` implementation collapses detailed type and element errors into
-// "data did not match any variant", so use a type-directed visitor to preserve useful diagnostics.
-impl<'de> Deserialize<'de> for PreviewFeaturesOption {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        serde_untagged::UntaggedEnumVisitor::new()
-            .expecting("a boolean or a list of preview feature names")
-            .bool(|value| Ok(Self::Toggle(value)))
-            .seq(|sequence| sequence.deserialize().map(Self::Features))
-            .deserialize(deserializer)
-    }
 }
 
 #[expect(

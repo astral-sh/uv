@@ -1,17 +1,17 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-pub use dist_info_name::DistInfoName;
 pub use extra_name::{DefaultExtras, ExtraName};
 pub use group_name::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PipGroupName};
 pub use package_name::PackageName;
+pub use variant::{InvalidVariantComponent, VariantFeature, VariantNamespace, VariantValue};
 
 use uv_small_str::SmallString;
 
-mod dist_info_name;
 mod extra_name;
 mod group_name;
 mod package_name;
+mod variant;
 
 /// Validate and normalize an unowned package or extra name.
 pub(crate) fn validate_and_normalize_ref(
@@ -132,7 +132,7 @@ impl Display for InvalidPipGroupPathError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "The `--group` path is required to end in 'pyproject.toml' for compatibility with pip; got: {}",
+            "The `--group` path is required to end in `pyproject.toml` for compatibility with pip; got: {}",
             self.0,
         )
     }

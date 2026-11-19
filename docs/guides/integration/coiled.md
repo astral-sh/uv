@@ -51,7 +51,7 @@ When running this script locally, e.g., with:
 $ uv run process.py
 ```
 
-uv will automatically create a virtual environment and installs its dependencies.
+uv will automatically create a virtual environment and install its dependencies.
 
 To learn more about using inline script metadata with uv, see the
 [script guide](../scripts.md#declaring-script-dependencies).
@@ -71,7 +71,7 @@ e.g.:
 Coiled makes it simple to run code on cloud hardware.
 
 First, authenticate with Coiled using
-[`coiled login`](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-login) :
+[`coiled login`](https://docs.coiled.io/user_guide/api.html?utm_source=uv-docs#coiled-login):
 
 ```bash
 $ uvx coiled login

@@ -18,8 +18,13 @@ mod help;
 
 mod network;
 
+#[cfg(feature = "test-python")]
+mod proxy_index;
+
 #[cfg(feature = "test-pypi")]
 mod publish;
+
+mod requirements;
 
 #[cfg(unix)]
 mod resource_limits;

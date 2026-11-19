@@ -10,7 +10,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use rand::RngCore as _;
+use rand::Rng as _;
 
 const ALPHABET: [u8; 64] = *b"_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const MASK: u8 = 63;

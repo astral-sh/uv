@@ -5,6 +5,14 @@ targets have different strategies for rendering light- and dark-mode images. Thi
 adjusts the images in the README.md to support the given target.
 """
 
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
+# ///
+
 from __future__ import annotations
 
 import argparse
@@ -118,7 +126,7 @@ if __name__ == "__main__":
         "--target",
         type=str,
         required=True,
-        choices=("pypi", "mkdocs"),
+        choices=("pypi",),
     )
     args = parser.parse_args()
 

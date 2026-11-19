@@ -10,7 +10,8 @@ on:
         type: string
         default: "false"
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   CARGO_INCREMENTAL: 0
@@ -19,6 +20,7 @@ env:
   PYTHON_VERSION: "3.12"
   RUSTC_BOOTSTRAP: 1
   RUSTUP_MAX_RETRIES: 10
+  UV_LOCKED: 1
 
 jobs:
   # We use the large GitHub actions runners
@@ -34,34 +36,41 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Install mold"
-        run: ./scripts/install-mold.sh
-
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        id: rust-cache
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
-          cache-workspace-crates: "true"
-          save-if: ${{ inputs.save-rust-cache == 'true' }}
+          profile: fast-build-nightly
+          save-if: ${{ github.ref == 'refs/heads/main' && inputs.save-rust-cache == 'true' }}
 
-      - name: "Record Cargo cache freshness"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
+      - name: "Configure Python archive cache"
+        # Share archives downloaded during setup with the tests.
+        run: echo "UV_PYTHON_CACHE_DIR=$RUNNER_TEMP/uv-python-cache" >> "$GITHUB_ENV"
 
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          version: "0.12.1"
+          enable-cache: auto
 
       - name: "Install required Python versions"
-        run: uv python install
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
+        run: |
+          uv python install
+          # Warm the cache for Unix-only tests
+          uv python install 3.12d 3.13d 3.13t 3.13td
 
       - name: "Install secret service"
         run: |
-          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
+          # Try the next configured mirror after the first failed download.
+          cat /etc/apt/apt-mirrors.txt
+          printf '%s\n' \
+            'Acquire::Retries "0";' \
+            'Acquire::http::Timeout "10";' \
+            'Acquire::https::Timeout "10";' \
+            | sudo tee /etc/apt/apt.conf.d/80-retries > /dev/null
           sudo apt install -y --no-install-recommends gnome-keyring
 
       - name: "Start gnome-keyring"
@@ -72,7 +81,6 @@ jobs:
 
       - name: "Create btrfs filesystem"
         run: |
-          sudo apt install -y btrfs-progs
           truncate -s 1G /tmp/btrfs.img
           mkfs.btrfs /tmp/btrfs.img
           sudo mkdir /btrfs
@@ -93,17 +101,11 @@ jobs:
           sudo mount -o loop /tmp/minix.img /minix
           sudo chown "$(id -u):$(id -g)" /minix
 
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
-        with:
-          tool: cargo-nextest
-
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
-          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           UV_INTERNAL__TEST_COW_FS: /btrfs
           UV_INTERNAL__TEST_NOCOW_FS: /tmpfs
           UV_INTERNAL__TEST_ALT_FS: /tmpfs
@@ -112,7 +114,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          uv run --only-group test cargo nextest run --locked \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -120,13 +122,9 @@ jobs:
             --workspace \
             --profile ci-linux
 
-      - name: "Prune superseded workspace artifacts"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
-
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pending-snapshots-linux
           path: pending-snapshots/
@@ -136,7 +134,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-results-linux
           path: target/nextest/ci*/junit.xml
@@ -150,6 +148,7 @@ jobs:
     runs-on: namespace-profile-macos-15
     name: "cargo test on macos"
     steps:
+      - uses: astral-sh/github-actions/demudhra@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -157,17 +156,12 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        id: rust-cache
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
-          cache-workspace-crates: "true"
+          profile: fast-build-nightly
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Record Cargo cache freshness"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: touch "$RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Create HFS+ disk image (no reflink support)"
         run: |
@@ -185,24 +179,26 @@ jobs:
           security list-keychains -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
           security default-keychain -d user -s "$RUNNER_TEMP/uv-ci.keychain-db"
 
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - name: "Configure Python archive cache"
+        run: echo "UV_PYTHON_CACHE_DIR=$RUNNER_TEMP/uv-python-cache" >> "$GITHUB_ENV"
+
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          version: "0.12.1"
+          enable-cache: auto
 
       - name: "Install required Python versions"
-        run: uv python install
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
-        with:
-          tool: cargo-nextest
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
+        run: |
+          uv python install
+          # Warm the cache for Unix-only tests
+          uv python install 3.12d 3.13d 3.13t 3.13td
 
       - name: "Cargo test"
         env:
           # Retry more than default to reduce flakes in CI
           UV_HTTP_RETRIES: 5
           RUST_BACKTRACE: 1
-          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           # macOS tmpdir is on APFS which supports reflink
           UV_INTERNAL__TEST_COW_FS: ${{ runner.temp }}
           # HFS+ RAM disk does not support copy-on-write and is on a different device
@@ -212,7 +208,7 @@ jobs:
           INSTA_UPDATE: new
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         run: |
-          cargo nextest run \
+          uv run --only-group test cargo nextest run --locked \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -221,13 +217,9 @@ jobs:
             --workspace \
             --profile ci-macos
 
-      - name: "Prune superseded workspace artifacts"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: python3 scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$RUNNER_TEMP/uv-cargo-cache-marker"
-
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pending-snapshots-macos
           path: pending-snapshots/
@@ -237,7 +229,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-results-macos
           path: target/nextest/ci*/junit.xml
@@ -265,31 +257,28 @@ jobs:
         run: |
           Copy-Item -Path "${{ github.workspace }}" -Destination "$Env:UV_WORKSPACE" -Recurse
 
-      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - uses: $/.github/actions/setup-uv-toolchain
         with:
-          version: "0.12.1"
+          enable-cache: auto
 
       - name: "Install required Python versions"
+        env:
+          UV_PYTHON_DOWNLOADS_JSON_URL: crates/uv-python-managed/download-metadata.json
         run: uv python install
 
       - name: "Install Rust toolchain"
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
-        id: rust-cache
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
-          workspaces: ${{ env.UV_WORKSPACE }}
-          cache-workspace-crates: "true"
+          workspace: ${{ env.UV_WORKSPACE }}
+          profile: fast-build-nightly
           # Use the same cache entry across the partitions
           add-job-id-key: false
           save-if: ${{ inputs.save-rust-cache == 'true' }}
-
-      - name: "Record Cargo cache freshness"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        run: New-Item -ItemType File -Path "$env:RUNNER_TEMP/uv-cargo-cache-marker"
 
       - name: "Create NTFS test directory (low hardlink limit)"
         run: New-Item -Path "C:\uv" -ItemType Directory -Force
@@ -298,11 +287,6 @@ jobs:
         run: |
           New-Item -Path "C:\uv-smb" -ItemType Directory -Force
           New-SmbShare -Name "uv-alt-fs" -Path "C:\uv-smb" -FullAccess "Everyone"
-
-      - name: "Install cargo nextest"
-        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
-        with:
-          tool: cargo-nextest
 
       - name: "Cargo test"
         working-directory: ${{ env.UV_WORKSPACE }}
@@ -313,7 +297,6 @@ jobs:
           # See https://github.com/astral-sh/uv/issues/6940
           UV_LINK_MODE: copy
           RUST_BACKTRACE: 1
-          CARGO_UNSTABLE_MTIME_ON_USE: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
           UV_INTERNAL__TEST_ALT_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_SMB_FS: "\\\\localhost\\uv-alt-fs"
           UV_INTERNAL__TEST_LOWLINKS_FS: "C:\\uv"
@@ -322,7 +305,7 @@ jobs:
           INSTA_PENDING_DIR: ${{ github.workspace }}/pending-snapshots
         shell: bash
         run: |
-          cargo nextest run \
+          uv run --only-group test cargo nextest run --locked \
             --cargo-profile fast-build-nightly \
             -Z panic-abort-tests \
             -Z checksum-freshness \
@@ -332,14 +315,9 @@ jobs:
             --profile ci-windows \
             --partition hash:${{ matrix.partition }}/3
 
-      - name: "Prune superseded workspace artifacts"
-        if: ${{ inputs.save-rust-cache == 'true' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        working-directory: ${{ env.UV_WORKSPACE }}
-        run: python scripts/prune_cargo_workspace_cache.py target/fast-build-nightly "$env:RUNNER_TEMP/uv-cargo-cache-marker"
-
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pending-snapshots-windows-${{ matrix.partition }}
           path: pending-snapshots/
@@ -349,7 +327,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: junit-results-windows-${{ matrix.partition }}
           path: ${{ env.UV_WORKSPACE }}/target/nextest/ci*/junit.xml

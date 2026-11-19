@@ -1,9 +1,6 @@
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
-use std::{
-    ffi::OsString,
-    process::{Command, ExitCode, ExitStatus},
-};
+use std::process::{Command, ExitCode, ExitStatus};
 
 /// Spawns a command exec style.
 fn exec_spawn(cmd: &mut Command) -> std::io::Result<Infallible> {
@@ -49,7 +46,7 @@ fn get_uv_path(current_exe_parent: &Path, uvx_suffix: Option<&str>) -> std::io::
     }
 
     // Then just look for good ol' `uv`
-    let uv = current_exe_parent.join(format!("uv{}", std::env::consts::EXE_SUFFIX));
+    let uv = current_exe_parent.join(if cfg!(windows) { "uv.exe" } else { "uv" });
     // If we are sure the `uv` binary does not exist, display a clearer error message.
     // If we're not certain if uv exists (try_exists == Err), keep going and hope it works.
     if matches!(uv.try_exists(), Ok(false)) {
@@ -78,15 +75,10 @@ fn run() -> std::io::Result<ExitStatus> {
     };
     let uvx_suffix = get_uvx_suffix(&current_exe);
     let uv = get_uv_path(bin, uvx_suffix)?;
-    let args = ["tool", "uvx"]
-        .iter()
-        .map(OsString::from)
-        // Skip the `uvx` name
-        .chain(std::env::args_os().skip(1))
-        .collect::<Vec<_>>();
-
     let mut cmd = Command::new(uv);
-    cmd.args(&args);
+    cmd.args(["tool", "uvx"]);
+    // Skip the `uvx` name.
+    cmd.args(std::env::args_os().skip(1));
     match exec_spawn(&mut cmd)? {}
 }
 

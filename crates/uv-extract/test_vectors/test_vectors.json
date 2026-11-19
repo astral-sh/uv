@@ -1,0 +1,38 @@
+[
+  {
+    "input": {},
+    "dirhash": "ead67022a6f7acbd92eaf244632160a758ab8d042386247f9fdb132153553f03"
+  },
+  {
+    "input": {
+      "a": "hello"
+    },
+    "dirhash": "1b158685aaa5588adec58d35ad2178a2aeb28ad5709211c48635a0cabe9a17e8"
+  },
+  {
+    "input": {
+      "b": "world",
+      "a": "hello",
+      "c": "!"
+    },
+    "dirhash": "d475b613288751a2920ac0cf6d1ea7341e3d8f892817bab63024872a21067b4c"
+  },
+  {
+    "input": {
+      "a": {
+        "b": {}
+      }
+    },
+    "dirhash": "7e4abae0916b2c119c980c145ba2aafb30c0f261bf24f0e0a6d97dcb225fd065"
+  },
+  {
+    "input": {
+      "b": {
+        "c": "world",
+        "!": {}
+      },
+      "a": "hello"
+    },
+    "dirhash": "0c297a9e4b3a7031d60baae0594ade5da8953d30abd7475a052c732b8eab459b"
+  }
+]

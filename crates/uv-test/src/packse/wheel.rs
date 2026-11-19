@@ -1,11 +1,10 @@
 //! Generate minimal Python wheels and source distributions in memory.
 //!
-//! Packse scenario packages are trivial: they contain only metadata and a stub
-//! `__init__.py`. We generate them directly without invoking a Python build backend.
+//! Packse scenario packages contain metadata, a stub `__init__.py`, and optional console scripts.
+//! We generate them directly without invoking a Python build backend.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::io::Cursor;
 
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression as ZipCompression, ZipEntryBuilder};
@@ -16,62 +15,154 @@ use futures::executor::block_on;
 use futures::io::AllowStdIo;
 use indoc::formatdoc;
 use sha2::{Digest, Sha256};
-use tokio_util::compat::{FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+use tar_codec::{ArchiveBuilder as _, EntryMetadata, TarEncoder};
+use tokio_util::compat::FuturesAsyncWriteCompatExt;
 
+use uv_distribution_filename::VariantLabel;
 use uv_normalize::{ExtraName, PackageName};
 use uv_pep440::{Version, VersionSpecifiers};
 use uv_pep508::Requirement;
 
-/// Generate a wheel (`.whl`) as an in-memory ZIP archive.
-///
-/// Returns `(filename, bytes)`.
-pub fn generate_wheel(
-    name: &PackageName,
-    version: &Version,
-    requires: &[Requirement],
-    extras: &BTreeMap<ExtraName, Vec<Requirement>>,
-    requires_python: Option<&VersionSpecifiers>,
-    tag: &str,
-) -> (String, Vec<u8>) {
-    let normalized = name.as_dist_info_name();
-    let dist_info = format!("{normalized}-{version}.dist-info");
+pub(super) const DEFAULT_WHEEL_TAG: &str = "py3-none-any";
 
-    let mut zip = ZipFileWriter::new(Vec::new());
+/// Build a wheel in memory. By default, it is a `py3-none-any` wheel with no dependencies.
+#[derive(Clone, Copy)]
+#[must_use]
+pub struct WheelBuilder<'a> {
+    name: &'a PackageName,
+    version: &'a Version,
+    requires: &'a [Requirement],
+    extras: Option<&'a BTreeMap<ExtraName, Vec<Requirement>>>,
+    requires_python: Option<&'a VersionSpecifiers>,
+    tag: &'a str,
+    entry_points: &'a [String],
+    files: &'a [(&'a str, &'a str)],
+    variant: Option<(&'a VariantLabel, &'a str)>,
+}
 
-    let entries = [
-        (
-            format!("{normalized}/__init__.py"),
-            format!("__version__ = \"{version}\"\n"),
-        ),
-        (
-            format!("{dist_info}/METADATA"),
-            build_metadata(name, version, requires, extras, requires_python),
-        ),
-        (
-            format!("{dist_info}/WHEEL"),
-            format!(
-                "Wheel-Version: 1.0\n\
-                 Generator: uv-test\n\
-                 Root-Is-Purelib: true\n\
-                 Tag: {tag}\n"
-            ),
-        ),
-    ];
-    for (path, contents) in &entries {
-        let entry = ZipEntryBuilder::new(path.clone().into(), ZipCompression::Stored);
-        block_on(zip.write_entry_whole(entry, contents.as_bytes()))
-            .expect("failed to write wheel file");
+impl<'a> WheelBuilder<'a> {
+    pub fn new(name: &'a PackageName, version: &'a Version) -> Self {
+        Self {
+            name,
+            version,
+            requires: &[],
+            extras: None,
+            requires_python: None,
+            tag: DEFAULT_WHEEL_TAG,
+            entry_points: &[],
+            files: &[],
+            variant: None,
+        }
     }
 
-    let record = build_record(&dist_info, &entries);
-    let record_entry =
-        ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), ZipCompression::Stored);
-    block_on(zip.write_entry_whole(record_entry, record.as_bytes()))
-        .expect("failed to write RECORD file");
+    pub fn requires(mut self, requires: &'a [Requirement]) -> Self {
+        self.requires = requires;
+        self
+    }
 
-    let bytes = block_on(zip.close()).expect("failed to finish in-memory wheel");
-    let filename = format!("{normalized}-{version}-{tag}.whl");
-    (filename, bytes)
+    pub fn extras(mut self, extras: &'a BTreeMap<ExtraName, Vec<Requirement>>) -> Self {
+        self.extras = Some(extras);
+        self
+    }
+
+    pub fn requires_python(mut self, requires_python: Option<&'a VersionSpecifiers>) -> Self {
+        self.requires_python = requires_python;
+        self
+    }
+
+    pub fn tag(mut self, tag: &'a str) -> Self {
+        self.tag = tag;
+        self
+    }
+
+    pub fn entry_points(mut self, entry_points: &'a [String]) -> Self {
+        self.entry_points = entry_points;
+        self
+    }
+
+    /// Include additional files as `(path, contents)` pairs.
+    pub fn files(mut self, files: &'a [(&'a str, &'a str)]) -> Self {
+        self.files = files;
+        self
+    }
+
+    /// Include variant metadata and append its label to the wheel filename.
+    pub fn variant(mut self, label: &'a VariantLabel, metadata: &'a str) -> Self {
+        self.variant = Some((label, metadata));
+        self
+    }
+
+    /// Return the wheel's filename and ZIP archive contents.
+    pub fn build(self) -> (String, Vec<u8>) {
+        let normalized = self.name.as_dist_info_name();
+        let version = self.version;
+        let tag = self.tag;
+        let dist_info = format!("{normalized}-{version}.dist-info");
+        let metadata = build_metadata(
+            self.name,
+            version,
+            self.requires,
+            self.extras.unwrap_or(&BTreeMap::new()),
+            self.requires_python,
+        );
+        let mut entries = vec![
+            (
+                format!("{normalized}/__init__.py"),
+                format!("__version__ = \"{version}\"\n"),
+            ),
+            (format!("{dist_info}/METADATA"), metadata),
+            (
+                format!("{dist_info}/WHEEL"),
+                formatdoc! {"
+                    Wheel-Version: 1.0
+                    Generator: uv-test
+                    Root-Is-Purelib: true
+                    Tag: {tag}
+                "},
+            ),
+        ];
+
+        if !self.entry_points.is_empty() {
+            let mut scripts = String::from("[console_scripts]\n");
+            for script in self.entry_points {
+                writeln!(scripts, "{script} = {normalized}.cli:main")
+                    .expect("writing to a string should succeed");
+            }
+            entries.push((format!("{dist_info}/entry_points.txt"), scripts));
+            entries.push((format!("{normalized}/cli.py"), build_cli_module(self.name)));
+        }
+
+        if let Some((_, metadata)) = self.variant {
+            entries.push((format!("{dist_info}/variant.json"), metadata.to_owned()));
+        }
+
+        entries.extend(
+            self.files
+                .iter()
+                .map(|&(path, contents)| (path.to_owned(), contents.to_owned())),
+        );
+
+        let mut zip = ZipFileWriter::new(Vec::new());
+        for (path, contents) in &entries {
+            let entry = ZipEntryBuilder::new(path.clone().into(), ZipCompression::Stored);
+            block_on(zip.write_entry_whole(entry, contents.as_bytes()))
+                .expect("failed to write wheel file");
+        }
+
+        let record = build_record(&dist_info, &entries);
+        let record_entry =
+            ZipEntryBuilder::new(format!("{dist_info}/RECORD").into(), ZipCompression::Stored);
+        block_on(zip.write_entry_whole(record_entry, record.as_bytes()))
+            .expect("failed to write `RECORD` file");
+
+        let bytes = block_on(zip.close()).expect("failed to finish in-memory wheel");
+        let filename = if let Some((label, _)) = self.variant {
+            format!("{normalized}-{version}-{tag}-{label}.whl")
+        } else {
+            format!("{normalized}-{version}-{tag}.whl")
+        };
+        (filename, bytes)
+    }
 }
 
 /// Build the `RECORD` metadata for a generated wheel.
@@ -100,38 +191,59 @@ pub fn generate_sdist(
     requires: &[Requirement],
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
+    entry_points: &[String],
 ) -> (String, Vec<u8>) {
     let normalized = name.as_dist_info_name();
     let prefix = format!("{normalized}-{version}");
 
-    let buf = Vec::new();
-    let encoder = GzEncoder::new(buf, Compression::fast());
-    let mut tar = tokio_tar::Builder::new_non_terminated(AllowStdIo::new(encoder).compat_write());
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+    let mut tar = TarEncoder::new(AllowStdIo::new(&mut encoder).compat_write()).builder();
 
-    let pyproject = build_pyproject_toml(name, version, requires, extras, requires_python);
-    append_tar_file(
+    let pyproject = build_pyproject_toml(
+        name,
+        version,
+        requires,
+        extras,
+        requires_python,
+        entry_points,
+    );
+    add_tar_file(
         &mut tar,
         &format!("{prefix}/pyproject.toml"),
         pyproject.as_bytes(),
     );
 
     let pkg_info = build_metadata(name, version, requires, extras, requires_python);
-    append_tar_file(&mut tar, &format!("{prefix}/PKG-INFO"), pkg_info.as_bytes());
+    add_tar_file(&mut tar, &format!("{prefix}/PKG-INFO"), pkg_info.as_bytes());
 
     let init_py = format!("__version__ = \"{version}\"\n");
-    append_tar_file(
+    add_tar_file(
         &mut tar,
         &format!("{prefix}/src/{normalized}/__init__.py"),
         init_py.as_bytes(),
     );
+    if !entry_points.is_empty() {
+        add_tar_file(
+            &mut tar,
+            &format!("{prefix}/src/{normalized}/cli.py"),
+            build_cli_module(name).as_bytes(),
+        );
+    }
 
-    let writer = block_on(tar.into_inner()).expect("failed to finish in-memory source archive");
-    let encoder = writer.into_inner().into_inner();
+    block_on(tar.finish()).expect("failed to finish in-memory source archive");
     let bytes = encoder
         .finish()
         .expect("failed to finish in-memory gzip stream");
     let filename = format!("{normalized}-{version}.tar.gz");
     (filename, bytes)
+}
+
+/// Build the callable module used by generated console scripts.
+fn build_cli_module(name: &PackageName) -> String {
+    formatdoc! {"
+        def main():
+            print('Hello from {name}!')
+    "}
 }
 
 /// Build PEP 566 / PEP 643 metadata content.
@@ -180,6 +292,7 @@ fn build_pyproject_toml(
     requires: &[Requirement],
     extras: &BTreeMap<ExtraName, Vec<Requirement>>,
     requires_python: Option<&VersionSpecifiers>,
+    entry_points: &[String],
 ) -> String {
     let normalized = name.as_dist_info_name();
     let dependencies = if requires.is_empty() {
@@ -212,6 +325,17 @@ fn build_pyproject_toml(
         optional_dependencies
     };
 
+    let scripts = if entry_points.is_empty() {
+        String::new()
+    } else {
+        let scripts: BTreeMap<_, _> = entry_points
+            .iter()
+            .map(|entry_point| (entry_point, format!("{normalized}.cli:main")))
+            .collect();
+        let scripts = toml::to_string(&scripts).expect("console scripts should serialize to TOML");
+        format!("\n[project.scripts]\n{scripts}")
+    };
+
     formatdoc! {
         r#"
         [build-system]
@@ -227,27 +351,18 @@ fn build_pyproject_toml(
         [project]
         name = "{name}"
         version = "{version}"
-        {dependencies}{requires_python}{optional_dependencies}
+        {dependencies}{requires_python}{optional_dependencies}{scripts}
         "#
     }
 }
 
-/// Append a file entry to a tar archive from a byte slice.
-fn append_tar_file<W>(tar: &mut tokio_tar::Builder<W>, path: &str, data: &[u8])
+/// Add a file entry to a tar archive from a byte slice.
+fn add_tar_file<W>(tar: &mut tar_codec::Builder<TarEncoder<W>>, path: &str, data: &[u8])
 where
-    W: tokio::io::AsyncWrite + Unpin + Send,
+    W: tokio::io::AsyncWrite + Unpin,
 {
-    let mut header = tokio_tar::Header::new_gnu();
-    header.set_entry_type(tokio_tar::EntryType::Regular);
-    header.set_size(data.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    block_on(tar.append_data(
-        &mut header,
-        path,
-        AllowStdIo::new(Cursor::new(data)).compat(),
-    ))
-    .expect("failed to append file to in-memory source archive");
+    block_on(tar.add_file(path, data, EntryMetadata::default()))
+        .expect("failed to add file to in-memory source archive");
 }
 
 /// Compute the SHA-256 hex digest of a byte slice.
@@ -259,10 +374,11 @@ pub fn sha256_hex(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::pin::Pin;
+    use std::io::Cursor;
     use std::str::FromStr;
 
-    use futures::StreamExt;
+    use tar_codec::{Archive as _, Member, TarArchive};
+    use tokio_util::compat::FuturesAsyncReadCompatExt;
 
     use super::*;
 
@@ -271,14 +387,13 @@ mod tests {
         let requires = vec![Requirement::from_str("dep>=1.0").expect("valid requirement")];
         let requires_python =
             VersionSpecifiers::from_str(">=3.12").expect("valid version specifier");
-        let (filename, bytes) = generate_wheel(
+        let (filename, bytes) = WheelBuilder::new(
             &PackageName::from_str("my-package").expect("valid package name"),
             &Version::from_str("1.0.0").expect("valid version"),
-            &requires,
-            &BTreeMap::new(),
-            Some(&requires_python),
-            "py3-none-any",
-        );
+        )
+        .requires(&requires)
+        .requires_python(Some(&requires_python))
+        .build();
         assert_eq!(filename, "my_package-1.0.0-py3-none-any.whl");
 
         let archive = block_on(async_zip::base::read::mem::ZipFileReader::new(bytes))
@@ -340,24 +455,23 @@ mod tests {
             &requires,
             &BTreeMap::new(),
             Some(&requires_python),
+            &[],
         );
         assert_eq!(filename, "my_package-1.0.0.tar.gz");
 
         let decoder = flate2::read::GzDecoder::new(Cursor::new(bytes));
-        let mut archive = tokio_tar::Archive::new(AllowStdIo::new(decoder).compat());
+        let archive = TarArchive::new(AllowStdIo::new(decoder).compat());
         let names = block_on(async {
-            let mut entries = archive.entries().expect("sdist archive should be readable");
-            let mut entries = Pin::new(&mut entries);
+            let mut members = archive.members();
             let mut names = Vec::new();
-            while let Some(entry) = entries.next().await {
-                let entry = entry.expect("sdist archive entry should be readable");
-                names.push(
-                    entry
-                        .path()
-                        .expect("sdist archive entry should have a path")
-                        .to_string_lossy()
-                        .to_string(),
-                );
+            while let Some(member) = members
+                .next()
+                .await
+                .expect("sdist archive member should be readable")
+            {
+                if let Member::File { metadata, .. } = member {
+                    names.push(metadata.path);
+                }
             }
             names
         });
@@ -411,7 +525,7 @@ mod tests {
         );
         assert!(
             metadata.contains(
-                "Requires-Dist: dep ; (sys_platform == 'darwin' and extra == 'compat') or (sys_platform == 'linux' and extra == 'compat')"
+                "Requires-Dist: dep ; (sys_platform == 'darwin' or sys_platform == 'linux') and extra == 'compat'"
             ),
             "metadata should preserve the original or-marker semantics:\n{metadata}"
         );

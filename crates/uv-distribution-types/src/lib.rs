@@ -47,8 +47,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use memchr::memchr3;
-use url::Url;
 
+use uv_cache_key::CanonicalUrl;
 use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
@@ -61,7 +61,8 @@ use uv_pypi_types::{
     ParsedArchiveUrl, ParsedDirectoryUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, ParsedPathUrl,
     ParsedUrl, VerbatimParsedUrl,
 };
-use uv_redacted::DisplaySafeUrl;
+use uv_redacted::SafeUrl;
+use uv_redacted::policy::SerializationPolicy;
 
 pub use crate::annotation::*;
 pub use crate::any::*;
@@ -79,21 +80,25 @@ pub use crate::file::*;
 pub use crate::hash::*;
 pub use crate::id::*;
 pub use crate::index::*;
+pub use crate::index_entry::*;
 pub use crate::index_name::*;
 pub use crate::index_url::*;
 pub use crate::installed::*;
-pub use crate::known_platform::*;
+pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
-pub use crate::prioritized_distribution::*;
+pub use crate::proxy_index::*;
 pub use crate::requested::*;
 pub use crate::requirement::*;
 pub use crate::requires_python::*;
 pub use crate::resolution::*;
+pub use crate::resolution_recorder::*;
 pub use crate::resolved::*;
 pub use crate::specified_requirement::*;
 pub use crate::status_code_strategy::*;
 pub use crate::traits::*;
+pub use crate::variant_json::*;
+pub use crate::variants_json::*;
 
 mod annotation;
 mod any;
@@ -111,22 +116,26 @@ mod file;
 mod hash;
 mod id;
 mod index;
+mod index_entry;
 mod index_name;
 mod index_url;
 mod installed;
 mod installed_modules;
-mod known_platform;
+mod minimum_libc_version;
 mod origin;
 mod pip_index;
-mod prioritized_distribution;
+mod proxy_index;
 mod requested;
 mod requirement;
 mod requires_python;
 mod resolution;
+mod resolution_recorder;
 mod resolved;
 mod specified_requirement;
 mod status_code_strategy;
 mod traits;
+mod variant_json;
+mod variants_json;
 
 #[derive(Debug, Clone)]
 pub enum VersionOrUrlRef<'a, T: Pep508Url = VerbatimUrl> {
@@ -160,7 +169,7 @@ pub enum InstalledVersion<'a> {
     Version(&'a Version),
     /// A URL, used to identify a distribution at an arbitrary location, along with the version
     /// specifier to which it resolved.
-    Url(&'a DisplaySafeUrl, &'a Version),
+    Url(&'a SafeUrl, &'a Version),
 }
 
 impl<'a> InstalledVersion<'a> {
@@ -275,7 +284,7 @@ pub struct DirectUrlBuiltDist {
     /// `https://example.org/packages/flask-3.0.0-py3-none-any.whl`
     pub filename: WheelFilename,
     /// The URL without the subdirectory fragment.
-    pub location: Box<DisplaySafeUrl>,
+    pub location: Box<SafeUrl>,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
     /// The expected size of the archive, if provided by a lockfile.
@@ -332,7 +341,7 @@ pub struct DirectUrlSourceDist {
     /// like using e.g. `foo @ https://github.com/org/repo/archive/master.zip`
     pub name: PackageName,
     /// The URL without the subdirectory fragment.
-    pub location: Box<DisplaySafeUrl>,
+    pub location: Box<SafeUrl>,
     /// The subdirectory within the archive in which the source distribution is located.
     pub subdirectory: Option<Box<Path>>,
     /// The file extension, e.g. `tar.gz`, `zip`, etc.
@@ -383,6 +392,13 @@ pub struct PathSourceDist {
     pub url: VerbatimUrl,
 }
 
+/// Whether a source distribution is a first-party workspace member.
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum FirstParty {
+    Yes,
+    No,
+}
+
 /// A source distribution that exists in a local directory.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct DirectorySourceDist {
@@ -393,6 +409,8 @@ pub struct DirectorySourceDist {
     pub editable: Option<bool>,
     /// Whether the package should be built and installed.
     pub r#virtual: Option<bool>,
+    /// Whether the package is a first-party workspace member.
+    pub first_party: FirstParty,
     /// The URL as it was provided by the user.
     pub url: VerbatimUrl,
 }
@@ -403,7 +421,7 @@ impl Dist {
     pub fn from_http_url(
         name: PackageName,
         url: VerbatimUrl,
-        location: DisplaySafeUrl,
+        location: SafeUrl,
         subdirectory: Option<Box<Path>>,
         ext: DistExtension,
     ) -> Result<Self, Error> {
@@ -532,6 +550,7 @@ impl Dist {
             install_path: install_path.into_boxed_path(),
             editable,
             r#virtual,
+            first_party: FirstParty::No,
             url,
         })))
     }
@@ -696,13 +715,23 @@ impl<'a> From<&'a BuiltDist> for DistRef<'a> {
 }
 
 impl BuiltDist {
+    /// Return the filename of the selected wheel.
+    pub fn wheel_filename(&self) -> &WheelFilename {
+        match self {
+            Self::Registry(wheels) => &wheels.best_wheel().filename,
+            Self::DirectUrl(wheel) => &wheel.filename,
+            Self::Path(wheel) => &wheel.filename,
+            Self::GitPath(wheel) => &wheel.filename,
+        }
+    }
+
     /// Return true if the distribution refers to a local file or directory.
     fn is_local(&self) -> bool {
         matches!(self, Self::Path(_))
     }
 
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
-    pub fn index(&self) -> Option<&IndexUrl> {
+    fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Registry(registry) => Some(&registry.best_wheel().index),
             Self::DirectUrl(_) => None,
@@ -779,6 +808,25 @@ impl SourceDist {
         match self {
             Self::Directory(DirectorySourceDist { r#virtual, .. }) => r#virtual.unwrap_or(false),
             _ => false,
+        }
+    }
+
+    /// Returns `true` if the distribution is a first-party workspace member.
+    pub fn is_first_party(&self) -> bool {
+        match self {
+            Self::Directory(DirectorySourceDist {
+                first_party: FirstParty::Yes,
+                ..
+            }) => true,
+            Self::Directory(DirectorySourceDist {
+                first_party: FirstParty::No,
+                ..
+            })
+            | Self::Registry(_)
+            | Self::DirectUrl(_)
+            | Self::GitDirectory(_)
+            | Self::GitPath(_)
+            | Self::Path(_) => false,
         }
     }
 
@@ -999,28 +1047,6 @@ impl Name for Dist {
     }
 }
 
-impl Name for CompatibleDist<'_> {
-    fn name(&self) -> &PackageName {
-        match self {
-            Self::InstalledDist(dist) => dist.name(),
-            Self::SourceDist {
-                sdist,
-                prioritized: _,
-            } => sdist.name(),
-            Self::CompatibleWheel {
-                wheel,
-                priority: _,
-                prioritized: _,
-            } => wheel.name(),
-            Self::IncompatibleWheel {
-                sdist,
-                wheel: _,
-                prioritized: _,
-            } => sdist.name(),
-        }
-    }
-}
-
 impl DistributionMetadata for RegistryBuiltWheel {
     fn version_or_url(&self) -> VersionOrUrlRef<'_> {
         VersionOrUrlRef::Version(&self.filename.version)
@@ -1178,7 +1204,7 @@ impl DistributionMetadata for Dist {
     }
 }
 
-impl RemoteSource for File {
+impl<Url> RemoteSource for File<Url> {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         Ok(Cow::Borrowed(&self.filename))
     }
@@ -1188,14 +1214,14 @@ impl RemoteSource for File {
     }
 }
 
-impl RemoteSource for Url {
+impl<P: SerializationPolicy> RemoteSource for SafeUrl<P> {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // Identify the last segment of the URL as the filename.
         let mut path_segments = self
             .path_segments()
             .ok_or_else(|| Error::MissingPathSegments(self.to_string()))?;
 
-        // This is guaranteed by the contract of `Url::path_segments`.
+        // This is guaranteed by the contract of `url::Url::path_segments`.
         let last = path_segments
             .next_back()
             .expect("path segments is non-empty");
@@ -1292,20 +1318,13 @@ impl RemoteSource for GitPathSourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // The filename is the last segment of the URL, before any `@`.
         match self.url.filename()? {
-            Cow::Borrowed(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Borrowed(filename))
-                } else {
-                    Ok(Cow::Borrowed(filename))
-                }
+            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Borrowed(suffix))
             }
-            Cow::Owned(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Owned(filename.to_owned()))
-                } else {
-                    Ok(Cow::Owned(filename))
-                }
+            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Owned(suffix.to_owned()))
             }
+            filename => Ok(filename),
         }
     }
 
@@ -1318,20 +1337,13 @@ impl RemoteSource for GitDirectorySourceDist {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         // The filename is the last segment of the URL, before any `@`.
         match self.url.filename()? {
-            Cow::Borrowed(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Borrowed(filename))
-                } else {
-                    Ok(Cow::Borrowed(filename))
-                }
+            Cow::Borrowed(filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Borrowed(suffix))
             }
-            Cow::Owned(filename) => {
-                if let Some((_, filename)) = filename.rsplit_once('@') {
-                    Ok(Cow::Owned(filename.to_owned()))
-                } else {
-                    Ok(Cow::Owned(filename))
-                }
+            Cow::Owned(ref filename) if let Some((_, suffix)) = filename.rsplit_once('@') => {
+                Ok(Cow::Owned(suffix.to_owned()))
             }
+            filename => Ok(filename),
         }
     }
 
@@ -1440,13 +1452,15 @@ impl RemoteSource for Dist {
     }
 }
 
-impl Identifier for DisplaySafeUrl {
+impl Identifier for SafeUrl {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self.clone()))
+        DistributionId::Url(CanonicalUrl::new(self.clone()))
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self.clone()))
+        let mut url = self.clone();
+        url.set_fragment(None);
+        ResourceId::Url(CanonicalUrl::new(url))
     }
 }
 
@@ -1456,7 +1470,7 @@ impl Identifier for File {
             .first()
             .cloned()
             .map(DistributionId::Digest)
-            .unwrap_or_else(|| self.url.distribution_id())
+            .unwrap_or_else(|| self.location.distribution_id())
     }
 
     fn resource_id(&self) -> ResourceId {
@@ -1464,7 +1478,7 @@ impl Identifier for File {
             .first()
             .cloned()
             .map(ResourceId::Digest)
-            .unwrap_or_else(|| self.url.resource_id())
+            .unwrap_or_else(|| self.location.resource_id())
     }
 }
 
@@ -1478,22 +1492,22 @@ impl Identifier for Path {
     }
 }
 
-impl Identifier for FileLocation {
+impl Identifier for CanonicalFileLocation {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            Self::RelativeUrl(base, url) => {
+            Self::RelativeUrl(base, url, _) => {
                 DistributionId::RelativeUrl(base.to_string(), url.to_string())
             }
-            Self::AbsoluteUrl(url) => DistributionId::AbsoluteUrl(url.to_string()),
+            Self::AbsoluteUrl(url, _) => DistributionId::AbsoluteUrl(url.to_string()),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            Self::RelativeUrl(base, url) => {
+            Self::RelativeUrl(base, url, _) => {
                 ResourceId::RelativeUrl(base.to_string(), url.to_string())
             }
-            Self::AbsoluteUrl(url) => ResourceId::AbsoluteUrl(url.to_string()),
+            Self::AbsoluteUrl(url, _) => ResourceId::AbsoluteUrl(url.to_string()),
         }
     }
 }
@@ -1560,11 +1574,11 @@ impl Identifier for PathBuiltDist {
 
 impl Identifier for GitPathBuiltDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        DistributionId::GitPath(self.git.as_ref().into(), self.install_path.clone())
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        ResourceId::Git(self.git.repository().clone())
     }
 }
 
@@ -1590,21 +1604,21 @@ impl Identifier for DirectorySourceDist {
 
 impl Identifier for GitPathSourceDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        GitPathSourceUrl::from(self).distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        GitPathSourceUrl::from(self).resource_id()
     }
 }
 
 impl Identifier for GitDirectorySourceDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        GitDirectorySourceUrl::from(self).distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        GitDirectorySourceUrl::from(self).resource_id()
     }
 }
 
@@ -1690,21 +1704,21 @@ impl Identifier for DirectSourceUrl<'_> {
 
 impl Identifier for GitDirectorySourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        DistributionId::GitDirectory(self.git.into(), self.subdirectory.map(Path::to_path_buf))
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        ResourceId::Git(self.git.repository().clone())
     }
 }
 
 impl Identifier for GitPathSourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        DistributionId::GitPath(self.git.into(), self.path.to_path_buf())
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        ResourceId::Git(self.git.repository().clone())
     }
 }
 
@@ -1769,7 +1783,8 @@ impl Identifier for BuildableSource<'_> {
 #[cfg(test)]
 mod test {
     use crate::{BuiltDist, Dist, RemoteSource, SourceDist, UrlString};
-    use uv_redacted::DisplaySafeUrl;
+    use uv_redacted::SafeUrl;
+    use uv_redacted::policy::{Raw, Stripped};
 
     /// Ensure that we don't accidentally grow the `Dist` sizes.
     #[test]
@@ -1791,14 +1806,65 @@ mod test {
             "https://example.com/foo-0.1.0.tar.gz#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query",
             "https://example.com/foo-0.1.0.tar.gz?query#fragment",
+            "https://example.com/foo-0.1.0.tar.gz#fragment?query",
+            "https://example.com/foo-0.1.0.tar.gz#fragment/3?query",
+            "https://example.com/foo%2D0.1.0.tar.gz#fragment/3?query",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment",
             "https://example.com/foo-0.1.0.tar.gz?query=1/2#fragment/3",
             "https://example.com/foo%2D0.1.0.tar.gz?query=1/2#fragment/3",
         ] {
-            let url = DisplaySafeUrl::parse(url).unwrap();
+            let url = SafeUrl::parse(url).unwrap();
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
             let url = UrlString::from(url.clone());
             assert_eq!(url.filename().unwrap(), "foo-0.1.0.tar.gz", "{url}");
         }
+    }
+
+    #[test]
+    fn remote_source_redacts_missing_path_segments() {
+        for (input, expected) in [
+            (
+                "mailto:ferris@example.com?X-Amz-Signature=sentinel",
+                "mailto:ferris@example.com?X-Amz-Signature=****",
+            ),
+            (
+                "ssh://user:secret@example.com?sig=sentinel",
+                "ssh://user:****@example.com?sig=****",
+            ),
+            (
+                "mailto:ferris@example.com?sig=one&X-Amz-Credential=two&X-Amz-Security-Token=three&X-Amz-Signature=four&token=kept#fragment",
+                "mailto:ferris@example.com?sig=****&X-Amz-Credential=****&X-Amz-Security-Token=****&X-Amz-Signature=****&token=kept#fragment",
+            ),
+            (
+                "mailto:ferris@example.com?x-amz%2dsignature=sentinel&safe=value",
+                "mailto:ferris@example.com?x-amz-signature=****&safe=value",
+            ),
+            (
+                "mailto:ferris@example.com?token=kept#fragment",
+                "mailto:ferris@example.com?token=kept#fragment",
+            ),
+        ] {
+            let url = SafeUrl::parse(input).unwrap().with_policy(Raw);
+            let error = RemoteSource::filename(&url).unwrap_err();
+            let crate::Error::MissingPathSegments(payload) = &error else {
+                panic!("expected missing path segments");
+            };
+            assert_eq!(payload, expected);
+            assert_eq!(
+                error.to_string(),
+                format!("Could not extract path segments from URL: {expected}")
+            );
+            assert_eq!(
+                format!("{error:?}"),
+                format!("MissingPathSegments({expected:?})")
+            );
+            assert!(std::error::Error::source(&error).is_none());
+            assert_eq!(url.as_str(), input);
+        }
+
+        let input = "https://example.org/demo%20name.whl?sig=sentinel";
+        let url = SafeUrl::parse(input).unwrap().with_policy(Stripped);
+        assert_eq!(RemoteSource::filename(&url).unwrap(), "demo name.whl");
+        assert_eq!(url.as_str(), input);
     }
 }

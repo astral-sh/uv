@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 
@@ -10,11 +11,11 @@ use crate::resolver::ResolverEnvironment;
 
 /// See [`crate::resolver::ForkState`].
 #[derive(Default, Debug, Clone)]
-pub(crate) struct ForkUrls(FxHashMap<PackageName, VerbatimParsedUrl>);
+pub(crate) struct ForkUrls(FxHashMap<PackageName, Arc<VerbatimParsedUrl>>);
 
 impl ForkUrls {
     /// Get the URL previously used for a package in this fork.
-    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&VerbatimParsedUrl> {
+    pub(crate) fn get(&self, package_name: &PackageName) -> Option<&Arc<VerbatimParsedUrl>> {
         self.0.get(package_name)
     }
 
@@ -32,7 +33,7 @@ impl ForkUrls {
     ) -> Result<(), ResolveError> {
         match self.0.entry(package_name.clone()) {
             Entry::Occupied(previous) => {
-                if previous.get() != url {
+                if previous.get().as_ref() != url {
                     let mut conflicting_url =
                         vec![previous.get().parsed_url.clone(), url.parsed_url.clone()];
                     conflicting_url.sort();
@@ -44,7 +45,7 @@ impl ForkUrls {
                 }
             }
             Entry::Vacant(vacant) => {
-                vacant.insert(url.clone());
+                vacant.insert(Arc::new(url.clone()));
             }
         }
         Ok(())

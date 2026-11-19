@@ -1,3 +1,11 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = []
+#
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
+# ///
 """Check that uv and uv_build wheels contain exactly the expected files"""
 
 import re

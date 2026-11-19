@@ -164,6 +164,7 @@ fn add_module_components(components: &[&str], modules: &mut BTreeSet<ModuleName>
 mod tests {
     use std::collections::BTreeSet;
 
+    use indoc::indoc;
     use uv_pypi_types::ModuleName;
 
     use super::add_record_module;
@@ -203,7 +204,14 @@ mod tests {
         add_record_module("package/module.pyc", &[], &mut modules);
         add_record_module("legacy.pyc", &[], &mut modules);
 
-        assert_eq!(module_names(modules), "legacy\npackage\npackage.module");
+        assert_eq!(
+            module_names(modules),
+            indoc! {"
+                legacy
+                package
+                package.module"
+            }
+        );
     }
 
     #[test]
@@ -252,7 +260,14 @@ mod tests {
 
         assert_eq!(
             module_names(modules),
-            "package\npackage.extension\npackage.free_threaded\npackage.limited\npackage.windows\nplain"
+            indoc! {"
+                package
+                package.extension
+                package.free_threaded
+                package.limited
+                package.windows
+                plain"
+            }
         );
     }
 

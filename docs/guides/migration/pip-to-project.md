@@ -110,7 +110,7 @@ typing-extensions==4.12.2
     #   pydantic-core
 ```
 
-Here, all the versions constraints are _exact_. Only a single version of each package can be used.
+Here, all the version constraints are _exact_. Only a single version of each package can be used.
 The above example was generated with `uv pip compile`, but could also be generated with
 `pip-compile` from `pip-tools`.
 
@@ -312,8 +312,8 @@ We'll discuss the commands necessary to automate these imports below.
 
 ### The uv lockfile
 
-uv uses a lockfile (`uv.lock`) file to lock package versions. The format of this file is specific to
-uv, allowing uv to support advanced features. It replaces `requirements.txt` files.
+uv uses a lockfile (`uv.lock`) to lock package versions. The format of this file is specific to uv,
+allowing uv to support advanced features. It replaces `requirements.txt` files.
 
 The lockfile will be automatically created and populated when adding dependencies, but you can
 explicitly create it with `uv lock`.

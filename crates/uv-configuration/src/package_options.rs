@@ -94,7 +94,7 @@ impl Reinstall {
         }
     }
 
-    /// Add a [`Package`] to the [`Reinstall`] policy.
+    /// Add a [`PackageName`] to the [`Reinstall`] policy.
     #[must_use]
     pub fn with_package(self, package_name: PackageName) -> Self {
         match self {

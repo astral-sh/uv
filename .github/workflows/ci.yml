@@ -6,23 +6,80 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.event.pull_request.number || github.sha }}
+  # An older commit's rerun must not cancel the latest push to the same PR.
+  group: ${{ github.workflow }}-${{ github.ref_name }}-${{ github.run_attempt == 1 && github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
+
+env:
+  UV_LOCKED: 1
 
 jobs:
   plan:
+    # CI on main is redundant in the security repository.
+    if: ${{ github.repository != 'astral-sh/uv-security' || github.ref != 'refs/heads/main' }}
     uses: $/.github/workflows/plan.yml
 
+  check-cargo-vet:
+    name: "check | crates"
+    needs: plan
+    uses: astral-sh/github-actions/.github/workflows/cargo-vet.yml@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+    with:
+      runner: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+      workspaces: ${{ needs.plan.outputs.cargo-vet-workspaces }}
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.13.7"
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
   check-fmt:
+    name: "check | fmt"
+    needs: plan
     uses: $/.github/workflows/check-fmt.yml
 
-  review:
+  review-security:
+    name: "review | security"
     needs: plan
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
-    uses: $/.github/workflows/pull-request-security-review.yml
+    # N.B. despite setting this, Depot jobs allow cache writes directly through the API
+    cache-mode: read
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+    with:
+      runner: depot-ubuntu-24.04-16
+      helper-runner: github-ubuntu-24.04-x86_64-4
+      # renovate: datasource=github-release-attachments depName=astral-sh/uv
+      uv-version: "0.13.7"
+      uv-checksum: "c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+      # Install Rust tools such as cargo-nextest so the reviewer can test PR code.
+      # Keep the environment outside the checkout when switching to the PR head.
+      setup-command: |
+        export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/pull-request-review-tools"
+        export UV_PYTHON_DOWNLOADS_JSON_URL="$GITHUB_WORKSPACE/crates/uv-python-managed/download-metadata.json"
+        uv sync --locked --only-dev
+        echo "$UV_PROJECT_ENVIRONMENT/bin" >> "$GITHUB_PATH"
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+      issues: read
+      pull-requests: read
+
+  review-code-quality:
+    name: "review | code quality"
+    needs: plan
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        (github.repository == 'astral-sh/uv' || github.repository == 'astral-sh/uv-dev') &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        needs.plan.outputs.run-checks == 'true'
+      }}
+    uses: $/.github/workflows/pull-request-code-quality-review.yml
     secrets: inherit
     permissions:
       contents: read
@@ -31,6 +88,7 @@ jobs:
       pull-requests: read
 
   check-lint:
+    name: "check | lint"
     needs: plan
     uses: $/.github/workflows/check-lint.yml
     with:
@@ -38,12 +96,14 @@ jobs:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
 
   check-docs:
+    name: "check | docs"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-docs.yml
     secrets: inherit
 
   check-zizmor:
+    name: "check | zizmor"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-zizmor.yml
@@ -52,21 +112,76 @@ jobs:
       security-events: write
 
   check-publish:
+    name: "check | publish"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-publish.yml
 
   check-release:
+    name: "check | release"
     needs: plan
-    if: ${{ needs.plan.outputs.run-checks == 'true' }}
+    if: ${{ needs.plan.outputs.run-checks == 'true' || needs.plan.outputs.require-check-release == 'true' }}
     uses: $/.github/workflows/check-release.yml
 
+  check-crates-policies:
+    name: "check | crates policies"
+    needs: plan
+    if: ${{ needs.plan.outputs.check-crates-policies == 'true' }}
+    uses: $/.github/workflows/check-crates-policies.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
+  check-cargo-cooldowns:
+    name: "check | crates cooldowns"
+    needs: plan
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    permissions:
+      actions: read # Download publication times from a successful main run.
+      contents: read
+    env:
+      UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/github-actions/cargo-cooldowns@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        with:
+          policy: .github/cargo-cooldowns.toml
+
+  check-cargo-lock-changes:
+    name: "check | cargo lockfile changes"
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.repository_owner == 'astral-sh' &&
+        github.event.pull_request.head.repo.full_name != github.repository
+      }}
+    runs-on: github-ubuntu-24.04-x86_64-2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          enable-cache: auto
+      - name: "Check Cargo lockfile changes"
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+          UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
+        run: uv run --script scripts/check-cargo-lock-changes.py HEAD^1 HEAD
+
   check-lock:
+    name: "check | lock"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-lock.yml
 
   check-generated-files:
+    name: "check | generated files"
     needs: plan
     if: ${{ needs.plan.outputs.test-code == 'true' }}
     uses: $/.github/workflows/check-generated-files.yml
@@ -113,6 +228,7 @@ jobs:
     uses: $/.github/workflows/test-integration.yml
     secrets: inherit
     permissions:
+      contents: read
       id-token: write
     with:
       sha: ${{ github.sha }}
@@ -135,9 +251,10 @@ jobs:
     with:
       sha: ${{ github.sha }}
 
-  build-release-binaries:
+  build-release-artifacts:
     needs: plan
     if: ${{ needs.plan.outputs.build-release-binaries == 'true' }}
+    cache-mode: none
     uses: $/.github/workflows/build-release-binaries.yml
     secrets: inherit
 
@@ -147,6 +264,18 @@ jobs:
     uses: $/.github/workflows/build-docker.yml
     with:
       push-dev: ${{ needs.plan.outputs.push-docker == 'true' }}
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
+  publish-docker:
+    needs: build-docker
+    if: ${{ needs.build-docker.outputs.publish-dev == 'true' }}
+    uses: $/.github/workflows/publish-docker.yml
+    with:
+      manifest: ${{ needs.build-docker.outputs.manifest }}
+      push-dev: true
     secrets: inherit
     permissions:
       contents: read
@@ -161,24 +290,26 @@ jobs:
     secrets: inherit
     with:
       save-rust-cache: ${{ needs.plan.outputs.save-rust-cache }}
+    permissions:
+      contents: read
+      id-token: write
 
   # This job cannot be moved into a reusable workflow because it includes coverage for uploading
   # attestations and PyPI does not support attestations in reusable workflows.
   test-publish:
+    cache-mode: none
     name: "test uv publish"
     timeout-minutes: 20
     needs:
       - plan
       - build-dev-binaries
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     # Only the main repository is a trusted publisher
     if: ${{ github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.fork != true && needs.plan.outputs.test-publish == 'true' }}
     environment:
       name: uv-test-publish
       deployment: false
     env:
-      # No dbus in GitHub Actions
-      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
       PYTHON_VERSION: 3.12
     permissions:
       # For trusted publishing
@@ -189,12 +320,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "${{ env.PYTHON_VERSION }}"
 
       - name: "Download binary"
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: uv-linux-libc-${{ github.sha }}
 
@@ -209,13 +340,17 @@ jobs:
           cd astral-test-pypa-gh-action
           ../uv init --package --no-workspace
           # Get the latest patch version
-          patch_version=$(curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json | jq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' | grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)')
+          patch_version=$(
+            curl https://test.pypi.org/simple/astral-test-pypa-gh-action/?format=application/vnd.pypi.simple.v1+json |
+              ../uv run --project .. --only-group=jaq --python "$PYTHON_VERSION" jaq --raw-output '[.files[].filename | select(endswith(".tar.gz"))] | last' |
+              grep -oP '(?<=astral_test_pypa_gh_action-0\.1\.)\d+(?=\.tar\.gz)'
+          )
           # Set the current version to one higher (which should be unused)
           sed -i "s/0.1.0/0.1.$((patch_version + 1))/g" pyproject.toml
           ../uv build
 
       - name: "Publish astral-test-pypa-gh-action"
-        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           # With this GitHub action, we can't do as rigid checks as with our custom Python script, so we publish more
           # leniently
@@ -247,28 +382,10 @@ jobs:
           fi
           GITLAB_PYPI_OIDC_TOKEN=$(cat "${pypi_id_token_file}")
 
-          # we expect ./gitlab-artifacts/*/artifacts/pyx-id-token to exist
-          pyx_id_token_file=$(find ./gitlab-artifacts -type f -name pyx-id-token | head -n 1)
-          if [ -z "${pyx_id_token_file}" ]; then
-            echo "No pyx-id-token file found in GitLab artifacts"
-            exit 1
-          fi
-          GITLAB_PYX_OIDC_TOKEN=$(cat "${pyx_id_token_file}")
-
           # Add secret masks for the tokens.
           echo "::add-mask::$GITLAB_PYPI_OIDC_TOKEN"
-          echo "::add-mask::$GITLAB_PYX_OIDC_TOKEN"
 
           echo "GITLAB_PYPI_OIDC_TOKEN=${GITLAB_PYPI_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
-          echo "GITLAB_PYX_OIDC_TOKEN=${GITLAB_PYX_OIDC_TOKEN}" >> "${GITHUB_OUTPUT}"
-
-      - name: "Add password to keyring"
-        run: |
-          # `keyrings.alt` contains the plaintext keyring
-          ./uv tool install --with keyrings.alt keyring
-          echo $UV_TEST_PUBLISH_KEYRING | keyring set https://test.pypi.org/legacy/?astral-test-keyring __token__
-        env:
-          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
 
       - name: "Add password to uv text store"
         run: |
@@ -280,35 +397,64 @@ jobs:
         # `-p 3.12` prefers the python we just installed over the one locked in `.python_version`.
         run: ./uv run --no-project -p "${PYTHON_VERSION}" scripts/publish/test_publish.py --uv ./uv all
         env:
-          RUST_LOG: uv=debug,uv_publish=trace
+          UV_TEST_PUBLISH_RUST_LOG: uv=debug,uv_publish=trace
           UV_TEST_PUBLISH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_TOKEN }}
           UV_TEST_PUBLISH_PASSWORD: ${{ secrets.UV_TEST_PUBLISH_PASSWORD }}
+          UV_TEST_PUBLISH_KEYRING: ${{ secrets.UV_TEST_PUBLISH_KEYRING }}
           UV_TEST_PUBLISH_GITLAB_PAT: ${{ secrets.UV_TEST_PUBLISH_GITLAB_PAT }}
           UV_TEST_PUBLISH_CODEBERG_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CODEBERG_TOKEN }}
           UV_TEST_PUBLISH_CLOUDSMITH_TOKEN: ${{ secrets.UV_TEST_PUBLISH_CLOUDSMITH_TOKEN }}
-          UV_TEST_PUBLISH_PYX_TOKEN: ${{ secrets.UV_TEST_PUBLISH_PYX_TOKEN }}
           UV_TEST_PUBLISH_PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
           UV_TEST_PUBLISH_GITLAB_PYPI_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYPI_OIDC_TOKEN }}
-          UV_TEST_PUBLISH_GITLAB_PYX_OIDC_TOKEN: ${{ steps.load-gitlab-oidc-token.outputs.GITLAB_PYX_OIDC_TOKEN }}
 
   required-checks-passed:
     name: "all required jobs passed"
-    if: always()
+    if: ${{ always() && github.ref != 'refs/heads/main' }}
     needs:
+      - plan
+      - check-cargo-cooldowns
+      - check-cargo-lock-changes
+      - check-cargo-vet
       - check-fmt
       - check-lint
       - check-docs
+      - check-lock
+      - check-crates-policies
+      - check-release
       - check-generated-files
       - test
+      - test-integration
+      - test-system
       - build-dev-binaries
-    runs-on: ubuntu-slim
+      - build-release-artifacts
+      - build-docker
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          group: jaq
+
       - name: "Check required jobs passed"
         run: |
-          failing=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key): \(.value.result)"')
+          failing=$(
+            echo "$NEEDS_JSON" | jaq -r --argjson conditional_jobs "$CONDITIONAL_JOBS" '
+              to_entries[]
+              | select($conditional_jobs[.key] != false)
+              | select(.value.result != "success" and (.value.result != "skipped" or .key == "check-cargo-vet" or .key == "check-cargo-cooldowns"))
+              | "\(.key): \(.value.result)"
+            '
+          )
           if [ -n "$failing" ]; then
             echo "$failing"
             exit 1
           fi
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          # Jobs not listed here are always required.
+          CONDITIONAL_JOBS: >-
+            {
+              "build-release-artifacts": ${{ contains(github.event.pull_request.labels.*.name, 'build:release') }},
+              "check-release": ${{ needs.plan.outputs.require-check-release == 'true' }},
+              "test-integration": ${{ contains(github.event.pull_request.labels.*.name, 'test:integration') }},
+              "test-system": ${{ contains(github.event.pull_request.labels.*.name, 'test:system') }}
+            }

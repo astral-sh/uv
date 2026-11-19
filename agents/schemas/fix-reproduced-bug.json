@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "outcome": {
+      "type": "string",
+      "enum": ["fixed", "not_fixed"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "validation": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "pull_request_title": { "type": "string" }
+  },
+  "required": ["outcome", "summary", "validation", "pull_request_title"]
+}

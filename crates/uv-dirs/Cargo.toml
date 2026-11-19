@@ -1,6 +1,6 @@
 [package]
 name = "uv-dirs"
-version = "0.0.70"
+version = "0.0.101"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -19,9 +19,13 @@ workspace = true
 uv-static = { workspace = true }
 
 etcetera = { workspace = true }
-fs-err = { workspace = true }
+
+[target.'cfg(not(windows))'.dependencies]
 tracing = { workspace = true }
 
 [dev-dependencies]
 assert_fs = { workspace = true }
 indoc = { workspace = true }
+
+[target.'cfg(unix)'.dev-dependencies]
+fs-err = { workspace = true }

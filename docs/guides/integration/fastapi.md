@@ -43,7 +43,7 @@ $ uv init --no-package
 ```
 
 This creates a `pyproject.toml` file for a
-[flat, unpackaged project](../../concepts/projects/init.md#unpackaged-applications).
+[flat, unpackaged project](../../concepts/projects/init.md#creating-a-project-without-a-build-system).
 
 Then, add a dependency on FastAPI:
 

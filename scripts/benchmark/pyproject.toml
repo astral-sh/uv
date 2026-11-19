@@ -4,6 +4,7 @@ version = "0.0.1"
 description = "Benchmark package resolution tools"
 requires-python = ">=3.11"
 dependencies = [
+  "astral-dev-toolchain-hyperfine==2.0.0",
   "pdm",
   "pip-tools",
   "poetry",
@@ -18,5 +19,52 @@ resolver = "benchmark.resolver:main"
 tools = "benchmark.tools:main"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.12.3,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv]
+no-build = true
+require-build-hashes = true
+preview-features = ["build-dependency-hashes"]
+no-binary-package = ["benchmark"]
+# Pin the isolated build environment for source-build exceptions.
+build-constraint-dependencies = [
+    { requirement = "uv-build==0.12.3", hashes = [
+        "sha256:322d634f2fbf8c7965dde52106db8040b0cc23dbc07b6508d900f217843bd129",
+        "sha256:39adb84a210edaffc4eab8f59a2fc66579d08ea4e75acd3f36548f33f4a3eefc",
+        "sha256:3bdf349e221a93544c940157361d22e5b6d73bc9bd1b302364461d8afd46479a",
+        "sha256:3f6cda73d200e755d8aec6492af22c279ce69e460241a5f7507eba4aeb08abb7",
+        "sha256:48117d0f8d7be3e88f2e8e63e608873bc2aa950f5d9c3a845650e41632dfd0e9",
+        "sha256:52d1bb3e76217f4ece4fb2b89a7536d481af087567d83428cc72d570b540f3df",
+        "sha256:6d0d59550fc9498087c071e9c842c87cd5288e0f8bda4888a633d6be79c3178c",
+        "sha256:7b9bd7b737e8e79370684c959e9500eb32fee44efc396d51ab11ca598d1596a2",
+        "sha256:7f13598c88b44a9b46c5d74370a0c12954f2e328d9193e80358a38edf95c7608",
+        "sha256:855dbaf6912805e70ae1c788a282dc023d69f6acaec0955d14e57759017e11de",
+        "sha256:9bc47530837f8a544c7a9e11e6636a950bc68aac1837462052dc180f45318f96",
+        "sha256:aa2c683d59b2c593b3b3f20e9bdc949131f3e6dd11250f214093a4b800e2472d",
+        "sha256:ad894d87c4e048973ba975aa85f9c8b30fe1065b8c10ec2adfd8395333a6df4f",
+        "sha256:b294990201d431fb0e7cfada5a00e7e5d4c520c32c86a437a11825f73960c441",
+        "sha256:b6f51ed4411a35f008c9ef6e28016ac8f167f5c14fb2d0e453a9a97246b14206",
+        "sha256:b92f3c999dceaa1ba544587be5e85708bbc7a584f4e22dbb770409699eeffe80",
+        "sha256:c821185380be7573bed6e653f995c6211258bd5351cbccf4072cef3ebfcf1a5c",
+        "sha256:cf304c80cf6200aad0956bbc2cdb1e23dd49bfeb74e036a263050de2b0e54f91",
+        "sha256:d1d47f328fb52f62cbc4915c82c96850d246d9029e6f461bfd01f31f43a13451",
+    ] },
+]
+exclude-newer = "P7D"
+
+[tool.uv.exclude-newer-package]
+astral-dev-toolchain-hyperfine = "2026-10-08T08:11:00Z"
+# Set certifi's cutoff to admit 2026.10.19 before the seven-day wait: its CA
+# bundle removes the eMudhra root that anchors the compromised intermediates.
+# Remove the cutoff once 2026.10.19 is seven days old, so later certifi
+# releases can be selected after the seven-day wait.
+certifi = "2026-10-20T02:24:17Z"
+# Set pip's cutoff to admit 26.2.2 before the seven-day wait: its bundled CA
+# certificates remove the eMudhra root that anchors the compromised intermediates.
+# Remove the cutoff once 26.2.2 is seven days old, so later pip releases
+# can be selected after the seven-day wait.
+pip = "2026-10-20T16:36:30Z"
+
+[tool.uv.build-backend]
+source-include = [".python-version", "README.md", "uv.lock"]
