@@ -2526,8 +2526,18 @@ impl Lock {
                 vec![]
             };
 
-            let mut package =
-                Package::from_annotated_dist(dist, fork_markers, root, index_locations)?;
+            let mut wheel_marker = dist.marker;
+            if let Some(supported_environments_marker) = supported_environments_marker {
+                wheel_marker.and(supported_environments_marker);
+            }
+            let mut package = Package::from_annotated_dist(
+                dist,
+                fork_markers,
+                root,
+                index_locations,
+                &requires_python,
+                &wheel_marker,
+            )?;
             // Git declarations can introduce direct sources needed by offline freshness checks.
             if metadata_free
                 && matches!(package.id.source, Source::Git(..))
@@ -2535,19 +2545,6 @@ impl Lock {
             {
                 package.metadata = PackageMetadata::from_distribution(metadata, root, dist.role)?;
             }
-            let mut wheel_marker = dist.marker;
-            if let Some(supported_environments_marker) = supported_environments_marker {
-                wheel_marker.and(supported_environments_marker);
-            }
-            let wheels = &mut package.wheels;
-            wheels.retain(|wheel| {
-                !is_wheel_unreachable_for_marker(
-                    &wheel.filename,
-                    &requires_python,
-                    &wheel_marker,
-                    None,
-                )
-            });
 
             if let Some(index) = dist.index()
                 && let Some(route) = index_locations.proxy_route_for(index)
@@ -7007,10 +7004,17 @@ impl Package {
         fork_markers: Vec<UniversalMarker>,
         root: &Path,
         index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+        wheel_marker: &UniversalMarker,
     ) -> Result<Self, LockError> {
         let id = PackageId::from_annotated_dist(annotated_dist, root)?;
         let sdist = SourceDist::from_annotated_dist(&id, annotated_dist, index_locations)?;
-        let wheels = Wheel::from_annotated_dist(annotated_dist, index_locations)?;
+        let wheels = Wheel::from_annotated_dist(
+            annotated_dist,
+            index_locations,
+            requires_python,
+            wheel_marker,
+        )?;
         let metadata = if id.source.is_immutable() {
             PackageMetadata::default()
         } else {
@@ -9209,81 +9213,44 @@ struct Wheel {
 }
 
 impl Wheel {
+    /// Convert reachable wheels to lock entries, applying index hash requirements only to those wheels.
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+        marker: &UniversalMarker,
     ) -> Result<Vec<Self>, LockError> {
-        match annotated_dist.dist {
+        let dist = match &annotated_dist.dist {
             // We pass empty installed packages for locking.
             ResolvedDist::Installed { .. } => unreachable!(),
-            ResolvedDist::Installable { ref dist, .. } => Self::from_dist(
-                dist,
-                annotated_dist.hashes.as_slice(),
-                annotated_dist.index(),
-                index_locations,
-            ),
-        }
-    }
-
-    fn from_dist(
-        dist: &Dist,
-        hashes: &[HashDigest],
-        index: Option<&IndexUrl>,
-        index_locations: &IndexLocations,
-    ) -> Result<Vec<Self>, LockError> {
-        match *dist {
-            Dist::Built(ref built_dist) => {
-                Self::from_built_dist(built_dist, hashes, index, index_locations)
+            ResolvedDist::Installable { dist, .. } => dist.as_ref(),
+        };
+        let is_reachable = |filename: &WheelFilename| {
+            !is_wheel_unreachable_for_marker(filename, requires_python, marker, None)
+        };
+        let hashes = annotated_dist.hashes.as_slice();
+        let wheels = match dist {
+            Dist::Built(BuiltDist::Registry(dist)) => &dist.wheels,
+            Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => &dist.wheels,
+            Dist::Source(_) => return Ok(vec![]),
+            Dist::Built(dist) if !is_reachable(dist.wheel_filename()) => return Ok(vec![]),
+            Dist::Built(BuiltDist::DirectUrl(dist)) => {
+                return Ok(vec![Self::from_direct_dist(dist, hashes)]);
             }
-            Dist::Source(uv_distribution_types::SourceDist::Registry(ref source_dist)) => {
-                source_dist
-                    .wheels
-                    .iter()
-                    .filter(|wheel| {
-                        // Reject distributions from registries that don't match the index URL, as can occur with
-                        // `--find-links`.
-                        index.is_some_and(|index| *index == wheel.index)
-                    })
-                    .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
-                    .collect()
+            Dist::Built(BuiltDist::Path(dist)) => {
+                return Ok(vec![Self::from_path_dist(dist, hashes)]);
             }
-            Dist::Source(_) => Ok(vec![]),
-        }
-    }
-
-    fn from_built_dist(
-        built_dist: &BuiltDist,
-        hashes: &[HashDigest],
-        index: Option<&IndexUrl>,
-        index_locations: &IndexLocations,
-    ) -> Result<Vec<Self>, LockError> {
-        match *built_dist {
-            BuiltDist::Registry(ref reg_dist) => {
-                Self::from_registry_dist(reg_dist, index, index_locations)
+            Dist::Built(BuiltDist::GitPath(dist)) => {
+                return Ok(vec![Self::from_git_path_dist(dist, hashes)]);
             }
-            BuiltDist::DirectUrl(ref direct_dist) => {
-                Ok(vec![Self::from_direct_dist(direct_dist, hashes)])
-            }
-            BuiltDist::Path(ref path_dist) => Ok(vec![Self::from_path_dist(path_dist, hashes)]),
-            BuiltDist::GitPath(ref git_dist) => {
-                Ok(vec![Self::from_git_path_dist(git_dist, hashes)])
-            }
-        }
-    }
-
-    fn from_registry_dist(
-        reg_dist: &RegistryBuiltDist,
-        index: Option<&IndexUrl>,
-        index_locations: &IndexLocations,
-    ) -> Result<Vec<Self>, LockError> {
-        reg_dist
-            .wheels
+        };
+        let index = annotated_dist.index();
+        wheels
             .iter()
-            .filter(|wheel| {
-                // Reject distributions from registries that don't match the index URL, as can occur with
-                // `--find-links`.
-                index.is_some_and(|index| *index == wheel.index)
-            })
+            // Reject distributions from registries that don't match the index URL, as can occur with
+            // `--find-links`.
+            .filter(|wheel| Some(&wheel.index) == index)
+            .filter(|wheel| is_reachable(&wheel.filename))
             .map(|wheel| Self::from_registry_wheel(wheel, index_locations))
             .collect()
     }

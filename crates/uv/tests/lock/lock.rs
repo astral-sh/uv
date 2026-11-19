@@ -13315,6 +13315,7 @@ async fn lock_core_metadata_hash() -> Result<()> {
 }
 
 /// Lock with an index that advertises multiple hashes, then require SHA256 for that index.
+/// The CPython 3.12 wheel only advertises SHA512 and is excluded by `requires-python`.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_hash_algorithm() -> Result<()> {
@@ -13334,6 +13335,10 @@ async fn lock_index_hash_algorithm() -> Result<()> {
                 "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
             },
             "core-metadata": true
+        }, {
+            "filename": "basic_package-0.1.0-cp312-cp312-manylinux_2_17_x86_64.whl",
+            "url": format!("{}/files/basic_package-0.1.0-cp312-cp312-manylinux_2_17_x86_64.whl", server.uri()),
+            "hashes": { "sha512": "ab".repeat(64) }
         }, {
             "filename": "basic_package-0.1.0.tar.gz",
             "url": format!("{}/files/basic_package-0.1.0.tar.gz", server.uri()),
