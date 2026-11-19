@@ -2801,7 +2801,7 @@ impl Lock {
                 let Some(&index) = by_id.get(&dependency.package_id) else {
                     return Err(LockErrorKind::UnrecognizedDependency {
                         id: dist.id.clone(),
-                        dependency: dependency.clone(),
+                        dependency: dependency.package_id.clone().into(),
                     }
                     .into());
                 };
@@ -6889,21 +6889,14 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
-        // Count the number of sources for each package name. When
-        // there's only one source for a particular package name (the
-        // overwhelmingly common case), we can omit some data (like source and
-        // version) on dependency edges since it is strictly redundant.
-        let mut unambiguous_package_ids: FxHashMap<PackageName, PackageId> = FxHashMap::default();
-        let mut ambiguous = FxHashSet::default();
-        for dist in &wire.packages {
-            if ambiguous.contains(&dist.id.name) {
-                continue;
-            }
-            if let Some(id) = unambiguous_package_ids.remove(&dist.id.name) {
-                ambiguous.insert(id.name);
-                continue;
-            }
-            unambiguous_package_ids.insert(dist.id.name.clone(), dist.id.clone());
+        // When a name identifies a single package, dependencies can omit its source and version.
+        // Store `None` for names shared by multiple packages.
+        let mut package_ids = FxHashMap::default();
+        for package in &wire.packages {
+            package_ids
+                .entry(package.id.name.clone())
+                .and_modify(|id| *id = None)
+                .or_insert_with(|| Some(package.id.clone()));
         }
 
         let fork_markers = wire
@@ -6923,14 +6916,7 @@ impl TryFrom<LockWire> for Lock {
         let packages = wire
             .packages
             .into_iter()
-            .map(|dist| {
-                dist.unwire(
-                    &wire.requires_python,
-                    environment,
-                    default,
-                    &unambiguous_package_ids,
-                )
-            })
+            .map(|dist| dist.unwire(&wire.requires_python, environment, default, &package_ids))
             .collect::<Result<Vec<_>, _>>()?;
         let supported_environments = wire
             .supported_environments
@@ -7904,7 +7890,7 @@ impl PackageWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        package_ids: &FxHashMap<PackageName, Option<PackageId>>,
     ) -> Result<Package, LockError> {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
@@ -7948,18 +7934,19 @@ impl PackageWire {
         let unwire_deps = |deps: Vec<DependencyWire>| -> Result<Vec<Dependency>, LockError> {
             deps.into_iter()
                 .map(|dep| {
-                    dep.unwire(
-                        requires_python,
-                        environment,
-                        default,
-                        unambiguous_package_ids,
-                    )
+                    let Some(package_id) = package_ids.get(&dep.package_id.name) else {
+                        return Err(LockErrorKind::UnrecognizedDependency {
+                            id: self.id.clone(),
+                            dependency: dep.package_id,
+                        }
+                        .into());
+                    };
+                    dep.unwire(requires_python, environment, default, package_id.as_ref())
                 })
                 .collect()
         };
 
         Ok(Package {
-            id: self.id,
             metadata: self.metadata,
             default_groups: self.default_groups,
             group_requires_python: self.group_requires_python,
@@ -7982,6 +7969,7 @@ impl PackageWire {
                 .into_iter()
                 .map(|(group, deps)| Ok((group, unwire_deps(deps)?)))
                 .collect::<Result<_, LockError>>()?,
+            id: self.id,
         })
     }
 }
@@ -8038,11 +8026,7 @@ struct PackageIdForDependency {
 }
 
 impl PackageIdForDependency {
-    fn unwire(
-        self,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
-    ) -> Result<PackageId, LockError> {
-        let unambiguous_package_id = unambiguous_package_ids.get(&self.name);
+    fn unwire(self, unambiguous_package_id: Option<&PackageId>) -> Result<PackageId, LockError> {
         let source = self.source.map(Ok::<_, LockError>).unwrap_or_else(|| {
             let Some(package_id) = unambiguous_package_id else {
                 return Err(LockErrorKind::MissingDependencySource {
@@ -8075,6 +8059,16 @@ impl PackageIdForDependency {
             version,
             source,
         })
+    }
+}
+
+impl Display for PackageIdForDependency {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if let Some(version) = &self.version {
+            write!(f, "{}=={version}", self.name)
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 
@@ -9735,7 +9729,7 @@ impl DependencyWire {
         requires_python: &RequiresPython,
         environment: SimplifiedMarkerTree,
         default: UniversalMarker,
-        unambiguous_package_ids: &FxHashMap<PackageName, PackageId>,
+        unambiguous_package_id: Option<&PackageId>,
     ) -> Result<Dependency, LockError> {
         let (simplified_marker, complexified_marker) =
             if self.marker.as_simplified_marker_tree().is_true() {
@@ -9748,7 +9742,7 @@ impl DependencyWire {
                 (simplified_marker, complexified_marker)
             };
         Ok(Dependency {
-            package_id: self.package_id.unwire(unambiguous_package_ids)?,
+            package_id: self.package_id.unwire(unambiguous_package_id)?,
             index: PackageIndex(0),
             extra: self.extra,
             simplified_marker,
@@ -10326,13 +10320,13 @@ enum LockErrorKind {
     /// An error that occurs when there's an unrecognized dependency.
     ///
     /// That is, a dependency for a package that isn't in the lockfile.
-    #[error("For package `{id}`, found dependency `{dependency}` with no locked package", id = id.cyan(), dependency = dependency.cyan())]
+    #[error("No matching package entry for `{dependency}` (required by `{id}`)", dependency = dependency.cyan(), id = id.cyan())]
     UnrecognizedDependency {
         /// The ID of the package that has an unrecognized dependency.
         id: PackageId,
         /// The ID of the dependency that doesn't have a corresponding package
         /// entry.
-        dependency: Dependency,
+        dependency: PackageIdForDependency,
     },
     /// An artifact does not satisfy the lockfile's hash requirement.
     #[error(transparent)]
