@@ -628,8 +628,8 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     Ok(())
 }
 
-/// The error reports the glibc minimum shared by the available manylinux wheels, using the
-/// oldest tag on each wheel.
+/// The error reports a shared glibc minimum for releases with manylinux wheels, using the
+/// oldest tag per architecture on each wheel.
 #[test]
 fn minimum_libc_no_compatible_version() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -643,7 +643,7 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
         )])
         .collect();
     for (version, tag) in [
-        ("1.0.0", "cp312-cp312-manylinux_2_34_x86_64"),
+        ("1.0.0", "cp312-cp312-win_amd64"),
         (
             "2.0.0",
             "cp312-cp312-manylinux_2_36_x86_64.manylinux_2_34_x86_64",
@@ -672,16 +672,23 @@ fn minimum_libc_no_compatible_version() -> Result<()> {
     ----- stderr -----
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     error: No solution found when resolving dependencies for split (markers: platform_machine == 'x86_64' and sys_platform == 'linux')
-      cause: Because all versions of demo have no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 (the manylinux wheels are tagged for glibc 2.34 or newer) and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
+      cause: Because demo==1.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels and only the following versions of demo are available:
+                 demo==1.0.0
+                 demo==2.0.0
+             we can conclude that all of:
+                 demo<2.0.0
+                 demo>2.0.0
+              cannot be used.
+             And because demo==2.0.0 has no `platform_machine == 'x86_64' and sys_platform == 'linux'`-compatible wheels that satisfy `minimum-libc-version` for glibc 2.31 (the manylinux wheels are tagged for glibc 2.34 or newer) and your project depends on demo, we can conclude that your project's requirements are unsatisfiable.
     ");
     assert!(!context.temp_dir.child("uv.lock").exists());
 
-    // One release now has wheels with different minima, so there is no common minimum.
+    // Both releases now have manylinux wheels, but their oldest x86-64 tags differ.
     wheel(
         &context,
         "demo",
-        "2.0.0",
-        "cp313-cp313-manylinux_2_36_x86_64",
+        "1.0.0",
+        "cp312-cp312-manylinux_2_36_x86_64.manylinux_2_34_aarch64",
     )?;
     uv_snapshot!(filters, context.lock().arg("--offline"), @"
     exit_code: 1 (failure)
