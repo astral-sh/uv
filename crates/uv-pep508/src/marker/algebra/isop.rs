@@ -5,7 +5,9 @@
 //! the decision from all branches. This preserves the function, but does not guarantee a
 //! prime, irredundant cover over arbitrary unions of ranges.
 //!
-//! See <https://people.eecs.berkeley.edu/~alanmi/publications/2003/iwls03_sop.pdf>, section 4.
+//! Shin-ichi Minato describes the ISOP algorithm in chapters 5 and 7 of [*Binary Decision Diagrams
+//! and Applications for VLSI CAD*](https://doi.org/10.1007/978-1-4613-1303-8)
+//! ([open-access dissertation](https://doi.org/10.11501/3080926)).
 
 use std::cmp::Ordering;
 use std::ops::Bound;
