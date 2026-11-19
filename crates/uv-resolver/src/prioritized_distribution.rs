@@ -7,15 +7,16 @@ use tracing::debug;
 
 use uv_distribution_filename::{BuildTag, WheelFilename};
 use uv_distribution_types::{
-    File, IndexUrl, InstalledDist, LibcTag, MinimumLibcVersion, Name, RegistryBuiltDist,
-    RegistryBuiltWheel, RegistrySourceDist, RequiresPython, SupportedVariantProperties,
-    VariantScore, VariantsJsonContent, VariantsJsonFilename, VerbatimFile,
+    File, IndexUrl, InstalledDist, MinimumLibcVersion, Name, RegistryBuiltDist, RegistryBuiltWheel,
+    RegistrySourceDist, RequiresPython, SupportedVariantProperties, VariantScore,
+    VariantsJsonContent, VariantsJsonFilename, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Version, VersionSpecifier, VersionSpecifiers};
 use uv_pep508::{MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString};
 use uv_platform_tags::{
-    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, LibcVersion, PlatformTag, TagPriority, Tags,
+    AbiTag, BinaryFormat, IncompatibleTag, LanguageTag, LibcTag, LibcVersion, PlatformTag,
+    TagPriority, Tags,
 };
 use uv_pypi_types::{HashDigest, Yanked};
 
@@ -1025,43 +1026,49 @@ impl MissingPlatform {
             let python = target.and(implied_python_markers(wheel));
             let mut by_arch = BTreeMap::new();
             for tag in wheel.platform_tags() {
-                let Some(libc) = LibcTag::from_platform_tag(tag) else {
+                let Some(libc) = tag.libc_tag() else {
                     continue;
                 };
                 let covers = !python.is_disjoint(implied_platform_markers([tag]));
                 if covers {
                     missing.required_libc = Some(required);
-                }
-                // Independent minima for both families can describe disjoint environments.
-                let (arch, version) = match (libc, required.glibc, required.musl) {
-                    (LibcTag::Glibc(arch, version), Some(_), None) => {
-                        all_supported &= version.is_manylinux_supported(arch);
-                        (arch, version)
+                    // Independent minima for both families can describe disjoint environments.
+                    if required.glibc.is_some() && required.musl.is_some() {
+                        return missing;
                     }
-                    (LibcTag::Musl(arch, version), None, Some(_)) => (arch, version),
+                }
+                let (arch, version) = match (libc, required.glibc, required.musl) {
+                    (LibcTag::Glibc(arch, version), Some(_), None)
+                    | (LibcTag::Musl(arch, version), None, Some(_)) => (arch, version),
                     (LibcTag::Glibc(..) | LibcTag::Musl(..), _, _) => continue,
                 };
                 family_matches |= covers;
+                all_supported &= libc.is_supported();
                 // A wheel can advertise multiple tags for the same architecture.
                 let oldest = by_arch.entry(arch).or_insert(version);
                 *oldest = version.min(*oldest);
             }
             minima.extend(by_arch.into_values());
+            if missing.required_libc.is_some() && (!all_supported || minima.len() > 1) {
+                return missing;
+            }
         }
-        if family_matches && all_supported && minima.len() == 1 {
+        if family_matches {
             missing.shared_minimum = minima.pop_first();
         }
         missing
     }
 
-    /// Combine failures for the same required environment when reporting a version range.
+    /// Combine releases missing coverage for the same environment and libc baselines.
     pub(crate) fn merge(&self, other: &Self) -> Option<Self> {
-        (self.marker == other.marker).then(|| Self {
-            marker: self.marker,
-            required_libc: self.required_libc.or(other.required_libc),
+        if self.marker != other.marker || self.required_libc != other.required_libc {
+            return None;
+        }
+        Some(Self {
             shared_minimum: self
                 .shared_minimum
                 .filter(|min| other.shared_minimum == Some(*min)),
+            ..*self
         })
     }
 }
