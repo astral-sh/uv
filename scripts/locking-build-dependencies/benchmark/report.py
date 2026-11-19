@@ -1,9 +1,9 @@
 """Render a standalone comparison from bench.py's results (including partial runs)."""
 
 import json
-import math
 import statistics
 import sys
+from bisect import bisect_right
 from html import escape
 from pathlib import Path
 
@@ -11,27 +11,39 @@ from pathlib import Path
 def histogram(values, title, unit):
     if not values:
         return ""
-    # Keep zero in view so the sign and scale of the overhead are visible.
-    lo = min(min(values), 0)
-    hi = max(max(values), 0)
-    width = (hi - lo) / 12 or 1
-    bins = [0] * 12
+    # Fixed bands let successive runs be compared. Keep outliers in open-ended bins instead of
+    # stretching the entire axis around one timeout or discarding the most expensive locks.
+    cuts = (
+        (-1, 0, 0.1, 0.5, 1, 2, 5, 15, 30)
+        if unit == "seconds"
+        else (-50, 0, 10, 25, 50, 100, 250, 500, 1000)
+    )
+    bins = [0] * (len(cuts) + 1)
     for value in values:
-        index = min(11, max(0, math.floor((value - lo) / width)))
-        bins[index] += 1
-    bars = []
+        bins[bisect_right(cuts, value)] += 1
+
+    span = 360 / len(bins)
+    marks = []
     for i, count in enumerate(bins):
         height = 100 * count / max(bins)
-        label = f"{lo + i * width:+.2f} to {lo + (i + 1) * width:+.2f} {unit}: {count} pairs"
-        bars.append(
-            f'<rect x="{i * 30}" y="{102 - height:.1f}" width="28" height="{height:.1f}">'
-            f"<title>{label}</title></rect>"
+        if i == 0:
+            label = f"below {cuts[0]}"
+        elif i == len(cuts):
+            label = f"{cuts[-1]} and above"
+        else:
+            label = f"from {cuts[i - 1]} up to {cuts[i]}"
+        marks.append(
+            f'<rect x="{i * span:.1f}" y="{102 - height:.1f}" width="{span - 2:.1f}" height="{height:.1f}">'
+            f"<title>{label} {unit}: {count:,} pairs</title></rect>"
         )
+        if i:
+            marks.append(f'<text x="{i * span:.1f}" y="116">{cuts[i - 1]}</text>')
+
     return f"""
       <figure><figcaption>{title} ({unit})</figcaption>
-      <svg role="img" aria-label="{title}; histogram of {len(values)} paired observations"
-        viewBox="0 0 360 104">{"".join(bars)}</svg>
-      <div class="range"><span>{lo:+.2f}</span><span>{lo + 12 * width:+.2f}</span></div></figure>"""
+      <svg role="img" aria-label="{title} for {len(values)} paired observations"
+        viewBox="0 0 360 120">{"".join(marks)}</svg>
+      <small>One bar per band; band widths differ. Tallest bar: {max(bins):,} pairs.</small></figure>"""
 
 
 def render(directory):
@@ -67,7 +79,7 @@ def render(directory):
     baseline_failed = sum("error" in row["baseline"] for row in failed)
     candidate_failed = sum("error" in row["candidate"] for row in failed)
     details = []
-    for r in failed[:20]:
+    for r in sorted(failed, key=lambda r: "error" in r["baseline"])[:20]:
         errors = "".join(
             f"<b>{side.title()}</b><pre>{escape(r[side]['error'])}</pre>"
             for side in ("baseline", "candidate")
@@ -89,7 +101,7 @@ def render(directory):
 body{{margin:3rem auto;padding:0 1rem;max-width:72rem;font:16px/1.55 system-ui,sans-serif;color:#172635;background:#fcfcfa}}
 h1,h2{{line-height:1.15}} h1{{font-size:clamp(2rem,5vw,3rem)}} p{{max-width:53rem}}
 .charts{{display:flex;gap:2rem;flex-wrap:wrap}} figure{{margin:0;flex:1 1 18rem}} figcaption{{font-weight:bold}}
-svg{{width:100%;fill:#288774;border-bottom:1px solid #7e918e}} .range{{display:flex;justify-content:space-between}}
+svg{{width:100%;fill:#288774;border-bottom:1px solid #7e918e}} svg text{{font:8px system-ui;fill:#172635;text-anchor:middle}}
 .scroll{{overflow-x:auto}} table{{border-collapse:collapse;font-variant-numeric:tabular-nums}}
 td,th{{padding:.55rem .75rem;border-bottom:1px solid #d1dad9;text-align:right;white-space:nowrap}}
 th:first-child,summary{{text-align:left}} pre,code{{white-space:pre-wrap;overflow-wrap:anywhere}}
@@ -114,7 +126,7 @@ entries, so implicit, unambiguous build requirements do not inflate that number.
 Only candidate succeeded: {len(failed) - candidate_failed:,}.
 Both failed: {baseline_failed + candidate_failed - len(failed):,}.
 <a href="results.jsonl">All raw observations</a> · <a href="method.json">Run parameters</a></p>
-{"".join(details) or "<p>None.</p>"}{"<p>Only the first 20 failures are shown.</p>" if len(failed) > 20 else ""}
+{"".join(details) or "<p>None.</p>"}{"<p>Showing 20 failures, prioritizing those where only the candidate failed.</p>" if len(failed) > 20 else ""}
 <h2>How this was measured</h2>
 <p>Workload: {escape(meta["workloads"])}. PyPI cutoff: <code>{escape(meta["cutoff"])}</code>.
 Both sides use Python 3.11 and separate caches, initially empty and reused between projects.
