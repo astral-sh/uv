@@ -336,6 +336,7 @@ pub fn check_direct_build(
         Some(VersionOrUrl::VersionSpecifier(_)) => {}
     }
 
+    // Variant markers are unsupported in build-backend requirements.
     if !uv_requirement.evaluate_markers(marker_env, &[]) {
         return Ok(());
     }

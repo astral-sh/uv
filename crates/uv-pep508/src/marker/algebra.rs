@@ -556,7 +556,11 @@ impl InternerGuard<'_> {
         })
     }
 
-    fn restrict_nodes(&mut self, i: NodeId, select: &impl Fn(&Node) -> Option<NodeId>) -> NodeId {
+    pub(crate) fn restrict_nodes(
+        &mut self,
+        i: NodeId,
+        select: &impl Fn(&Node) -> Option<NodeId>,
+    ) -> NodeId {
         self.restrict_by_cached(i, select, &mut None)
     }
 
@@ -1118,6 +1122,28 @@ pub(crate) enum Variable {
     /// We keep extras and groups at the leaves of the tree, so when simplifying extras we can
     /// trivially remove the leaves without having to reconstruct the entire tree.
     List(CanonicalMarkerListPair),
+}
+
+impl Variable {
+    pub(crate) fn is_variant(&self) -> bool {
+        matches!(
+            self,
+            Self::String(CanonicalMarkerValueString::VariantLabel)
+                | Self::In {
+                    key: CanonicalMarkerValueString::VariantLabel,
+                    ..
+                }
+                | Self::Contains {
+                    key: CanonicalMarkerValueString::VariantLabel,
+                    ..
+                }
+                | Self::List(
+                    CanonicalMarkerListPair::VariantNamespace(_)
+                        | CanonicalMarkerListPair::VariantFeature(_)
+                        | CanonicalMarkerListPair::VariantProperty(_)
+                )
+        )
+    }
 }
 
 /// A decision node in an Algebraic Decision Diagram.

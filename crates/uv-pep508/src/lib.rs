@@ -79,6 +79,9 @@ pub enum Pep508ErrorSource<T: Pep508Url = VerbatimUrl> {
     /// An error from our parser.
     #[error("{0}")]
     String(String),
+    /// A wheel variant marker used outside a dependency specifier.
+    #[error("The marker `{0}` is only allowed in dependency specifiers")]
+    VariantMarkerInEnvironment(String),
     /// A URL parsing error.
     #[error(transparent)]
     UrlError(Box<T::Err>),

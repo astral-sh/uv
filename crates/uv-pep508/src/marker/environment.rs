@@ -43,6 +43,8 @@ impl MarkerEnvironment {
     /// Returns of the stringly typed value of the key in the current environment
     pub fn get_string(&self, key: CanonicalMarkerValueString) -> &str {
         match key {
+            // TODO(konsti): Evaluate this marker against the declaring wheel's variant label.
+            CanonicalMarkerValueString::VariantLabel => "",
             CanonicalMarkerValueString::ImplementationName => self.implementation_name(),
             CanonicalMarkerValueString::OsName => self.os_name(),
             CanonicalMarkerValueString::PlatformMachine => self.platform_machine(),
