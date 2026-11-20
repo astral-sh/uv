@@ -236,7 +236,11 @@ fn oversized_resource_is_rejected() -> Result<()> {
         u32::from_le_bytes(launcher[size_offset..size_offset + 4].try_into()?) as usize,
         python_path.len(),
     );
-    launcher[size_offset..size_offset + 4].copy_from_slice(&0x10_0000_u32.to_le_bytes());
+    // The path starts within the image. Claiming a full image's worth of bytes
+    // extends past its section, but the trailing padding keeps the range inside the file.
+    let size = u32::try_from(launcher.len())?;
+    launcher[size_offset..size_offset + 4].copy_from_slice(&size.to_le_bytes());
+    launcher.resize(2 * launcher.len(), 0);
     fs_err::write(path.path(), &launcher)?;
 
     assert!(Launcher::try_from_path(path.path())?.is_none());
