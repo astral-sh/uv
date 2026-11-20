@@ -7,7 +7,9 @@ use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::PathChild;
 use editpe::{Image, ResourceEntry, ResourceEntryName};
 use fs_err::File;
-use goblin::pe::{PE, options::ParseOptions, utils::find_offset};
+use goblin::pe::{
+    PE, options::ParseOptions, resource::ResourceEntry as DirectoryEntry, utils::find_offset,
+};
 use windows::Win32::System::LibraryLoader::{
     BeginUpdateResourceW, EndUpdateResourceW, UpdateResourceW,
 };
@@ -182,6 +184,22 @@ fn resource_file_offset(image: &PE<'_>) -> Result<usize> {
     .context("Missing resource file offset")
 }
 
+/// Locate the first named RCDATA entry, which is the Python path in these fixtures.
+fn path_resource(launcher: &[u8]) -> Result<(usize, DirectoryEntry)> {
+    let image = PE::parse(launcher)?;
+    let offset = resource_file_offset(&image)?;
+    let rcdata = image
+        .resource_data
+        .context("Missing resource data")?
+        .entries()
+        .find_by_id(u16::try_from(RT_RCDATA)?)?
+        .context("Missing RCDATA entry")?;
+    let name = rcdata
+        .next_depth(&launcher[offset..])?
+        .context("Missing named resource")?;
+    Ok((offset, name))
+}
+
 /// A PE resource size is untrusted even when the Windows loader accepts the image.
 #[test]
 fn oversized_resource_is_rejected() -> Result<()> {
@@ -203,21 +221,9 @@ fn oversized_resource_is_rejected() -> Result<()> {
         Path::new("C:/Python312/python.exe"),
     );
 
-    let image = PE::parse(&launcher)?;
-    let resource_offset = resource_file_offset(&image)?;
-    let resources = &launcher[resource_offset..];
-    let rcdata = image
-        .resource_data
-        .context("Missing resource data")?
-        .entries()
-        .find_by_id(u16::try_from(RT_RCDATA)?)?
-        .context("Missing RCDATA entry")?;
-    // The resource writer orders names lexically, so the path precedes the kind.
-    let name = rcdata
-        .next_depth(resources)?
-        .context("Missing named resource")?;
+    let (resource_offset, name) = path_resource(&launcher)?;
     let language = name
-        .next_depth(resources)?
+        .next_depth(&launcher[resource_offset..])?
         .context("Missing resource language")?;
     let entry_offset = resource_offset
         + usize::try_from(
@@ -354,12 +360,37 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     let launcher = Launcher::try_from_path(path.path())?.context("Missing localized launcher")?;
     assert_eq!(launcher.python_path, Path::new("C:/Python312/python.exe"));
 
-    write_native_resources(
+    let localized = write_native_resources(
         path.path(),
         &english,
         0x0407,
         &[(RESOURCE_PYTHON_PATH, b"C:/Python313/python.exe")],
     )?;
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+
+    let python = which::which("python")?;
+    let mut neutral = write_native_resources(
+        path.path(),
+        &localized,
+        0,
+        &[(
+            RESOURCE_PYTHON_PATH,
+            python.to_str().context("Invalid path")?.as_bytes(),
+        )],
+    )?;
+    Command::new(path.path())
+        .args(["-c", "pass"])
+        .assert()
+        .success();
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing neutral launcher")?;
+    assert_eq!(launcher.python_path, python);
+
+    // A binary search can find the second neutral entry when IDs are duplicated.
+    let (offset, name) = path_resource(&neutral)?;
+    let second = offset + usize::try_from(name.offset_to_directory())? + 16 + 8;
+    assert_eq!(&neutral[second..second + 4], &0x0407_u32.to_le_bytes());
+    neutral[second..second + 4].fill(0);
+    fs_err::write(path.path(), neutral)?;
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
 }

@@ -149,14 +149,25 @@ impl Resources {
         if header.number_of_name_entries != 0 || header.number_of_id_entries == 0 {
             return None;
         }
-        // Language IDs are sorted, so the neutral resource comes first when present.
-        let entry = self.entry(languages, 0)?;
-        let language = u16::try_from(entry.name_offset_or_integer_id).ok()?;
+        let count = u32::from(header.number_of_id_entries);
+        self.seek_directory(languages + 16, 8 * count)?;
+        let entry = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
+        let mut language = u16::try_from(entry.name_offset_or_integer_id).ok()?;
         // uv writes neutral resources. With several localized variants and no neutral
         // entry, the target selected by FindResourceW depends on the user's language.
         // Uninstall needs an unambiguous target to establish ownership of the link.
-        if language != 0 && header.number_of_id_entries > 1 {
+        if language != 0 && count > 1 {
             return None;
+        }
+        // The loader searches sorted IDs. In particular, duplicate neutral IDs
+        // can make it select a different entry from the first.
+        for _ in 1..count {
+            let other = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
+            let next = u16::try_from(other.name_offset_or_integer_id).ok()?;
+            if next <= language {
+                return None;
+            }
+            language = next;
         }
         let pos = entry.data_entry_or_subdirectory_offset;
         if pos & DIRECTORY_FLAG != 0 {
