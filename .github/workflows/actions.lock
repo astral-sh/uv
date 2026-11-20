@@ -52,6 +52,8 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'astral-sh/github-actions@2026.11.16.1'
         - 'astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d'
+    '.github/workflows/check-gh-actions-lock.yml':
+        - 'actions/checkout@v7.0.1'
     '.github/workflows/check-lint.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-python@v7.0.0'

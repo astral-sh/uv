@@ -111,6 +111,14 @@ jobs:
       contents: read
       security-events: write
 
+  check-actions-lock:
+    name: "check | zizmor"
+    needs: plan
+    if: ${{ needs.plan.outputs.run-checks == 'true' }}
+    uses: $/.github/workflows/check-gh-actions-lock.yml
+    permissions:
+      contents: read
+
   check-publish:
     name: "check | publish"
     needs: plan
