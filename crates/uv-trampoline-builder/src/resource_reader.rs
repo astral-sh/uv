@@ -223,7 +223,11 @@ fn read_headers(file: &mut BufReader<File>) -> Option<(ImageDataDirectory, Vec<S
         return None;
     }
     for _ in 0..coff.number_of_sections {
-        let section = SectionHeader::read_from_io(&mut *file).ok()?;
+        let mut section = SectionHeader::read_from_io(&mut *file).ok()?;
+        // Windows maps the raw data when the section has no explicit virtual size.
+        if section.virtual_size == 0 {
+            section.virtual_size = section.size_of_raw_data;
+        }
         // Reject ambiguous RVA mappings and offsets the loader would round down.
         if section.virtual_address < previous_end
             || !section.virtual_address.is_multiple_of(alignment)

@@ -15,7 +15,8 @@ use windows::core::PCWSTR;
 
 use super::{
     Launcher, LauncherKind, RESOURCE_PYTHON_PATH, RESOURCE_SCRIPT_DATA, RESOURCE_TRAMPOLINE_KIND,
-    RT_RCDATA, get_launcher_bin, windows_script_launcher, write_resources,
+    RT_RCDATA, WindowMode, get_launcher_bin, windows_python_launcher, windows_script_launcher,
+    write_resources,
 };
 
 /// Use the Windows resource editor as an independent reference for resource readback.
@@ -277,6 +278,36 @@ fn relocated_resource_directory() -> Result<()> {
     let result = Launcher::try_from_path(path.path())?.context("Missing relocated resources")?;
     assert_eq!(result.python_path, Path::new("C:/Python312/python.exe"));
     assert_eq!(result.script_data.as_deref(), Some(b"payload".as_slice()));
+    Ok(())
+}
+
+/// Windows uses the raw size for sections whose virtual size is unspecified.
+#[test]
+fn resource_section_with_zero_virtual_size() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let python = which::which("python")?;
+    let mut launcher = windows_python_launcher(&python, WindowMode::Console)?;
+    let image = PE::parse(&launcher)?;
+    let resource_offset = resource_file_offset(&image)?;
+    let index = image
+        .sections
+        .iter()
+        .position(|section| section.pointer_to_raw_data as usize == resource_offset)
+        .context("Missing resource section")?;
+    let table = image.header.dos_header.pe_pointer as usize
+        + 24
+        + usize::from(image.header.coff_header.size_of_optional_header);
+    let virtual_size = table + 40 * index + 8;
+    launcher[virtual_size..virtual_size + 4].fill(0);
+    fs_err::write(path.path(), launcher)?;
+
+    Command::new(path.path())
+        .args(["-c", "pass"])
+        .assert()
+        .success();
+    let result = Launcher::try_from_path(path.path())?.context("Missing Python launcher")?;
+    assert_eq!(result.python_path, python);
     Ok(())
 }
 
