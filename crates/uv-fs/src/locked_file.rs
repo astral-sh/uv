@@ -1,14 +1,10 @@
 use std::fmt::Display;
 use std::io;
-#[cfg(all(feature = "tokio", any(target_os = "android", target_os = "haiku")))]
-use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::time::Duration;
 #[cfg(feature = "tokio")]
 use std::{convert::Into, env, path::Path, sync::LazyLock};
 
-#[cfg(all(feature = "tokio", any(target_os = "android", target_os = "haiku")))]
-use rustix::fs::{FlockOperation, flock};
 use thiserror::Error;
 #[cfg(feature = "tokio")]
 use tracing::{debug, error, info, trace, warn};
@@ -129,11 +125,13 @@ impl LockedFileMode {
     /// Use the platform's `flock` when Rust's file-locking API is unavailable.
     #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
+        use std::os::fd::AsFd;
+
         let operation = match self {
-            Self::Exclusive => FlockOperation::NonBlockingLockExclusive,
-            Self::Shared => FlockOperation::NonBlockingLockShared,
+            Self::Exclusive => rustix::fs::FlockOperation::NonBlockingLockExclusive,
+            Self::Shared => rustix::fs::FlockOperation::NonBlockingLockShared,
         };
-        flock(file.as_fd(), operation).map_err(|errno| {
+        rustix::fs::flock(file.as_fd(), operation).map_err(|errno| {
             if errno == rustix::io::Errno::WOULDBLOCK {
                 std::fs::TryLockError::WouldBlock
             } else {
@@ -162,11 +160,13 @@ impl LockedFileMode {
     /// Use the platform's `flock` when Rust's file-locking API is unavailable.
     #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
+        use std::os::fd::AsFd;
+
         let operation = match self {
-            Self::Exclusive => FlockOperation::LockExclusive,
-            Self::Shared => FlockOperation::LockShared,
+            Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
+            Self::Shared => rustix::fs::FlockOperation::LockShared,
         };
-        flock(file.as_fd(), operation)
+        rustix::fs::flock(file.as_fd(), operation)
             .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
 }
@@ -405,7 +405,9 @@ impl LockedFile {
     /// Use the platform's `flock` when Rust's file-locking API is unavailable.
     #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn unlock(&self) -> Result<(), io::Error> {
-        flock(self.0.as_fd(), FlockOperation::Unlock)
+        use std::os::fd::AsFd;
+
+        rustix::fs::flock(self.0.as_fd(), rustix::fs::FlockOperation::Unlock)
             .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
     }
 }
