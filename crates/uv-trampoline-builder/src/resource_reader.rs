@@ -16,7 +16,7 @@ use editpe::types::{
 use fs_err::File;
 use zerocopy::FromBytes;
 
-use super::{Error, LauncherKind, RESOURCE_TRAMPOLINE_KIND, RT_RCDATA};
+use super::{Error, LauncherKind, RESOURCE_SCRIPT_DATA, RESOURCE_TRAMPOLINE_KIND, RT_RCDATA};
 
 // The high bit distinguishes a string from an integer ID and a subdirectory from a leaf.
 const DIRECTORY_FLAG: u32 = 1 << 31;
@@ -166,6 +166,11 @@ impl Resources {
             return None;
         }
         let count = u32::from(header.number_of_id_entries);
+        // Python locates the ZIP from the end of the executable, independently
+        // of the language the Windows resource loader would select.
+        if name == RESOURCE_SCRIPT_DATA && count != 1 {
+            return None;
+        }
         self.seek_directory(languages + 16, 8 * count)?;
         let entry = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
         let mut language = u16::try_from(entry.name_offset_or_integer_id).ok()?;

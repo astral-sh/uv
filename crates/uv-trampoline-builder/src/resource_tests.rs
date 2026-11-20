@@ -517,6 +517,32 @@ fn missing_script_resource_is_rejected() -> Result<()> {
 }
 
 #[test]
+fn multiple_script_payloads_are_rejected() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let launcher = write_native_resources(
+        path.path(),
+        get_launcher_bin(false)?,
+        0x0409,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            (RESOURCE_SCRIPT_DATA, b"localized payload"),
+        ],
+    )?;
+    assert!(Launcher::try_from_path(path.path())?.is_some());
+    write_native_resources(
+        path.path(),
+        &launcher,
+        0,
+        &[(RESOURCE_SCRIPT_DATA, b"neutral payload")],
+    )?;
+
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn empty_script_resource_is_preserved() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("empty.exe");
