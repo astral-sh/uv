@@ -17459,8 +17459,10 @@ fn config_settings_package() -> Result<()> {
     Ok(())
 }
 
+/// The central directory overstates the compressed size of the first `RECORD` entry,
+/// so uv rejects the wheel before it reaches the NUL in the second `RECORD` entry's Unicode Path.
 #[test]
-fn reject_invalid_archive_member_names() {
+fn reject_overstated_central_directory_compressed_size() {
     let context = uv_test::test_context!("3.12")
         .with_exclude_newer("2025-10-07T00:00:00Z")
         .with_filtered_http_retries();
@@ -17472,7 +17474,52 @@ fn reject_invalid_archive_member_names() {
     Resolved 1 package in [TIME]
     error: Failed to download `cbwheeldiff2==0.0.1`
       cause: Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
-      cause: Archive contains unacceptable filename: cbwheeldiff2-0.0.1.dist-info/RECORD�
+      cause: ZIP file uses conflicting compressed sizes (got 226, expected 296 from the central-directory record) for: cbwheeldiff2-0.0.1.dist-info/RECORD (387)
+    "
+    );
+}
+
+/// Reject a NUL in the central directory's Unicode Path even when the local filename is valid.
+#[test]
+fn reject_invalid_archive_member_names() {
+    let context = uv_test::test_context!("3.12");
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    context
+        .python_command()
+        .arg("-c")
+        .arg(indoc! {r#"
+            import struct
+            import sys
+            import zipfile
+            import zlib
+
+            with zipfile.ZipFile(sys.argv[1]) as source, zipfile.ZipFile(sys.argv[2], "w") as wheel:
+                for entry in source.infolist():
+                    wheel.writestr(entry, source.read(entry))
+
+                # The local headers have been written. The central directory is written on close.
+                record = wheel.getinfo("ok-1.0.0.dist-info/RECORD")
+                name = record.filename.encode()
+                unicode_path = struct.pack("<BI", 1, zlib.crc32(name)) + name + b"\0"
+                record.extra = struct.pack("<HH", 0x7075, len(unicode_path)) + unicode_path
+        "#})
+        .arg(context.workspace_root.join("test/links").join(filename))
+        .arg(context.temp_dir.join(filename))
+        .assert()
+        .success();
+    let server = FindLinksServer::new(context.temp_dir.path());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(server.url())
+        .arg("ok==1.0.0"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==1.0.0`
+      cause: Failed to extract archive: ok-1.0.0-py3-none-any.whl
+      cause: Archive contains unacceptable filename: ok-1.0.0.dist-info/RECORD�
     "
     );
 }

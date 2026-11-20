@@ -75,7 +75,7 @@ pub enum Error {
         local_crc32: u32,
         central_directory_crc32: u32,
     },
-    #[error("ZIP file uses conflicting compressed sizes for the local file header and central-directory record (got {local_compressed_size}, expected {central_directory_compressed_size}) for: {} ({offset})", path.display())]
+    #[error("ZIP file uses conflicting compressed sizes (got {local_compressed_size}, expected {central_directory_compressed_size} from the central-directory record) for: {} ({offset})", path.display())]
     ConflictingCompressedSizes {
         path: PathBuf,
         offset: u64,

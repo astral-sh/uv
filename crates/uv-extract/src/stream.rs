@@ -41,12 +41,10 @@ struct LocalHeaderEntry {
     is_dir: bool,
     /// The computed CRC32 checksum of the entry.
     crc32: u32,
-    /// The computed compressed size of the entry.
+    /// The compressed size from the data descriptor or local file header.
     compressed_size: u64,
     /// The computed uncompressed size of the entry.
     uncompressed_size: u64,
-    /// Whether the entry has a data descriptor.
-    data_descriptor: bool,
     /// The digest of the extracted file contents.
     digest: Option<blake3::Hash>,
 }
@@ -412,7 +410,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         }
 
         // If we have a data descriptor, validate it.
-        if let Some(descriptor) = descriptor {
+        let compressed_size = if let Some(descriptor) = descriptor {
             if descriptor.crc != computed.crc32 {
                 if !skip_validation {
                     return Err(Error::BadCrc32 {
@@ -440,7 +438,10 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     });
                 }
             }
-        }
+            descriptor.compressed_size
+        } else {
+            expected_compressed_size
+        };
 
         // Store the offset, for validation, and error if we see a duplicate file.
         match local_headers.entry(file_offset) {
@@ -450,8 +451,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                     is_dir,
                     crc32: computed.crc32,
                     uncompressed_size: computed.uncompressed_size,
-                    compressed_size: expected_compressed_size,
-                    data_descriptor: expected_data_descriptor,
+                    compressed_size,
                     digest: computed.digest,
                 });
             }
@@ -556,17 +556,15 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                                 });
                             }
                         }
-                        if local_header.compressed_size != entry.compressed_size() {
-                            if !local_header.data_descriptor {
-                                if !skip_validation {
-                                    return Err(Error::ConflictingCompressedSizes {
-                                        path: relpath.to_path_buf(),
-                                        offset: entry.file_offset(),
-                                        local_compressed_size: local_header.compressed_size,
-                                        central_directory_compressed_size: entry.compressed_size(),
-                                    });
-                                }
-                            }
+                        if local_header.compressed_size != entry.compressed_size()
+                            && !skip_validation
+                        {
+                            return Err(Error::ConflictingCompressedSizes {
+                                path: relpath.to_path_buf(),
+                                offset: entry.file_offset(),
+                                local_compressed_size: local_header.compressed_size,
+                                central_directory_compressed_size: entry.compressed_size(),
+                            });
                         }
                         if is_dir {
                             if hash_contents {
