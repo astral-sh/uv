@@ -2369,6 +2369,7 @@ async fn run_project(
                 args.frozen,
                 args.active,
                 args.no_sync,
+                args.watch,
                 args.isolated,
                 args.all_packages,
                 args.package,
