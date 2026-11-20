@@ -346,7 +346,7 @@ pub async fn sync_from_lock(
 }
 
 /// Filter out any virtual workspace members.
-fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
+pub fn apply_no_virtual_project(resolution: Resolution) -> Resolution {
     resolution.filter(|dist| {
         let ResolvedDist::Installable { dist, .. } = dist else {
             return true;

@@ -14,7 +14,7 @@ use uv_environment_operations::environment::CachedEnvironment;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
     ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
-    store_credentials_from_target,
+    apply_no_virtual_project, store_credentials_from_target,
 };
 use uv_fs::{Simplified, normalize_path};
 use uv_install_operations::loggers::SummaryInstallLogger;
@@ -105,6 +105,7 @@ impl LockedToolInstaller<'_> {
             &self.settings.resolver.build_options,
             &InstallOptions::default(),
         )?;
+        let resolution = apply_no_virtual_project(resolution);
         store_credentials_from_target(target, self.client_builder)?;
         let environment = CachedEnvironment::from_locked_resolution(
             &resolution,
