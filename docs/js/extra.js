@@ -44,12 +44,43 @@ function setCopyText() {
   });
 }
 
+function setPlatformTabs() {
+  const savedTabs = __md_get("__tabs");
+  const platformTabs = ["Windows", "macOS and Linux", "Unix"];
+
+  // Keep explicit tab links and the platform choices saved by Material.
+  if (
+    window.location.hash.startsWith("#__tabbed_") ||
+    (Array.isArray(savedTabs) &&
+      savedTabs.some((tab) => platformTabs.includes(tab)))
+  ) {
+    return;
+  }
+
+  const platform = navigator.userAgentData?.platform || navigator.platform;
+  let preferredTabs;
+  if (platform.startsWith("Win")) {
+    preferredTabs = ["Windows"];
+  } else if (/^(Mac|macOS|Linux)/.test(platform)) {
+    preferredTabs = ["macOS and Linux", "Unix"];
+  } else {
+    return;
+  }
+
+  document.querySelectorAll(".tabbed-labels > label").forEach((label) => {
+    if (preferredTabs.includes(label.textContent.trim())) {
+      label.control?.click();
+    }
+  });
+}
+
 // Using the document$ observable is particularly important if you are using instant loading since
 // it will not result in a page refresh in the browser
 // See `How to integrate with third-party JavaScript libraries` guideline:
 // https://squidfunk.github.io/mkdocs-material/customization/?h=javascript#additional-javascript
 document$.subscribe(function () {
   setCopyText();
+  setPlatformTabs();
 });
 
 // Use client-side redirects for anchors that have moved.
