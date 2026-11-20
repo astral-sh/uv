@@ -656,6 +656,35 @@ fn truncated_appended_end_record_is_not_rewritten() -> Result<()> {
 }
 
 #[test]
+fn archive_start_before_script_resource_is_not_rewritten() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let python = which::which("python")?;
+    let archive = script_archive("print('complete')")?;
+    // The ZIP is contiguous in the executable, but copying UV_SCRIPT_DATA
+    // alone would leave the local file header behind.
+    let bytes = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (
+                RESOURCE_PYTHON_PATH,
+                python.to_str().context("Invalid Python path")?.as_bytes(),
+            ),
+            ("UV_SCRIPT", &archive[..4]),
+            (RESOURCE_SCRIPT_DATA, &archive[4..]),
+        ],
+    )?;
+    fs_err::write(path.path(), bytes)?;
+    Command::new(path.path())
+        .assert()
+        .success()
+        .stdout("complete\r\n");
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn empty_script_resource_is_preserved() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("empty.exe");
