@@ -42,6 +42,7 @@ jobs:
       deployment: false
     timeout-minutes: 10
     permissions:
+      contents: read # To download actions from the source repository.
       id-token: write
       pull-requests: read
     outputs:
@@ -773,6 +774,7 @@ jobs:
       deployment: false
     timeout-minutes: 10
     permissions:
+      contents: read # To download actions from the source repository.
       id-token: write
       pull-requests: read
     steps:
