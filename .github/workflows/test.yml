@@ -32,14 +32,14 @@ jobs:
     runs-on: depot-ubuntu-24.04-16
     name: "cargo test on linux"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
@@ -124,7 +124,7 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pending-snapshots-linux
           path: pending-snapshots/
@@ -134,7 +134,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: junit-results-linux
           path: target/nextest/ci*/junit.xml
@@ -148,15 +148,15 @@ jobs:
     runs-on: namespace-profile-macos-15
     name: "cargo test on macos"
     steps:
-      - uses: astral-sh/github-actions/demudhra@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/github-actions/demudhra@2026.11.16.0
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: "Install Rust toolchain"
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
@@ -219,7 +219,7 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pending-snapshots-macos
           path: pending-snapshots/
@@ -229,7 +229,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: junit-results-macos
           path: target/nextest/ci*/junit.xml
@@ -245,7 +245,7 @@ jobs:
       matrix:
         partition: [1, 2, 3]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -270,7 +270,7 @@ jobs:
         working-directory: ${{ env.UV_WORKSPACE }}
         run: rustup toolchain install --profile minimal
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
+      - uses: astral-sh/github-actions/rust-workspace-cache@2026.11.16.1
         with:
           prefix-key: v1-rust-workspace
           key: ${{ hashFiles('Cargo.toml') }}
@@ -317,7 +317,7 @@ jobs:
 
       - name: "Upload pending snapshots"
         if: ${{ failure() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: pending-snapshots-windows-${{ matrix.partition }}
           path: pending-snapshots/
@@ -327,7 +327,7 @@ jobs:
 
       - name: "Upload JUnit results"
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: junit-results-windows-${{ matrix.partition }}
           path: ${{ env.UV_WORKSPACE }}/target/nextest/ci*/junit.xml
