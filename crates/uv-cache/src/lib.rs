@@ -1292,7 +1292,8 @@ pub enum CacheBucket {
 }
 
 impl CacheBucket {
-    fn to_str(self) -> &'static str {
+    /// Return the versioned directory name of the cache bucket.
+    pub fn to_str(self) -> &'static str {
         match self {
             Self::SourceDistributions => "sdists-v11",
             Self::FlatIndex => "flat-index-v7",

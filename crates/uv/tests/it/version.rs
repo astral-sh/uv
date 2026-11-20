@@ -10,6 +10,7 @@ use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::assert_snapshot;
 
+use uv_cache::CacheBucket;
 use uv_static::EnvVars;
 use uv_test::{apply_filters, uv_snapshot};
 
@@ -2353,7 +2354,12 @@ fn self_version_json() -> Result<()> {
             r#"commits_since_last_tag": .*"#,
             r#"commits_since_last_tag": [COUNT]"#,
         ))
-        .with_filter((r#"target_triple": ".*""#, r#"target_triple": "[TARGET]""#));
+        .with_filter((r#"target_triple": ".*""#, r#"target_triple": "[TARGET]""#))
+        .with_filters(CacheBucket::iter().map(|bucket| {
+            let bucket = bucket.to_str();
+            let (name, _) = bucket.rsplit_once('-').expect("versioned cache bucket");
+            (format!(r#""{bucket}""#), format!(r#""{name}-[VERSION]""#))
+        }));
 
     let pyproject_toml = context.temp_dir.child("pyproject.toml");
     pyproject_toml.write_str(
@@ -2379,7 +2385,22 @@ fn self_version_json() -> Result<()> {
             "last_tag": "[TAG]",
             "commits_since_last_tag": [COUNT]
           },
-          "target_triple": "[TARGET]"
+          "target_triple": "[TARGET]",
+          "cache_bucket_versions": [
+            "archive-[VERSION]",
+            "binaries-[VERSION]",
+            "builds-[VERSION]",
+            "environments-[VERSION]",
+            "files-[VERSION]",
+            "flat-index-[VERSION]",
+            "git-[VERSION]",
+            "interpreter-[VERSION]",
+            "osv-[VERSION]",
+            "python-[VERSION]",
+            "sdists-[VERSION]",
+            "simple-[VERSION]",
+            "wheels-[VERSION]"
+          ]
         }
         "#)
     } else {
@@ -2391,7 +2412,22 @@ fn self_version_json() -> Result<()> {
         "package_name": "uv",
         "version": "[VERSION]",
         "commit_info": null,
-        "target_triple": "[TARGET]"
+        "target_triple": "[TARGET]",
+        "cache_bucket_versions": [
+          "archive-[VERSION]",
+          "binaries-[VERSION]",
+          "builds-[VERSION]",
+          "environments-[VERSION]",
+          "files-[VERSION]",
+          "flat-index-[VERSION]",
+          "git-[VERSION]",
+          "interpreter-[VERSION]",
+          "osv-[VERSION]",
+          "python-[VERSION]",
+          "sdists-[VERSION]",
+          "simple-[VERSION]",
+          "wheels-[VERSION]"
+        ]
       }
       "#)
     };
