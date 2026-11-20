@@ -12,8 +12,9 @@ use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_INVALID_DATA, LPARA
 use windows::Win32::UI::WindowsAndMessaging::{
     HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_SETTINGCHANGE,
 };
-use windows::core::{HRESULT, w};
+use windows::core::w;
 use windows_registry::{CURRENT_USER, HSTRING};
+use windows_result::WIN32_ERROR;
 
 use uv_static::EnvVars;
 
@@ -89,11 +90,13 @@ fn get_windows_path_var() -> anyhow::Result<Option<HSTRING>> {
     let reg_value = environment.get_hstring(EnvVars::PATH);
     match reg_value {
         Ok(reg_value) => Ok(Some(reg_value)),
-        Err(err) if err.code() == HRESULT::from(ERROR_INVALID_DATA) => {
+        Err(err) if err.code() == WIN32_ERROR(ERROR_INVALID_DATA.0).to_hresult() => {
             warn!("`HKEY_CURRENT_USER\\Environment\\PATH` is a non-string");
             Ok(None)
         }
-        Err(err) if err.code() == HRESULT::from(ERROR_FILE_NOT_FOUND) => Ok(Some(HSTRING::new())),
+        Err(err) if err.code() == WIN32_ERROR(ERROR_FILE_NOT_FOUND.0).to_hresult() => {
+            Ok(Some(HSTRING::new()))
+        }
         Err(err) => Err(err.into()),
     }
 }

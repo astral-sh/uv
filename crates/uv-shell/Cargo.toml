@@ -31,6 +31,7 @@ nix = { workspace = true }
 anyhow = { workspace = true }
 windows = { workspace = true }
 windows-registry = { workspace = true }
+windows-result = { workspace = true }
 
 [dev-dependencies]
 fs-err = { workspace = true }
