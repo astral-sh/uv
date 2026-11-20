@@ -291,7 +291,7 @@ impl PythonVersionFile {
         if let Some(parent) = self.path.parent() {
             fs_err::tokio::create_dir_all(parent).await?;
         }
-        uv_fs::write_atomic_preserve(
+        uv_fs::write_atomic(
             &self.path,
             self.versions
                 .iter()
@@ -301,5 +301,35 @@ impl PythonVersionFile {
                 .as_bytes(),
         )
         .await
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn write_replaces_symlink_without_modifying_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let victim = dir.path().join("victim.txt");
+        std::fs::write(&victim, "original-secret\n").unwrap();
+
+        let version_file_path = dir.path().join(".python-version");
+        std::os::unix::fs::symlink(&victim, &version_file_path).unwrap();
+
+        let version_file = PythonVersionFile::new(version_file_path.clone())
+            .with_versions(vec![PythonRequest::parse("3.13")]);
+        version_file.write().await.unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(&victim).unwrap(),
+            "original-secret\n"
+        );
+        let meta = std::fs::symlink_metadata(&version_file_path).unwrap();
+        assert!(!meta.file_type().is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(&version_file_path).unwrap(),
+            "3.13\n"
+        );
     }
 }
