@@ -247,6 +247,32 @@ fn oversized_resource_is_rejected() -> Result<()> {
     Ok(())
 }
 
+/// Reading the kind needs one byte, but its entire declared extent must exist on disk.
+#[test]
+fn truncated_kind_resource_is_rejected() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let kind = b"\x02truncated";
+    let mut launcher = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, kind),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+        ],
+    )?;
+    fs_err::write(path.path(), &launcher)?;
+    assert!(Launcher::try_from_path(path.path())?.is_some());
+
+    let offset = launcher
+        .windows(kind.len())
+        .position(|bytes| bytes == kind)
+        .context("Missing kind resource")?;
+    launcher.truncate(offset + 1);
+    fs_err::write(path.path(), launcher)?;
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
 /// Directory offsets are relative to the declared directory RVA. Leaf RVAs can point
 /// into a different section with a different file-to-memory displacement.
 #[test]
