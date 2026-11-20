@@ -380,17 +380,17 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
         0x0409,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[2]),
-            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            (RESOURCE_PYTHON_PATH, b"missing-en.exe"),
         ],
     )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing localized launcher")?;
-    assert_eq!(launcher.python_path, Path::new("C:/Python312/python.exe"));
+    assert_eq!(launcher.python_path, Path::new("missing-en.exe"));
 
     let localized = write_native_resources(
         path.path(),
         &english,
         0x0407,
-        &[(RESOURCE_PYTHON_PATH, b"C:/Python313/python.exe")],
+        &[(RESOURCE_PYTHON_PATH, b"missing-de.exe")],
     )?;
     assert!(Launcher::try_from_path(path.path())?.is_none());
 
