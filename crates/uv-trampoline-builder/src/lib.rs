@@ -100,6 +100,9 @@ impl Launcher {
                 .map_err(|err| Error::InvalidPath(err.utf8_error()))?,
         );
         let script_data = read_resource(resources, RESOURCE_SCRIPT_DATA).map(<[u8]>::to_vec);
+        if kind == LauncherKind::Script && script_data.is_none() {
+            return Ok(None);
+        }
 
         Ok(Some(Self {
             kind,

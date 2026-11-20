@@ -171,7 +171,7 @@ fn oversized_resource_is_rejected() -> Result<()> {
     let mut launcher = write_resources(
         get_launcher_bin(false)?,
         &[
-            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_TRAMPOLINE_KIND, &[2]),
             (RESOURCE_PYTHON_PATH, python_path),
         ],
     )?;
@@ -308,6 +308,25 @@ fn resources_match_native_windows_updates() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+#[test]
+fn missing_script_resource_is_rejected() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    fs_err::write(
+        path.path(),
+        write_resources(
+            get_launcher_bin(false)?,
+            &[
+                (RESOURCE_TRAMPOLINE_KIND, &[1]),
+                (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            ],
+        )?,
+    )?;
+
+    assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
 }
 
