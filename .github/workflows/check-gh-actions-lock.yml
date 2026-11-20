@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-slim' }}
     env:
       # renovate: datasource=github-releases depName=github/gh-actions-lock
       GH_ACTIONS_LOCK_VERSION: v0.5.1

@@ -9,7 +9,7 @@ env:
 
 jobs:
   zizmor:
-    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-slim' }}
     permissions:
       contents: read
       security-events: write
