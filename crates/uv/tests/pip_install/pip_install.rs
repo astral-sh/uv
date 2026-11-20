@@ -17213,6 +17213,26 @@ fn config_settings_package() -> Result<()> {
     Ok(())
 }
 
+/// The central directory overstates the compressed size of the first `RECORD` entry,
+/// so uv rejects the wheel before it reaches the NUL in the second `RECORD` entry's Unicode Path.
+#[test]
+fn reject_overstated_central_directory_compressed_size() {
+    let context = uv_test::test_context!("3.12")
+        .with_exclude_newer("2025-10-07T00:00:00Z")
+        .with_filtered_http_retries();
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("cbwheeldiff2==0.0.1"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `cbwheeldiff2==0.0.1`
+      cause: Failed to extract archive: cbwheeldiff2-0.0.1-py2.py3-none-any.whl
+      cause: ZIP file uses conflicting compressed sizes (got 226, expected 296 from the central-directory record) for: cbwheeldiff2-0.0.1.dist-info/RECORD (387)
+    "
+    );
+}
+
 /// Reject a NUL in the central directory's Unicode Path even when the local filename is valid.
 #[test]
 fn reject_invalid_archive_member_names() {
