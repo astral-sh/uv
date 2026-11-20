@@ -760,10 +760,10 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::Haiku { release }, arch) => {
-            let release = release.replace(['.', '-'], "_").to_lowercase();
+            let release = release.replace(['.', '-', '~'], "_").to_lowercase();
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Haiku {
-                release_arch: ReleaseArch::parse_haiku(&release_arch).map_err(|error| {
+                release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
                     PlatformError::InvalidReleaseArch {
                         release_arch,
                         error,
@@ -1617,7 +1617,7 @@ mod tests {
         let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert_debug_snapshot!(tags, @r#"
         [
-            "haiku_r1~beta6_x86_64",
+            "haiku_r1_beta6_x86_64",
         ]
         "#);
     }

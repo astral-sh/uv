@@ -361,15 +361,9 @@ impl WheelFilename {
             WheelTag::Large {
                 large: Box::new(WheelTagLarge {
                     build_tag,
-                    python_tag: parse_large_tag_component::<LanguageTag>(
-                        python_tag, filename, false,
-                    )?,
-                    abi_tag: parse_large_tag_component::<AbiTag>(abi_tag, filename, false)?,
-                    platform_tag: parse_large_tag_component::<PlatformTag>(
-                        platform_tag,
-                        filename,
-                        true,
-                    )?,
+                    python_tag: parse_large_tag_component::<LanguageTag>(python_tag, filename)?,
+                    abi_tag: parse_large_tag_component::<AbiTag>(abi_tag, filename)?,
+                    platform_tag: parse_large_tag_component::<PlatformTag>(platform_tag, filename)?,
                     variant,
                     repr: repr.into(),
                 }),
@@ -387,7 +381,6 @@ impl WheelFilename {
 fn parse_large_tag_component<T: FromStr>(
     component: &str,
     filename: &str,
-    allow_haiku_tilde: bool,
 ) -> Result<TagSet<T>, WheelFilenameError> {
     if component.is_empty() {
         return Err(invalid_tag_component(filename));
@@ -395,12 +388,7 @@ fn parse_large_tag_component<T: FromStr>(
 
     let mut tags = TagSet::new();
     for tag in MemchrSplitter::split(component, b'.') {
-        let allow_tilde = allow_haiku_tilde && tag.starts_with("haiku_");
-        if tag.is_empty()
-            || !tag
-                .bytes()
-                .all(|byte| is_tag_atom_byte(byte) || (allow_tilde && byte == b'~'))
-        {
+        if tag.is_empty() || !tag.bytes().all(is_tag_atom_byte) {
             return Err(invalid_tag_component(filename));
         }
         if let Ok(tag) = T::from_str(tag) {
@@ -571,8 +559,8 @@ mod tests {
         insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-freebsd_13_x86/64.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
         let err =
-            WheelFilename::from_str("foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86/64.whl").unwrap_err();
-        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86/64.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
+            WheelFilename::from_str("foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86_64.whl").unwrap_err();
+        insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86_64.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
 
         let err = WheelFilename::from_str("foo-1.2.3-py3-none-unknown tag.whl").unwrap_err();
         insta::assert_snapshot!(err, @r#"The wheel filename `foo-1.2.3-py3-none-unknown tag.whl` is invalid: Tag components must contain only ASCII letters, digits, underscores, and periods"#);
@@ -586,15 +574,29 @@ mod tests {
 
     #[test]
     fn haiku_beta_wheel_tags() -> Result<(), Box<dyn Error>> {
-        let platform_tag = PlatformTag::from_str("haiku_r1~beta6_x86_64")?;
+        let tags = Tags::from_env(
+            Platform::new(
+                Os::Haiku {
+                    release: "R1~beta6".to_string(),
+                },
+                Arch::X86_64,
+            ),
+            (3, 14),
+            "cpython",
+            (3, 14),
+            TagsOptions::default(),
+        )?;
+        let platform_tag = PlatformTag::from_str("haiku_r1_beta6_x86_64")?;
         let platform_tags = std::slice::from_ref(&platform_tag);
 
-        let wheel = WheelFilename::from_str("foo-1.2.3-cp314-cp314-haiku_r1~beta6_x86_64.whl")?;
+        let wheel = WheelFilename::from_str("foo-1.2.3-cp314-cp314-haiku_r1_beta6_x86_64.whl")?;
         assert_eq!(wheel.platform_tags(), platform_tags);
+        assert!(wheel.is_compatible(&tags));
 
         // A build tag forces the general filename parser.
-        let wheel = WheelFilename::from_str("foo-1.2.3-1-cp314-cp314-haiku_r1~beta6_x86_64.whl")?;
+        let wheel = WheelFilename::from_str("foo-1.2.3-1-cp314-cp314-haiku_r1_beta6_x86_64.whl")?;
         assert_eq!(wheel.platform_tags(), platform_tags);
+        assert!(wheel.is_compatible(&tags));
 
         Ok(())
     }
