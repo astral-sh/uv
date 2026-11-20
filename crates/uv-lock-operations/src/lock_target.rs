@@ -402,7 +402,11 @@ impl<'lock> LockTarget<'lock> {
     /// Atomically write the lockfile so readers cannot observe a partial lock.
     pub(crate) async fn commit(self, lock: &Lock) -> Result<(), LockError> {
         let encoded = lock.to_toml()?;
-        uv_fs::write_atomic(self.lock_path(), encoded).await?;
+        let lock_path = self.lock_path();
+        let root = lock_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        uv_fs::write_atomic_preserve_within(&lock_path, root, encoded).await?;
         Ok(())
     }
 
