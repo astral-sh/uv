@@ -162,6 +162,24 @@ fn assert_other_resources_unchanged(
     Ok(())
 }
 
+fn resource_file_offset(image: &PE<'_>) -> Result<usize> {
+    let header = image
+        .header
+        .optional_header
+        .context("Missing PE optional header")?;
+    let directory = header
+        .data_directories
+        .get_resource_table()
+        .context("Missing PE resource directory")?;
+    find_offset(
+        usize::try_from(directory.virtual_address)?,
+        &image.sections,
+        header.windows_fields.file_alignment,
+        &ParseOptions::default(),
+    )
+    .context("Missing resource file offset")
+}
+
 /// A PE resource size is untrusted even when the Windows loader accepts the image.
 #[test]
 fn oversized_resource_is_rejected() -> Result<()> {
@@ -184,21 +202,7 @@ fn oversized_resource_is_rejected() -> Result<()> {
     );
 
     let image = PE::parse(&launcher)?;
-    let header = image
-        .header
-        .optional_header
-        .context("Missing PE optional header")?;
-    let directory = header
-        .data_directories
-        .get_resource_table()
-        .context("Missing PE resource directory")?;
-    let resource_offset = find_offset(
-        usize::try_from(directory.virtual_address)?,
-        &image.sections,
-        header.windows_fields.file_alignment,
-        &ParseOptions::default(),
-    )
-    .context("Missing resource file offset")?;
+    let resource_offset = resource_file_offset(&image)?;
     let resources = &launcher[resource_offset..];
     let rcdata = image
         .resource_data
@@ -225,6 +229,77 @@ fn oversized_resource_is_rejected() -> Result<()> {
         python_path.len(),
     );
     launcher[size_offset..size_offset + 4].copy_from_slice(&0x10_0000_u32.to_le_bytes());
+    fs_err::write(path.path(), &launcher)?;
+
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+/// Directory offsets are relative to the declared directory RVA. Leaf RVAs can point
+/// into a different section with a different file-to-memory displacement.
+#[test]
+fn relocated_resource_directory() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let mut launcher = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            (RESOURCE_SCRIPT_DATA, b"payload"),
+        ],
+    )?;
+    let image = PE::parse(&launcher)?;
+    let header = image
+        .header
+        .optional_header
+        .context("Missing PE optional header")?;
+    let (directory_end, directory) =
+        header.data_directories.data_directories[2].context("Missing resource directory")?;
+    let directory_offset = resource_file_offset(&image)?;
+    // Copy the tables into the interior of the first section, leaving the data RVAs
+    // pointing at their original payloads. This fixture is inspected as a data file.
+    let section = &image.sections[0];
+    let offset = section.pointer_to_raw_data as usize + 16;
+    let address = section.virtual_address + 16;
+    assert!(directory.size + 16 <= section.size_of_raw_data);
+    let size = directory.size as usize;
+    let field = image.header.dos_header.pe_pointer as usize + 24 + directory_end - 8;
+    launcher.copy_within(directory_offset..directory_offset + size, offset);
+    assert_eq!(
+        &launcher[field..field + 4],
+        &directory.virtual_address.to_le_bytes()
+    );
+    launcher[field..field + 4].copy_from_slice(&address.to_le_bytes());
+    fs_err::write(path.path(), &launcher)?;
+
+    let result = Launcher::try_from_path(path.path())?.context("Missing relocated resources")?;
+    assert_eq!(result.python_path, Path::new("C:/Python312/python.exe"));
+    assert_eq!(result.script_data.as_deref(), Some(b"payload".as_slice()));
+    Ok(())
+}
+
+/// An executable in `Scripts` can contain an arbitrarily deep resource tree even
+/// when it has no RCDATA. Probing it should stop at the root directory.
+#[test]
+fn deeply_nested_unrelated_resource() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("other.exe");
+    // Reserve space for a chain of single-entry tables and a final empty table.
+    let depth = 16_384;
+    let mut launcher = write_resources(
+        get_launcher_bin(false)?,
+        &[("PADDING", &vec![0; depth * 24 + 16])],
+    )?;
+    let offset = resource_file_offset(&PE::parse(&launcher)?)?;
+    let tables = &mut launcher[offset..offset + depth * 24 + 16];
+    tables.fill(0);
+    for (index, table) in tables.as_chunks_mut::<24>().0.iter_mut().enumerate() {
+        table[14] = 1; // NumberOfIdEntries
+        table[16] = 123; // An unrelated resource ID
+        let next = 0x8000_0000 | u32::try_from((index + 1) * 24)?;
+        table[20..24].copy_from_slice(&next.to_le_bytes());
+    }
     fs_err::write(path.path(), &launcher)?;
 
     assert!(Launcher::try_from_path(path.path())?.is_none());

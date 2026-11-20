@@ -36,6 +36,7 @@ async_zip = { workspace = true }
 editpe = { workspace = true }
 futures-lite = { workspace = true }
 windows = { workspace = true }
+zerocopy = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

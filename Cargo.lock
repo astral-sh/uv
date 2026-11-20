@@ -8157,6 +8157,7 @@ dependencies = [
  "uv-fs",
  "which",
  "windows",
+ "zerocopy",
 ]
 
 [[package]]

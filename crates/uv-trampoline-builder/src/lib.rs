@@ -11,6 +11,8 @@ use thiserror::Error;
 
 use uv_fs::Simplified;
 
+#[cfg(windows)]
+mod resource_reader;
 #[cfg(all(test, windows))]
 mod resource_tests;
 
@@ -73,33 +75,20 @@ impl Launcher {
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        let Ok(bytes) = fs_err::read(path) else {
+        let Some(mut resources) = resource_reader::Resources::open(path) else {
             return Ok(None);
         };
-        let Ok(image) = Image::parse(bytes) else {
+        let Some(kind) = resources.kind()? else {
             return Ok(None);
-        };
-        let Some(resources) = image.resource_directory() else {
-            return Ok(None);
-        };
-        let Some(kind_data) = read_resource(resources, RESOURCE_TRAMPOLINE_KIND) else {
-            return Ok(None);
-        };
-        let Some(&kind_value) = kind_data.first() else {
-            return Err(Error::UnprocessableMetadata);
-        };
-        let Some(kind) = LauncherKind::from_resource_value(kind_value) else {
-            return Err(Error::UnprocessableMetadata);
         };
 
-        let Some(path_data) = read_resource(resources, RESOURCE_PYTHON_PATH) else {
+        let Some(path_data) = resources.read(RESOURCE_PYTHON_PATH) else {
             return Ok(None);
         };
         let python_path = PathBuf::from(
-            String::from_utf8(path_data.to_vec())
-                .map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+            String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
         );
-        let script_data = read_resource(resources, RESOURCE_SCRIPT_DATA).map(<[u8]>::to_vec);
+        let script_data = resources.read(RESOURCE_SCRIPT_DATA);
         if kind == LauncherKind::Script && script_data.is_none() {
             return Ok(None);
         }
@@ -303,30 +292,6 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     image.set_resource_directory(resource_directory)?;
 
     Ok(image.data().to_vec())
-}
-
-/// Read a named resource from a parsed PE image.
-#[cfg(windows)]
-fn read_resource<'a>(resources: &'a ResourceDirectory, name: &str) -> Option<&'a [u8]> {
-    let languages = resources
-        .root()
-        .get(ResourceEntryName::ID(RT_RCDATA))?
-        .as_table()?
-        .get(ResourceEntryName::from_string(name))?
-        .as_table()?;
-
-    // uv writes language-neutral resources. Older or externally edited launchers can use a
-    // different language, so accept the first available resource if the neutral one is absent.
-    languages
-        .get(ResourceEntryName::ID(0))
-        .and_then(ResourceEntry::as_data)
-        .or_else(|| {
-            languages
-                .entries()
-                .into_iter()
-                .find_map(|name| languages.get(name)?.as_data())
-        })
-        .map(ResourceData::data)
 }
 
 /// Construct a Windows script launcher.
