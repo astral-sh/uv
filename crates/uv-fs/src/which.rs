@@ -16,7 +16,8 @@ fn get_binary_type(path: &Path) -> windows::core::Result<u32> {
         .encode_wide()
         .chain(Some(0))
         .collect::<Vec<u16>>();
-    // SAFETY: winapi call
+    // SAFETY: `name` is a null-terminated UTF-16 string, and `binary_type` is a writable
+    // `u32`. Both remain valid for the duration of the call.
     unsafe { GetBinaryTypeW(PCWSTR(name.as_ptr()), &raw mut binary_type)? };
     Ok(binary_type)
 }
