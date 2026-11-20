@@ -704,6 +704,12 @@ Once groups are defined, the `--all-groups`, `--no-default-groups`, `--group`, `
     The `--dev`, `--only-dev`, and `--no-dev` flags are equivalent to `--group dev`,
     `--only-group dev`, and `--no-group dev` respectively.
 
+    These flags (and the related `--group` / `--no-group` options) only affect which
+    packages are installed when the environment is synced. They do not remove packages
+    that are already present. If you pass `--no-sync` (for example,
+    `uv run --no-sync --no-dev`), or run against an environment that was previously
+    synced with the group included, packages from that group may still be available.
+
 uv requires that all dependency groups are compatible with each other and resolves all groups
 together when creating the lockfile.
 
