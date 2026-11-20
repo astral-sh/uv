@@ -48,7 +48,7 @@ jobs:
     if: ${{ github.event_name == 'pull_request' && github.repository == 'astral-sh/uv' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.review-security == 'true' }}
     # N.B. despite setting this, Depot jobs allow cache writes directly through the API
     cache-mode: read
-    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+    uses: astral-sh/github-actions/.github/workflows/pull-request-security-review.yml@6c1398e34f646a0470c5bf2a7c3476d19e435bd7
     with:
       runner: depot-ubuntu-24.04-16
       helper-runner: github-ubuntu-24.04-x86_64-4
