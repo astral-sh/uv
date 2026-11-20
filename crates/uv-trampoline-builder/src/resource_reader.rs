@@ -5,7 +5,7 @@
 //! on-disk layouts from `editpe` on Windows.
 
 use std::cmp::Ordering;
-use std::io::{BufReader, Read, Seek, SeekFrom, Take};
+use std::io::{self, BufReader, Read, Seek, SeekFrom, Take};
 use std::path::Path;
 
 use editpe::constants::{PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE, PE_PTR_OFFSET};
@@ -157,7 +157,7 @@ impl Resources {
         Some(Lookup::Missing)
     }
 
-    fn resource(&mut self, name: &str) -> Option<Take<&mut BufReader<File>>> {
+    fn data_entry(&mut self, name: &str) -> Option<ResourceDataEntry> {
         let Lookup::Directory(languages) = self.subdirectory(self.rcdata, Key::Name(name))? else {
             return None;
         };
@@ -194,28 +194,41 @@ impl Resources {
         if pos & DIRECTORY_FLAG != 0 {
             return None;
         }
-        let data: ResourceDataEntry = self.read_entry(pos)?;
+        self.read_entry(pos)
+    }
+
+    fn resource(&mut self, name: &str) -> io::Result<Option<Take<&mut BufReader<File>>>> {
+        let Some(data) = self.data_entry(name) else {
+            return Ok(None);
+        };
         if data.size > 0 {
-            let offset = self.offset(data.data_rva, data.size)?;
-            self.file.seek(SeekFrom::Start(offset)).ok()?;
+            let Some(offset) = self.offset(data.data_rva, data.size) else {
+                return Ok(None);
+            };
+            self.file.seek(SeekFrom::Start(offset))?;
         }
-        Some((&mut self.file).take(u64::from(data.size)))
+        Ok(Some((&mut self.file).take(u64::from(data.size))))
     }
 
     pub(super) fn kind(&mut self) -> Result<Option<LauncherKind>, Error> {
-        let Some(data) = self.resource(RESOURCE_TRAMPOLINE_KIND) else {
+        let Some(data) = self.resource(RESOURCE_TRAMPOLINE_KIND)? else {
             return Ok(None);
         };
-        let value = u8::read_from_io(data).map_err(|_| Error::UnprocessableMetadata)?;
+        if data.limit() == 0 {
+            return Err(Error::UnprocessableMetadata);
+        }
+        let value = u8::read_from_io(data)?;
         let kind = LauncherKind::from_resource_value(value).ok_or(Error::UnprocessableMetadata)?;
         Ok(Some(kind))
     }
 
-    pub(super) fn read(&mut self, name: &str) -> Option<Vec<u8>> {
-        let mut data = self.resource(name)?;
+    pub(super) fn read(&mut self, name: &str) -> io::Result<Option<Vec<u8>>> {
+        let Some(mut data) = self.resource(name)? else {
+            return Ok(None);
+        };
         let mut bytes = Vec::new();
-        data.read_to_end(&mut bytes).ok()?;
-        (data.limit() == 0).then_some(bytes)
+        data.read_to_end(&mut bytes)?;
+        Ok((data.limit() == 0).then_some(bytes))
     }
 }
 

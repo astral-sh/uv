@@ -77,7 +77,7 @@ impl Launcher {
     /// Read [`Launcher`] metadata from a trampoline executable file.
     ///
     /// Returns `Ok(None)` if the file is not a trampoline executable.
-    /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
+    /// Returns `Err` if reading or decoding a located launcher payload fails.
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
         let Some(mut resources) = resource_reader::Resources::open(path) else {
@@ -87,13 +87,13 @@ impl Launcher {
             return Ok(None);
         };
 
-        let Some(path_data) = resources.read(RESOURCE_PYTHON_PATH) else {
+        let Some(path_data) = resources.read(RESOURCE_PYTHON_PATH)? else {
             return Ok(None);
         };
         let python_path = PathBuf::from(
             String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
         );
-        let script_data = resources.read(RESOURCE_SCRIPT_DATA);
+        let script_data = resources.read(RESOURCE_SCRIPT_DATA)?;
         if kind == LauncherKind::Script && script_data.is_none() {
             return Ok(None);
         }
