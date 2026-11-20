@@ -860,20 +860,20 @@ impl VersionMapLazy {
         }
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self
+        let expected = self
             .hasher
-            .archive_policy_for_package(&filename.name, &filename.version);
-        let required_hashes = hash_policy.digests();
-        let hash = if required_hashes.is_empty() {
-            HashComparison::Matched
-        } else {
+            .hashes_for_package(&filename.name, &filename.version)
+            .filter(|hashes| !hashes.is_empty());
+        let hash = if let Some(expected) = expected {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
+            } else if hashes.iter().any(|hash| expected.contains(hash)) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
             }
+        } else {
+            HashComparison::Matched
         };
 
         SourceDistCompatibility::Compatible(hash)
@@ -932,18 +932,20 @@ impl VersionMapLazy {
         };
 
         // Check if hashes line up. If hashes aren't required, they're considered matching.
-        let hash_policy = self.hasher.archive_policy_for_package(name, version);
-        let required_hashes = hash_policy.digests();
-        let hash = if required_hashes.is_empty() {
-            HashComparison::Matched
-        } else {
+        let expected = self
+            .hasher
+            .hashes_for_package(name, version)
+            .filter(|hashes| !hashes.is_empty());
+        let hash = if let Some(expected) = expected {
             if hashes.is_empty() {
                 HashComparison::Missing
-            } else if hash_policy.matches(hashes) {
+            } else if hashes.iter().any(|hash| expected.contains(hash)) {
                 HashComparison::Matched
             } else {
                 HashComparison::Mismatched
             }
+        } else {
+            HashComparison::Matched
         };
 
         WheelCompatibility::from_tag_priority(filename, hash, priority)

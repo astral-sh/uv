@@ -236,6 +236,16 @@ impl HashStrategy {
         }
     }
 
+    /// Declared hashes for ranking registry files without constructing archive checks.
+    pub fn hashes_for_package(
+        &self,
+        name: &PackageName,
+        version: &Version,
+    ) -> Option<&[HashDigest]> {
+        self.lookup_for_verification(|| VersionId::from_registry(name.clone(), version.clone()))
+            .map(|(_, hashes)| hashes)
+    }
+
     /// Returns `true` if the given registry-based package is allowed.
     pub fn allows_package(&self, name: &PackageName, version: &Version) -> bool {
         match &self.verification {
