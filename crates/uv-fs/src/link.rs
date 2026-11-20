@@ -38,7 +38,9 @@ pub enum LinkMode {
 
 impl Default for LinkMode {
     fn default() -> Self {
-        if cfg!(any(
+        if cfg!(target_os = "haiku") {
+            Self::Copy
+        } else if cfg!(any(
             target_os = "macos",
             target_os = "ios",
             target_os = "linux"

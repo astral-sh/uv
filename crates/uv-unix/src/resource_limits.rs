@@ -14,6 +14,9 @@
 //! See: <https://github.com/astral-sh/uv/issues/16999>
 
 use nix::errno::Errno;
+#[cfg(target_os = "haiku")]
+use nix::libc::{self, RLIM_INFINITY, rlim_t};
+#[cfg(not(target_os = "haiku"))]
 use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit, rlim_t, setrlimit};
 use thiserror::Error;
 
@@ -68,8 +71,7 @@ const MAX_NOFILE_LIMIT: rlim_t = 0x0010_0000;
 /// Note the type of `rlim_t` is platform-specific (`u64` on Linux/macOS, `i64` on FreeBSD), but
 /// this function always returns a [`u64`].
 pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
-    let (soft, hard) =
-        getrlimit(Resource::RLIMIT_NOFILE).map_err(OpenFileLimitError::GetLimitFailed)?;
+    let (soft, hard) = open_file_limits().map_err(OpenFileLimitError::GetLimitFailed)?;
 
     // Convert `rlim_t` to `u64`. On FreeBSD, `rlim_t` is `i64` which may fail.
     // On Linux and macOS, `rlim_t` is a `u64`, and the conversion is infallible.
@@ -98,13 +100,16 @@ pub fn adjust_open_file_limit() -> Result<u64, OpenFileLimitError> {
 
 /// Set the soft open-file descriptor limit while preserving the hard limit.
 pub fn set_open_file_limit(target: u32) -> Result<u64, OpenFileLimitError> {
-    let (soft, hard) =
-        getrlimit(Resource::RLIMIT_NOFILE).map_err(OpenFileLimitError::GetLimitFailed)?;
+    let (soft, hard) = open_file_limits().map_err(OpenFileLimitError::GetLimitFailed)?;
     let Some(soft) = rlim_t_to_u64(soft) else {
         return Err(OpenFileLimitError::NegativeSoftLimit { value: soft });
     };
 
+    #[cfg(not(target_os = "haiku"))]
     let target_rlim = rlim_t::from(target);
+    // Haiku uses uintptr_t, which is at least 32 bits.
+    #[cfg(target_os = "haiku")]
+    let target_rlim = target as rlim_t;
     let target = u64::from(target);
     if hard != RLIM_INFINITY && target_rlim > hard {
         return Err(OpenFileLimitError::ExceedsHardLimit { target, hard });
@@ -120,15 +125,48 @@ fn set_open_file_limit_to(
     target_rlim: rlim_t,
     hard: rlim_t,
 ) -> Result<u64, OpenFileLimitError> {
-    setrlimit(Resource::RLIMIT_NOFILE, target_rlim, hard).map_err(|err| {
-        OpenFileLimitError::SetLimitFailed {
-            current,
-            target,
-            source: err,
-        }
+    set_open_file_limits(target_rlim, hard).map_err(|err| OpenFileLimitError::SetLimitFailed {
+        current,
+        target,
+        source: err,
     })?;
 
     Ok(target)
+}
+
+#[cfg(not(target_os = "haiku"))]
+fn open_file_limits() -> Result<(rlim_t, rlim_t), Errno> {
+    getrlimit(Resource::RLIMIT_NOFILE)
+}
+
+#[cfg(not(target_os = "haiku"))]
+fn set_open_file_limits(soft: rlim_t, hard: rlim_t) -> Result<(), Errno> {
+    setrlimit(Resource::RLIMIT_NOFILE, soft, hard)
+}
+
+// nix does not expose its resource module on Haiku.
+#[cfg(target_os = "haiku")]
+#[expect(unsafe_code)]
+fn open_file_limits() -> Result<(rlim_t, rlim_t), Errno> {
+    let mut limits = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: `limits` is writable storage for a `libc::rlimit`.
+    Errno::result(unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut limits) })?;
+    Ok((limits.rlim_cur, limits.rlim_max))
+}
+
+#[cfg(target_os = "haiku")]
+#[expect(unsafe_code)]
+fn set_open_file_limits(soft: rlim_t, hard: rlim_t) -> Result<(), Errno> {
+    let limits = libc::rlimit {
+        rlim_cur: soft,
+        rlim_max: hard,
+    };
+    // SAFETY: `limits` stays valid for the duration of the call.
+    Errno::result(unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &raw const limits) })?;
+    Ok(())
 }
 
 /// Convert `rlim_t` to `u64`, returning `None` if negative.

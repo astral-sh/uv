@@ -760,7 +760,7 @@ fn compatible_tags(platform: &Platform) -> Result<Vec<PlatformTag>, PlatformErro
             }]
         }
         (Os::Haiku { release }, arch) => {
-            let release = release.replace(['.', '-'], "_").to_lowercase();
+            let release = release.replace(['.', '-', '~'], "_").to_lowercase();
             let release_arch = format!("{release}_{arch}");
             vec![PlatformTag::Haiku {
                 release_arch: release_arch.parse::<ReleaseArch>().map_err(|error| {
@@ -1601,6 +1601,23 @@ mod tests {
             "freebsd_15_0_release_p13_amd64",
             "openbsd_7_9_amd64",
             "dragonfly_6_4_release_x86_64",
+        ]
+        "#);
+    }
+
+    #[test]
+    fn test_platform_tags_haiku() {
+        let tags = compatible_tags(&Platform::new(
+            Os::Haiku {
+                release: "R1~beta6".to_string(),
+            },
+            Arch::X86_64,
+        ))
+        .unwrap();
+        let tags = tags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert_debug_snapshot!(tags, @r#"
+        [
+            "haiku_r1_beta6_x86_64",
         ]
         "#);
     }
