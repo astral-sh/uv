@@ -37,6 +37,17 @@ pub fn escape_posix_for_single_quotes(string: &str) -> Cow<'_, str> {
     }
 }
 
+/// Escape a string for being used inside single quotes in a fish shell script.
+///
+/// In fish, inside single quotes, `\\` escapes a backslash and `\'` escapes a single quote.
+/// All other characters are kept verbatim.
+pub fn escape_fish_for_single_quotes(string: &str) -> Cow<'_, str> {
+    if !string.contains('\\') && !string.contains('\'') {
+        return Cow::Borrowed(string);
+    }
+    Cow::Owned(string.replace('\\', r"\\").replace('\'', r"\'"))
+}
+
 /// Quote a path, if necessary, for safe use in `PowerShell` and `cmd`.
 pub fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
     // Convert to a display path.
@@ -58,7 +69,8 @@ pub fn shlex_windows(executable: impl AsRef<Path>, shell: Shell) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::shlex_posix;
+    use super::{escape_fish_for_single_quotes, shlex_posix};
+    use std::borrow::Cow;
 
     #[test]
     fn posix_safe_path() {
@@ -75,6 +87,26 @@ mod tests {
         assert_eq!(
             shlex_posix("Testing's/$venv;activate"),
             r#"'Testing'"'"'s/$venv;activate'"#
+        );
+    }
+
+    #[test]
+    fn fish_escape_single_quotes() {
+        assert_eq!(
+            escape_fish_for_single_quotes("my-env"),
+            Cow::Borrowed("my-env")
+        );
+        assert_eq!(
+            escape_fish_for_single_quotes("x'; touch /tmp/PWNED; set x '"),
+            Cow::Owned::<str>("x\\'; touch /tmp/PWNED; set x \\'".to_string())
+        );
+        assert_eq!(
+            escape_fish_for_single_quotes(r"x\'$(touch PWNED)'\'"),
+            Cow::Owned::<str>(r"x\\\'$(touch PWNED)\'\\\'".to_string())
+        );
+        assert_eq!(
+            escape_fish_for_single_quotes(r"path\to\venv"),
+            Cow::Owned::<str>(r"path\\to\\venv".to_string())
         );
     }
 }
