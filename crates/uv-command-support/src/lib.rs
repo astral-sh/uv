@@ -1,6 +1,7 @@
 //! Output and process primitives shared by uv command implementations.
 
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::fs::Metadata;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -64,7 +65,17 @@ impl UvError {
         Self::Unexpected(error)
     }
 
-    /// Add command-specific context to a user error without changing unexpected errors.
+    /// Wrap the inner error with context for any variant, preserving its classification.
+    #[must_use]
+    pub fn context(self, context: impl Display + Send + Sync + 'static) -> Self {
+        match self {
+            Self::User(error) => Self::User(error.context(context)),
+            Self::Argument(error) => Self::Argument(error.context(context)),
+            Self::Unexpected(error) => Self::Unexpected(error.context(context)),
+        }
+    }
+
+    /// For [`Self::User`] only, replace the inner error with the result of the closure.
     #[must_use]
     pub fn map_user(self, context: impl FnOnce(anyhow::Error) -> anyhow::Error) -> Self {
         match self {

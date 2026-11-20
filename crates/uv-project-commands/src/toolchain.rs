@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
-use uv_command_support::{Printer, UvError};
+use uv_command_support::Printer;
 use uv_configuration::{
     ActiveEnvironment, Concurrency, DependencyGroupsWithDefaults, InstallOptions,
 };
@@ -13,7 +13,7 @@ use uv_distribution_types::Resolution;
 use uv_environment_operations::environment::CachedEnvironment;
 use uv_environment_operations::install_target::{InstallTarget, PackageSelection};
 use uv_environment_operations::{
-    ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
+    EnvironmentError, ProjectEnvironmentPolicy, ProjectEnvironmentTarget, ProjectInterpreter,
     apply_no_virtual_project, store_credentials_from_target,
 };
 use uv_fs::{Simplified, normalize_path};
@@ -30,6 +30,8 @@ use uv_warnings::warn_user;
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
 };
+
+use crate::ProjectError;
 
 /// A locked package selected for use as a project tool.
 pub(super) struct LockedTool<'lock> {
@@ -94,7 +96,7 @@ impl LockedToolInstaller<'_> {
         target: InstallTarget<'_>,
         dependency: &SelectedDependency<'_>,
         interpreter: &Interpreter,
-    ) -> Result<(PythonEnvironment, Resolution)> {
+    ) -> Result<(PythonEnvironment, Resolution), EnvironmentError> {
         let markers = interpreter.to_resolver_marker_environment();
         let resolution = target.lock().to_resolution_from_dependency(
             target.install_path(),
@@ -122,8 +124,7 @@ impl LockedToolInstaller<'_> {
             self.printer,
             self.preview,
         )
-        .await
-        .map_err(UvError::from)?;
+        .await?;
         Ok((PythonEnvironment::from(environment), resolution))
     }
 
@@ -138,7 +139,7 @@ impl LockedToolInstaller<'_> {
         python_arch: Option<PythonArchitecture>,
         python_downloads: PythonDownloads,
         install_mirrors: &PythonInstallMirrors,
-    ) -> Result<Option<PythonEnvironment>> {
+    ) -> Result<Option<PythonEnvironment>, ProjectError> {
         // Collapse `..` before walking ancestors, keeping symlinked members under their workspace
         // root. Use the physical path if collapsing `symlink/..` changes the directory it names.
         let mut directory = normalize_path(script_dir);
@@ -214,7 +215,8 @@ impl LockedToolInstaller<'_> {
             workspace.install_path(),
             config_discovery,
         )
-        .await?;
+        .await
+        .map_err(EnvironmentError::from)?;
         let interpreter = ProjectInterpreter::discover(
             ProjectEnvironmentTarget::from(workspace),
             project_python,
@@ -230,7 +232,8 @@ impl LockedToolInstaller<'_> {
         )
         .await?
         .into_interpreter();
-        let interpreter = CachedEnvironment::base_interpreter(&interpreter, self.cache)?;
+        let interpreter = CachedEnvironment::base_interpreter(&interpreter, self.cache)
+            .map_err(EnvironmentError::from)?;
         target.validate_platform(&interpreter.to_resolver_marker_environment())?;
         let Some(tool) = find_locked_tool(
             target.project_name(),

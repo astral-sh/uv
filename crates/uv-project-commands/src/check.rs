@@ -500,16 +500,10 @@ pub async fn check(
                         &install_mirrors,
                     )
                     .await
-                    .map_err(|error| -> anyhow::Error {
-                        let add_context = |error: anyhow::Error| {
-                            error.context("Failed to use the workspace's locked `ty`. Use `--no-project` to skip the workspace lookup")
-                        };
-                        match error.downcast() {
-                            Ok(UvError::User(error)) => UvError::User(add_context(error)).into(),
-                            Ok(UvError::Argument(error)) => UvError::Argument(add_context(error)).into(),
-                            Ok(UvError::Unexpected(error)) => UvError::Unexpected(add_context(error)).into(),
-                            Err(error) => add_context(error),
-                        }
+                    .map_err(|error| {
+                        UvError::from(error).context(
+                            "Failed to use the workspace's locked `ty`. Use `--no-project` to skip the workspace lookup",
+                        )
                     })?
             };
         }
@@ -664,7 +658,8 @@ pub async fn check(
                 let interpreter = CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
                 let (environment, resolution) = tool_installer
                     .install(target, tool.dependency(), &interpreter)
-                    .await?;
+                    .await
+                    .map_err(UvError::from)?;
                 malware_context.record_resolution(&resolution);
                 environment
             });
