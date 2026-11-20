@@ -110,9 +110,14 @@ impl Resources {
         T::read_from_io(&mut self.file).ok()
     }
 
-    fn entry(&mut self, table: u32, index: u32) -> Option<ResourceDirectoryEntry> {
+    fn compare_entry(&mut self, table: u32, index: u32, key: Key<'_>) -> Option<(Ordering, u32)> {
         let pos = table.checked_add(16 + 8 * index)?;
-        self.read_entry(pos)
+        let entry: ResourceDirectoryEntry = self.read_entry(pos)?;
+        let order = match key {
+            Key::Id(id) => entry.name_offset_or_integer_id.cmp(&id),
+            Key::Name(name) => self.compare_name(entry.name_offset_or_integer_id, name)?,
+        };
+        Some((order, entry.data_entry_or_subdirectory_offset))
     }
 
     fn compare_name(&mut self, offset: u32, name: &str) -> Option<Ordering> {
@@ -138,16 +143,22 @@ impl Resources {
         };
         while !range.is_empty() {
             let mid = range.start.midpoint(range.end - 1);
-            let entry = self.entry(table, mid)?;
-            let order = match key {
-                Key::Id(id) => entry.name_offset_or_integer_id.cmp(&id),
-                Key::Name(name) => self.compare_name(entry.name_offset_or_integer_id, name)?,
-            };
+            let (order, offset) = self.compare_entry(table, mid, key)?;
             match order {
                 Ordering::Equal => {
-                    let offset = entry
-                        .data_entry_or_subdirectory_offset
-                        .checked_sub(DIRECTORY_FLAG)?;
+                    // Duplicates in a sorted table are adjacent. Entries immediately
+                    // outside the remaining range already compared unequal.
+                    if mid > range.start
+                        && self.compare_entry(table, mid - 1, key)?.0 != Ordering::Less
+                    {
+                        return None;
+                    }
+                    if mid + 1 < range.end
+                        && self.compare_entry(table, mid + 1, key)?.0 != Ordering::Greater
+                    {
+                        return None;
+                    }
+                    let offset = offset.checked_sub(DIRECTORY_FLAG)?;
                     return Some(Lookup::Directory(offset));
                 }
                 Ordering::Less => range.start = mid + 1,

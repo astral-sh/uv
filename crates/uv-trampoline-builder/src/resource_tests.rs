@@ -547,6 +547,35 @@ fn multiple_script_payloads_are_rejected() -> Result<()> {
 }
 
 #[test]
+fn duplicate_script_names_are_rejected() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let other = "UV_SCRIPT_DATB";
+    let mut launcher = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            (RESOURCE_SCRIPT_DATA, b"first payload"),
+            (other, b"second payload"),
+        ],
+    )?;
+    fs_err::write(path.path(), &launcher)?;
+    assert!(Launcher::try_from_path(path.path())?.is_some());
+
+    // Rename the second entry in place to give the sorted table duplicate keys.
+    let name: Vec<_> = other.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    let offset = launcher
+        .windows(name.len())
+        .position(|bytes| bytes == name)
+        .context("Missing second name")?;
+    launcher[offset + name.len() - 2] = b'A';
+    fs_err::write(path.path(), launcher)?;
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn empty_script_resource_is_preserved() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("empty.exe");
