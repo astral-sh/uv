@@ -177,6 +177,22 @@ impl GitRepository {
         Ok(result.parse()?)
     }
 
+    /// Returns the type of the Git object identified by `oid`.
+    fn object_type(&self, oid: GitOid) -> Result<String> {
+        let result = GIT
+            .as_ref()
+            .cloned()?
+            .arg("cat-file")
+            .arg("-t")
+            .arg(oid.as_str())
+            .cwd(&self.path)
+            .exec_with_output()?;
+
+        let mut result = String::from_utf8(result.stdout)?;
+        result.truncate(result.trim_end().len());
+        Ok(result)
+    }
+
     /// Verifies LFS artifacts have been initialized for a given `refname`.
     #[instrument(skip_all, fields(path = %self.path.user_display(), refname = %refname))]
     fn lfs_fsck_objects(&self, refname: &str) -> bool {
@@ -345,6 +361,13 @@ impl GitDatabase {
         self.repo
             .rev_parse(&format!("{oid}^0"))
             .is_ok_and(|commit| commit == oid)
+    }
+
+    /// Returns whether `oid` identifies an annotated tag object.
+    pub(crate) fn is_annotated_tag(&self, oid: GitOid) -> bool {
+        self.repo
+            .object_type(oid)
+            .is_ok_and(|object_type| object_type == "tag")
     }
 
     /// Checks if `oid` contains necessary LFS artifacts in this database.
