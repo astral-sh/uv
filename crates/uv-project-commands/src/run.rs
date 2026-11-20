@@ -2061,8 +2061,11 @@ fn copy_entrypoint(
 ) -> Result<(), CopyEntrypointError> {
     use uv_trampoline_builder::Launcher;
 
-    let Some(launcher) = Launcher::try_from_path(source)? else {
-        return Ok(());
+    let launcher = match Launcher::try_from_path(source) {
+        Ok(Some(launcher)) => launcher,
+        Ok(None) => return Ok(()),
+        Err(uv_trampoline_builder::Error::Io(err)) => return Err(CopyEntrypointError::Io(err)),
+        Err(err) => return Err(CopyEntrypointError::Trampoline(err)),
     };
 
     let is_gui = launcher.python_path.ends_with("pythonw.exe");
