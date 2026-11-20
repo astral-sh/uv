@@ -33,8 +33,12 @@ enum Lookup {
     Missing,
 }
 
+// Take tracks the cursor within the file length. Its absolute seeks use
+// seek_relative on the BufReader, retaining buffered bytes for nearby entries.
+type ImageFile = Take<BufReader<File>>;
+
 pub(super) struct Resources {
-    file: BufReader<File>,
+    file: ImageFile,
     file_size: u64,
     sections: Vec<SectionHeader>,
     directory: ImageDataDirectory,
@@ -43,18 +47,18 @@ pub(super) struct Resources {
 
 impl Resources {
     pub(super) fn open(path: &Path) -> Option<Self> {
-        let mut file = BufReader::new(File::open(path).ok()?);
-        let file_size = file.get_ref().metadata().ok()?.len();
+        let file = File::open(path).ok()?;
+        let file_size = file.metadata().ok()?.len();
         if file_size < u64::from(PE_PTR_OFFSET) + 4 {
             return None;
         }
+        let mut file = BufReader::new(file).take(file_size);
         if u16::read_from_io(&mut file).ok()? != PE_DOS_MAGIC {
             return None;
         }
-        file.seek_relative(i64::from(PE_PTR_OFFSET) - 2).ok()?;
+        file.seek(SeekFrom::Start(PE_PTR_OFFSET.into())).ok()?;
         let pe_offset = u32::read_from_io(&mut file).ok()?;
-        file.seek_relative(i64::from(pe_offset) - i64::from(PE_PTR_OFFSET) - 4)
-            .ok()?;
+        file.seek(SeekFrom::Start(pe_offset.into())).ok()?;
         if u32::read_from_io(&mut file).ok()? != PE_NT_SIGNATURE {
             return None;
         }
@@ -213,7 +217,7 @@ impl Resources {
         self.read_entry(pos)
     }
 
-    fn resource(&mut self, name: &str) -> io::Result<Option<Take<&mut BufReader<File>>>> {
+    fn resource(&mut self, name: &str) -> io::Result<Option<Take<&mut ImageFile>>> {
         let Some(data) = self.data_entry(name) else {
             return Ok(None);
         };
@@ -225,7 +229,10 @@ impl Resources {
             return Ok(None);
         };
         let size = u64::from(data.size);
-        if name == RESOURCE_SCRIPT_DATA && self.has_external_archive(offset..offset + size)? {
+        if name == RESOURCE_SCRIPT_DATA
+            && let Some(archive) = self.last_archive()?
+            && (archive.start < offset || archive.end > offset + size)
+        {
             return Ok(None);
         }
         self.file.seek(SeekFrom::Start(offset))?;
@@ -234,10 +241,22 @@ impl Resources {
 
     /// Python searches for a ZIP in the entire executable, including its overlay.
     /// A rewrite only copies the named payload, so decline an archive outside it.
-    fn has_external_archive(&mut self, payload: Range<u64>) -> io::Result<bool> {
+    fn last_archive(&mut self) -> io::Result<Option<Range<u64>>> {
         // zipimport allows a 16-bit comment, a 22-byte end record and up to 76
         // bytes of ZIP64 records. See CPython's Lib/zipimport.py (_read_directory).
-        const SEARCH_SIZE: usize = 65_535 + 22 + 76;
+        const RECORDS_SIZE: usize = 22 + 76;
+        const SEARCH_SIZE: usize = 65_535 + RECORDS_SIZE;
+        // Reading the resource table of a small launcher often buffers the ZIP
+        // through EOF. Use it if it includes room for all the end records.
+        let buffer = self.file.get_ref().buffer();
+        if buffer.len() as u64 == self.file.limit() && buffer.len() <= SEARCH_SIZE {
+            let start = self.file_size - self.file.limit();
+            if let Some(archive) = archive_range(buffer, start)
+                && archive.end - start >= RECORDS_SIZE as u64
+            {
+                return Ok(Some(archive));
+            }
+        }
         let len = usize::try_from(self.file_size)
             .unwrap_or(usize::MAX)
             .min(SEARCH_SIZE);
@@ -245,8 +264,7 @@ impl Resources {
         let mut tail = vec![0; len];
         self.file.seek(SeekFrom::Start(start))?;
         self.file.read_exact(&mut tail)?;
-        Ok(archive_range(&tail, start)
-            .is_some_and(|archive| archive.start < payload.start || archive.end > payload.end))
+        Ok(archive_range(&tail, start))
     }
 
     pub(super) fn kind(&mut self) -> Result<Option<LauncherKind>, Error> {
@@ -296,7 +314,7 @@ fn archive_range(tail: &[u8], start: u64) -> Option<Range<u64>> {
 }
 
 /// Read the resource data directory and the sections used to resolve its addresses.
-fn read_headers(file: &mut BufReader<File>) -> Option<(ImageDataDirectory, Vec<SectionHeader>)> {
+fn read_headers(file: &mut ImageFile) -> Option<(ImageDataDirectory, Vec<SectionHeader>)> {
     let coff = CoffHeader::read_from_io(&mut *file).ok()?;
     // The Windows loader supports up to 96 sections.
     if coff.number_of_sections > 96 {
@@ -322,8 +340,7 @@ fn read_headers(file: &mut BufReader<File>) -> Option<(ImageDataDirectory, Vec<S
     if directory.virtual_address == 0 || directory.size == 0 {
         return None;
     }
-    let remaining = header.limit();
-    file.seek_relative(i64::try_from(remaining).ok()?).ok()?;
+    header.seek(SeekFrom::End(0)).ok()?;
     let mut sections = Vec::with_capacity(usize::from(coff.number_of_sections));
     let mut previous_end = windows.size_of_headers();
     let alignment = windows.section_alignment();
