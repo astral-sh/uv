@@ -24,6 +24,7 @@ async fn reject_data_descriptor_conflicting_compressed_size() -> anyhow::Result<
             with zipfile.ZipFile(StreamingOutput(), "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr("file.txt", b"hello")
                 entry = archive.getinfo("file.txt")
+                # Bit 3 indicates that zipfile wrote a data descriptor after the compressed data.
                 assert entry.flag_bits & 0x08
                 # The descriptor already records 7 bytes. Closing the archive writes the directory.
                 entry.compress_size = 1
