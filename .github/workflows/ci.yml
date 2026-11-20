@@ -111,7 +111,7 @@ jobs:
       contents: read
       security-events: write
 
-  check-actions-lock:
+  check-gh-actions-lock:
     name: "check | gh actions-lock"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
@@ -426,6 +426,8 @@ jobs:
       - check-fmt
       - check-lint
       - check-docs
+      - check-zizmor
+      - check-gh-actions-lock
       - check-lock
       - check-crates-policies
       - check-release
