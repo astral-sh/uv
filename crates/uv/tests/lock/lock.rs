@@ -13863,6 +13863,43 @@ fn lock_requires_python_no_wheels() -> Result<()> {
     Ok(())
 }
 
+/// A 32-bit interpreter on x86-64 Linux can report `x86_64` and use an `i686` wheel.
+/// Lockfile validation needs the path wheel to read its metadata on every platform.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_guarded_path_wheel_for_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"demo".parse()?, &"1.0.0".parse()?)
+        .tag("cp312-cp312-manylinux_2_17_i686")
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo ; sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+        [tool.uv.sources]
+        demo = {{ path = "{filename}" }}
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--check"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
 /// In this case, a package is included twice at the same version, but pointing to different direct
 /// URLs.
 #[cfg(feature = "test-universal")]
