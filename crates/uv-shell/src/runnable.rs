@@ -5,6 +5,8 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::process::Command;
 
+use uv_static::EnvVars;
+
 pub struct WindowsRunnable;
 
 #[derive(Debug)]
@@ -99,7 +101,53 @@ impl WindowsRunnable {
             })
             .find(|(_, script_path)| script_path.is_file())
             .map(|(script_type, script_path)| script_type.as_command(&script_path))
-            .unwrap_or_else(|| Command::new(runnable_name))
+            .unwrap_or_else(|| Self::from_path_variable(runnable_name))
+    }
+
+    /// Returns a [`Command`] for a runnable that is not in the scripts path of the environment.
+    ///
+    /// [`Command`] only appends `.exe` when it searches `PATH` for a program without an
+    /// extension, so a command shim like `code.cmd` or `npm.cmd` is not found by its bare name.
+    /// To match how Command Prompt resolves a bare name, this searches each `PATH` entry in order
+    /// for the name with an `.exe`, `.bat`, or `.cmd` extension. A `.bat` or `.cmd` match is run
+    /// by its full path, which lets [`Command`] apply its batch file argument escaping. An `.exe`
+    /// match, a name containing a path separator, or no match at all is left to [`Command`]'s own
+    /// lookup, so the executables it finds and its error for a missing program are unchanged.
+    ///
+    /// PowerShell scripts are not considered: Command Prompt does not run them from `PATH` by
+    /// name, and whether they run depends on the user's PowerShell execution policy.
+    fn from_path_variable(runnable_name: &OsStr) -> Command {
+        if Path::new(runnable_name).components().count() != 1 {
+            return Command::new(runnable_name);
+        }
+
+        let Some(path) = std::env::var_os(EnvVars::PATH) else {
+            return Command::new(runnable_name);
+        };
+
+        for directory in std::env::split_paths(&path) {
+            let candidate = directory.join(runnable_name);
+            for script_type in [
+                WindowsRunnableKind::Executable,
+                WindowsRunnableKind::Batch,
+                WindowsRunnableKind::Command,
+            ] {
+                let candidate = candidate.with_added_extension(script_type.to_extension());
+                if !candidate.is_file() {
+                    continue;
+                }
+                return match script_type {
+                    WindowsRunnableKind::Executable | WindowsRunnableKind::PowerShell => {
+                        Command::new(runnable_name)
+                    }
+                    WindowsRunnableKind::Batch | WindowsRunnableKind::Command => {
+                        Command::new(candidate)
+                    }
+                };
+            }
+        }
+
+        Command::new(runnable_name)
     }
 }
 
