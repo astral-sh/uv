@@ -151,6 +151,13 @@ impl Resources {
         }
         // Language IDs are sorted, so the neutral resource comes first when present.
         let entry = self.entry(languages, 0)?;
+        let language = u16::try_from(entry.name_offset_or_integer_id).ok()?;
+        // uv writes neutral resources. With several localized variants and no neutral
+        // entry, the target selected by FindResourceW depends on the user's language.
+        // Uninstall needs an unambiguous target to establish ownership of the link.
+        if language != 0 && header.number_of_id_entries > 1 {
+            return None;
+        }
         let pos = entry.data_entry_or_subdirectory_offset;
         if pos & DIRECTORY_FLAG != 0 {
             return None;

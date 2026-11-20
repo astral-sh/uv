@@ -22,6 +22,7 @@ use super::{
 fn write_native_resources(
     path: &Path,
     launcher: &[u8],
+    language: u16,
     resources: &[(&str, &[u8])],
 ) -> Result<Vec<u8>> {
     fs_err::write(path, launcher)?;
@@ -57,7 +58,7 @@ fn write_native_resources(
                     handle,
                     PCWSTR(RT_RCDATA as usize as *const u16),
                     PCWSTR(name_wide.as_ptr()),
-                    0,
+                    language,
                     Some(data.as_ptr().cast()),
                     *size,
                 )
@@ -307,6 +308,32 @@ fn deeply_nested_unrelated_resource() -> Result<()> {
 }
 
 #[test]
+fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let english = write_native_resources(
+        path.path(),
+        get_launcher_bin(false)?,
+        0x0409,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[2]),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+        ],
+    )?;
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing localized launcher")?;
+    assert_eq!(launcher.python_path, Path::new("C:/Python312/python.exe"));
+
+    write_native_resources(
+        path.path(),
+        &english,
+        0x0407,
+        &[(RESOURCE_PYTHON_PATH, b"C:/Python313/python.exe")],
+    )?;
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn resources_match_native_windows_updates() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
@@ -355,7 +382,7 @@ fn resources_match_native_windows_updates() -> Result<()> {
                 (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
                 (RESOURCE_SCRIPT_DATA, &payload),
             ];
-            let native = write_native_resources(native_path.path(), launcher, resources)?;
+            let native = write_native_resources(native_path.path(), launcher, 0, resources)?;
             let edited = write_resources(launcher, resources)?;
             fs_err::write(edited_path.path(), &edited)?;
 
