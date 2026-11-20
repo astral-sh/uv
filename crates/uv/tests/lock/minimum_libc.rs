@@ -390,11 +390,11 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 3 packages in [TIME]
     ");
-    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @r"
-        exit_code: 0 (success)
-        ----- stdout -----
-        demo==1.0.0 ; python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
-        demo==1.0.0+cpu ; (python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'
+    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-hashes", "--no-header", "--no-annotate"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; python_full_version < '3.13' and implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
+    demo==1.0.0+cpu ; (python_full_version >= '3.13' or implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'
     ");
 
     let lock = context.read("uv.lock");
@@ -404,8 +404,8 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
         revision = 5
         requires-python = ">=3.12"
         resolution-markers = [
-            "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
-            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+            "python_full_version >= '3.13' or implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
+            "python_full_version < '3.13' and implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
         ]
 
         [options]
@@ -417,7 +417,7 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
         version = "1.0.0"
         source = { registry = "links" }
         resolution-markers = [
-            "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+            "python_full_version < '3.13' and implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
         ]
         wheels = [
             { path = "demo-1.0.0-cp312-cp312-manylinux_2_17_aarch64.whl" },
@@ -428,7 +428,7 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
         version = "1.0.0+cpu"
         source = { registry = "links" }
         resolution-markers = [
-            "python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
+            "python_full_version >= '3.13' or implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux'",
         ]
         wheels = [
             { path = "demo-1.0.0+cpu-cp312-cp312-manylinux_2_17_x86_64.whl" },
@@ -440,8 +440,8 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-            { name = "demo", version = "1.0.0+cpu", source = { registry = "links" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'" },
+            { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "python_full_version < '3.13' and implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "demo", version = "1.0.0+cpu", source = { registry = "links" }, marker = "(python_full_version >= '3.13' or implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'" },
         ]
 
         [package.metadata]
