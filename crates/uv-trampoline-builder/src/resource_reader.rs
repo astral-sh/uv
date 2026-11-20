@@ -323,10 +323,13 @@ impl Resources {
 /// Locate the last ZIP's start by subtracting the central directory size and
 /// its archive-relative offset from the position of the end record.
 fn archive_range(tail: &[u8], start: u64) -> Option<Range<u64>> {
-    let pos = tail
-        .windows(22)
-        .rposition(|record| record.starts_with(b"PK\x05\x06"))?;
+    let pos = tail.windows(4).rposition(|bytes| bytes == b"PK\x05\x06")?;
     let end = start + pos as u64 + 22;
+    if tail.len() - pos < 22 {
+        // zipimport selects the last signature before checking its length.
+        // The required record extends beyond EOF and thus beyond the payload.
+        return Some(start + pos as u64..end);
+    }
     let (header, size, offset) = if pos >= 76 && tail[pos - 76..].starts_with(b"PK\x06\x06") {
         let record = &tail[pos - 76..pos];
         let size = u64::read_from_bytes(&record[40..48]).ok()?;

@@ -645,6 +645,17 @@ fn appended_archive_is_not_rewritten() -> Result<()> {
 }
 
 #[test]
+fn truncated_appended_end_record_is_not_rewritten() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let mut bytes = windows_script_launcher("pass", false, "python.exe")?;
+    bytes.extend_from_slice(b"PK\x05\x06");
+    fs_err::write(path.path(), bytes)?;
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn empty_script_resource_is_preserved() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("empty.exe");
