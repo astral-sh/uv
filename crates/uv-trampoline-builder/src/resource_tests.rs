@@ -601,6 +601,32 @@ fn duplicate_script_names_are_rejected() -> Result<()> {
     Ok(())
 }
 
+/// Python searches from the end of the file for a ZIP, including the PE overlay.
+#[test]
+fn appended_archive_is_not_rewritten() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let python = which::which("python")?;
+    let second = windows_script_launcher("print('appended')", false, &python)?;
+    fs_err::write(path.path(), second)?;
+    let archive = Launcher::try_from_path(path.path())?
+        .and_then(|launcher| launcher.script_data)
+        .context("Missing second archive")?;
+
+    let mut bytes = windows_script_launcher("print('embedded')", false, &python)?;
+    bytes.extend_from_slice(b"trailing data");
+    fs_err::write(path.path(), &bytes)?;
+    assert!(Launcher::try_from_path(path.path())?.is_some());
+    bytes.extend_from_slice(&archive);
+    fs_err::write(path.path(), bytes)?;
+    Command::new(path.path())
+        .assert()
+        .success()
+        .stdout("appended\r\n");
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
 #[test]
 fn empty_script_resource_is_preserved() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;

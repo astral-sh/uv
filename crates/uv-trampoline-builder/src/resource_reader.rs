@@ -6,6 +6,7 @@
 
 use std::cmp::Ordering;
 use std::io::{self, BufReader, Read, Seek, SeekFrom, Take};
+use std::ops::Range;
 use std::path::Path;
 
 use editpe::constants::{PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE, PE_PTR_OFFSET};
@@ -216,13 +217,36 @@ impl Resources {
         let Some(data) = self.data_entry(name) else {
             return Ok(None);
         };
-        if data.size > 0 {
-            let Some(offset) = self.offset(data.data_rva, data.size) else {
-                return Ok(None);
-            };
-            self.file.seek(SeekFrom::Start(offset))?;
+        let offset = if data.size == 0 {
+            0
+        } else if let Some(offset) = self.offset(data.data_rva, data.size) {
+            offset
+        } else {
+            return Ok(None);
+        };
+        let size = u64::from(data.size);
+        if name == RESOURCE_SCRIPT_DATA && self.has_external_archive(offset..offset + size)? {
+            return Ok(None);
         }
-        Ok(Some((&mut self.file).take(u64::from(data.size))))
+        self.file.seek(SeekFrom::Start(offset))?;
+        Ok(Some((&mut self.file).take(size)))
+    }
+
+    /// Python searches for a ZIP in the entire executable, including its overlay.
+    /// A rewrite only copies the named payload, so decline an archive outside it.
+    fn has_external_archive(&mut self, payload: Range<u64>) -> io::Result<bool> {
+        // zipimport allows a 16-bit comment, a 22-byte end record and up to 76
+        // bytes of ZIP64 records. See CPython's Lib/zipimport.py (_read_directory).
+        const SEARCH_SIZE: usize = 65_535 + 22 + 76;
+        let len = usize::try_from(self.file_size)
+            .unwrap_or(usize::MAX)
+            .min(SEARCH_SIZE);
+        let start = self.file_size - len as u64;
+        let mut tail = vec![0; len];
+        self.file.seek(SeekFrom::Start(start))?;
+        self.file.read_exact(&mut tail)?;
+        Ok(archive_range(&tail, start)
+            .is_some_and(|archive| archive.start < payload.start || archive.end > payload.end))
     }
 
     pub(super) fn kind(&mut self) -> Result<Option<LauncherKind>, Error> {
@@ -245,6 +269,30 @@ impl Resources {
         data.read_to_end(&mut bytes)?;
         Ok((data.limit() == 0).then_some(bytes))
     }
+}
+
+/// Locate the last ZIP's start by subtracting the central directory size and
+/// its archive-relative offset from the position of the end record.
+fn archive_range(tail: &[u8], start: u64) -> Option<Range<u64>> {
+    let pos = tail
+        .windows(22)
+        .rposition(|record| record.starts_with(b"PK\x05\x06"))?;
+    let end = start + pos as u64 + 22;
+    let (header, size, offset) = if pos >= 76 && tail[pos - 76..].starts_with(b"PK\x06\x06") {
+        let record = &tail[pos - 76..pos];
+        let size = u64::read_from_bytes(&record[40..48]).ok()?;
+        let offset = u64::read_from_bytes(&record[48..56]).ok()?;
+        (pos - 76, size, offset)
+    } else {
+        let record = &tail[pos..];
+        let size = u32::read_from_bytes(&record[12..16]).ok()?;
+        let offset = u32::read_from_bytes(&record[16..20]).ok()?;
+        (pos, u64::from(size), u64::from(offset))
+    };
+    let base = (start + header as u64)
+        .saturating_sub(size)
+        .saturating_sub(offset);
+    Some(base..end)
 }
 
 /// Read the resource data directory and the sections used to resolve its addresses.
