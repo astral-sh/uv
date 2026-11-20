@@ -17,8 +17,8 @@ use windows::core::PCWSTR;
 
 use super::{
     Launcher, LauncherKind, RESOURCE_PYTHON_PATH, RESOURCE_SCRIPT_DATA, RESOURCE_TRAMPOLINE_KIND,
-    RT_RCDATA, WindowMode, get_launcher_bin, windows_python_launcher, windows_script_launcher,
-    write_resources,
+    RT_RCDATA, WindowMode, get_launcher_bin, script_archive, windows_python_launcher,
+    windows_script_launcher, write_resources,
 };
 
 /// Use the Windows resource editor as an independent reference for resource readback.
@@ -601,23 +601,40 @@ fn duplicate_script_names_are_rejected() -> Result<()> {
     Ok(())
 }
 
+/// A Python proxy doesn't pass itself to zipimport, even if it contains an archive.
+#[test]
+fn python_proxy_keeps_its_optional_payload() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("proxy.exe");
+    let mut bytes = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[2]),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            (RESOURCE_SCRIPT_DATA, b"optional payload"),
+        ],
+    )?;
+    bytes.extend(script_archive("print('appended')")?);
+    fs_err::write(path.path(), bytes)?;
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
+    assert_eq!(
+        launcher.script_data.as_deref(),
+        Some(b"optional payload".as_slice())
+    );
+    Ok(())
+}
+
 /// Python searches from the end of the file for a ZIP, including the PE overlay.
 #[test]
 fn appended_archive_is_not_rewritten() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
     let python = which::which("python")?;
-    let second = windows_script_launcher("print('appended')", false, &python)?;
-    fs_err::write(path.path(), second)?;
-    let archive = Launcher::try_from_path(path.path())?
-        .and_then(|launcher| launcher.script_data)
-        .context("Missing second archive")?;
-
     let mut bytes = windows_script_launcher("print('embedded')", false, &python)?;
     bytes.extend_from_slice(b"trailing data");
     fs_err::write(path.path(), &bytes)?;
     assert!(Launcher::try_from_path(path.path())?.is_some());
-    bytes.extend_from_slice(&archive);
+    bytes.extend(script_archive("print('appended')")?);
     fs_err::write(path.path(), bytes)?;
     Command::new(path.path())
         .assert()

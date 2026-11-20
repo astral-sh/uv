@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader, Read, Seek, SeekFrom, Take};
 use std::ops::Range;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use editpe::constants::{PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE, PE_PTR_OFFSET};
 use editpe::types::{
@@ -17,7 +17,10 @@ use editpe::types::{
 use fs_err::File;
 use zerocopy::FromBytes;
 
-use super::{Error, LauncherKind, RESOURCE_SCRIPT_DATA, RESOURCE_TRAMPOLINE_KIND, RT_RCDATA};
+use super::{
+    Error, Launcher, LauncherKind, RESOURCE_PYTHON_PATH, RESOURCE_SCRIPT_DATA,
+    RESOURCE_TRAMPOLINE_KIND, RT_RCDATA,
+};
 
 // The high bit distinguishes a string from an integer ID and a subdirectory from a leaf.
 const DIRECTORY_FLAG: u32 = 1 << 31;
@@ -28,16 +31,52 @@ enum Key<'a> {
     Name(&'a str),
 }
 
-enum Lookup {
-    Directory(u32),
+enum Lookup<T> {
+    Found(T),
     Missing,
+}
+
+struct Payload {
+    range: Range<u64>,
+    languages: u16,
+}
+
+pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
+    let Some(mut resources) = Resources::open(path) else {
+        return Ok(None);
+    };
+    let Some(kind) = resources.kind()? else {
+        return Ok(None);
+    };
+    let Some(Lookup::Found(path)) = resources.locate(RESOURCE_PYTHON_PATH) else {
+        return Ok(None);
+    };
+    let path_data = resources.read(path.range)?;
+    let python_path = PathBuf::from(
+        String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+    );
+    let script_data = match resources.locate(RESOURCE_SCRIPT_DATA) {
+        Some(Lookup::Missing) if kind == LauncherKind::Python => None,
+        Some(Lookup::Missing) | None => return Ok(None),
+        Some(Lookup::Found(payload)) => {
+            if kind == LauncherKind::Script && !resources.is_script_archive(&payload)? {
+                return Ok(None);
+            }
+            Some(resources.read(payload.range)?)
+        }
+    };
+    Ok(Some(Launcher {
+        kind,
+        python_path,
+        script_data,
+    }))
 }
 
 // Take tracks the cursor within the file length. Its absolute seeks use
 // seek_relative on the BufReader, retaining buffered bytes for nearby entries.
 type ImageFile = Take<BufReader<File>>;
 
-pub(super) struct Resources {
+struct Resources {
     file: ImageFile,
     file_size: u64,
     sections: Vec<SectionHeader>,
@@ -46,7 +85,7 @@ pub(super) struct Resources {
 }
 
 impl Resources {
-    pub(super) fn open(path: &Path) -> Option<Self> {
+    fn open(path: &Path) -> Option<Self> {
         let file = File::open(path).ok()?;
         let file_size = file.metadata().ok()?.len();
         if file_size < u64::from(PE_PTR_OFFSET) + 4 {
@@ -70,13 +109,13 @@ impl Resources {
             directory,
             rcdata: 0,
         };
-        let Lookup::Directory(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
+        let Lookup::Found(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
             return None;
         };
         resources.rcdata = rcdata;
         // With MUI configuration, FindResourceW can obtain a different target from
         // a language-specific sidecar. Only infer ownership from a standalone image.
-        if let Lookup::Directory(_) = resources.subdirectory(0, Key::Name("MUI"))? {
+        if let Lookup::Found(_) = resources.subdirectory(0, Key::Name("MUI"))? {
             return None;
         }
         Some(resources)
@@ -143,7 +182,7 @@ impl Resources {
     }
 
     /// Search the sorted names or IDs. Return `None` if the directory cannot be searched.
-    fn subdirectory(&mut self, table: u32, key: Key<'_>) -> Option<Lookup> {
+    fn subdirectory(&mut self, table: u32, key: Key<'_>) -> Option<Lookup<u32>> {
         let header: ResourceDirectoryTable = self.read_entry(table)?;
         let names = u32::from(header.number_of_name_entries);
         let mut range = match key {
@@ -168,7 +207,7 @@ impl Resources {
                         return None;
                     }
                     let offset = offset.checked_sub(DIRECTORY_FLAG)?;
-                    return Some(Lookup::Directory(offset));
+                    return Some(Lookup::Found(offset));
                 }
                 Ordering::Less => range.start = mid + 1,
                 Ordering::Greater => range.end = mid,
@@ -177,20 +216,15 @@ impl Resources {
         Some(Lookup::Missing)
     }
 
-    fn data_entry(&mut self, name: &str) -> Option<ResourceDataEntry> {
-        let Lookup::Directory(languages) = self.subdirectory(self.rcdata, Key::Name(name))? else {
-            return None;
+    fn locate(&mut self, name: &str) -> Option<Lookup<Payload>> {
+        let Lookup::Found(languages) = self.subdirectory(self.rcdata, Key::Name(name))? else {
+            return Some(Lookup::Missing);
         };
         let header: ResourceDirectoryTable = self.read_entry(languages)?;
         if header.number_of_name_entries != 0 || header.number_of_id_entries == 0 {
             return None;
         }
         let count = u32::from(header.number_of_id_entries);
-        // Python locates the ZIP from the end of the executable, independently
-        // of the language the Windows resource loader would select.
-        if name == RESOURCE_SCRIPT_DATA && count != 1 {
-            return None;
-        }
         self.seek_directory(languages + 16, 8 * count)?;
         let entry = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
         let mut language = u16::try_from(entry.name_offset_or_integer_id).ok()?;
@@ -214,33 +248,27 @@ impl Resources {
         if pos & DIRECTORY_FLAG != 0 {
             return None;
         }
-        self.read_entry(pos)
-    }
-
-    fn resource(&mut self, name: &str) -> io::Result<Option<Take<&mut ImageFile>>> {
-        let Some(data) = self.data_entry(name) else {
-            return Ok(None);
-        };
+        let data: ResourceDataEntry = self.read_entry(pos)?;
         let offset = if data.size == 0 {
             0
-        } else if let Some(offset) = self.offset(data.data_rva, data.size) {
-            offset
         } else {
-            return Ok(None);
+            self.offset(data.data_rva, data.size)?
         };
-        let size = u64::from(data.size);
-        if name == RESOURCE_SCRIPT_DATA
-            && let Some(archive) = self.last_archive()?
-            && (archive.start < offset || archive.end > offset + size)
-        {
-            return Ok(None);
-        }
-        self.file.seek(SeekFrom::Start(offset))?;
-        Ok(Some((&mut self.file).take(size)))
+        Some(Lookup::Found(Payload {
+            range: offset..offset + u64::from(data.size),
+            languages: header.number_of_id_entries,
+        }))
     }
 
-    /// Python searches for a ZIP in the entire executable, including its overlay.
-    /// A rewrite only copies the named payload, so decline an archive outside it.
+    /// For script launchers, Python searches for the ZIP independently of language.
+    /// The archive it finds in the executable must fit within the single named payload.
+    fn is_script_archive(&mut self, payload: &Payload) -> io::Result<bool> {
+        Ok(payload.languages == 1
+            && self.last_archive()?.is_none_or(|archive| {
+                archive.start >= payload.range.start && archive.end <= payload.range.end
+            }))
+    }
+
     fn last_archive(&mut self) -> io::Result<Option<Range<u64>>> {
         // zipimport allows a 16-bit comment, a 22-byte end record and up to 76
         // bytes of ZIP64 records. See CPython's Lib/zipimport.py (_read_directory).
@@ -267,25 +295,28 @@ impl Resources {
         Ok(archive_range(&tail, start))
     }
 
-    pub(super) fn kind(&mut self) -> Result<Option<LauncherKind>, Error> {
-        let Some(data) = self.resource(RESOURCE_TRAMPOLINE_KIND)? else {
+    fn kind(&mut self) -> Result<Option<LauncherKind>, Error> {
+        let Some(Lookup::Found(payload)) = self.locate(RESOURCE_TRAMPOLINE_KIND) else {
             return Ok(None);
         };
-        if data.limit() == 0 {
+        if payload.range.is_empty() {
             return Err(Error::UnprocessableMetadata);
         }
-        let value = u8::read_from_io(data)?;
+        self.file.seek(SeekFrom::Start(payload.range.start))?;
+        let value = u8::read_from_io(&mut self.file)?;
         let kind = LauncherKind::from_resource_value(value).ok_or(Error::UnprocessableMetadata)?;
         Ok(Some(kind))
     }
 
-    pub(super) fn read(&mut self, name: &str) -> io::Result<Option<Vec<u8>>> {
-        let Some(mut data) = self.resource(name)? else {
-            return Ok(None);
-        };
+    fn read(&mut self, range: Range<u64>) -> io::Result<Vec<u8>> {
+        self.file.seek(SeekFrom::Start(range.start))?;
+        let mut data = (&mut self.file).take(range.end - range.start);
         let mut bytes = Vec::new();
         data.read_to_end(&mut bytes)?;
-        Ok((data.limit() == 0).then_some(bytes))
+        if data.limit() > 0 {
+            return Err(io::ErrorKind::UnexpectedEof.into());
+        }
+        Ok(bytes)
     }
 }
 
