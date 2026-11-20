@@ -641,7 +641,7 @@ impl ManagedPythonInstallation {
             let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
                 return false;
             };
-            if !matches!(launcher.kind, LauncherKind::Python) {
+            if launcher.kind() != LauncherKind::Python {
                 return false;
             }
             // We canonicalize the target path of the launcher in case it includes a minor version

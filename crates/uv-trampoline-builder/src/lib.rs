@@ -54,12 +54,17 @@ const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 
 #[derive(Debug)]
 pub struct Launcher {
-    pub kind: LauncherKind,
+    kind: LauncherKind,
     pub python_path: PathBuf,
-    pub script_data: Option<Vec<u8>>,
+    script_data: Option<Vec<u8>>,
 }
 
 impl Launcher {
+    /// The kind of trampoline described by the launcher resources.
+    pub fn kind(&self) -> LauncherKind {
+        self.kind
+    }
+
     /// Attempt to read [`Launcher`] metadata from a trampoline executable file.
     ///
     /// On Unix, this always returns [`None`]. Trampolines are a Windows-specific feature and cannot

@@ -1349,7 +1349,7 @@ fn find_matching_bin_link<'a>(
         installations.find(|installation| installation.executable(false) == target)
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
-        if !matches!(launcher.kind, LauncherKind::Python) {
+        if launcher.kind() != LauncherKind::Python {
             return None;
         }
         let target = dunce::canonicalize(launcher.python_path).ok()?;
