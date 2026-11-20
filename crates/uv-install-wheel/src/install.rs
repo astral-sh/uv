@@ -50,7 +50,11 @@ fn wheel_destination<'layout>(
 ///
 /// Wheel 1.0: <https://www.python.org/dev/peps/pep-0427/>
 #[instrument(skip_all, fields(wheel = %filename))]
-pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
+pub fn install_wheel<
+    Cache: serde::Serialize,
+    Build: serde::Serialize,
+    Variant: serde::Serialize,
+>(
     layout: &Layout,
     relocatable: bool,
     wheel: impl AsRef<Path>,
@@ -58,6 +62,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
     direct_url: Option<&DirectUrl>,
     cache_info: Option<&Cache>,
     build_info: Option<&Build>,
+    variant_info: Option<&Variant>,
     installer: Option<&str>,
     installer_metadata: bool,
     link_mode: LinkMode,
@@ -155,6 +160,7 @@ pub fn install_wheel<Cache: serde::Serialize, Build: serde::Serialize>(
             direct_url,
             cache_info,
             build_info,
+            variant_info,
             installer,
             &mut record,
         )?;

@@ -5,7 +5,10 @@ use std::str::FromStr;
 use rustc_hash::FxHashMap;
 
 use uv_normalize::{ExtraName, GroupName, InvalidNameError, PackageName};
-use uv_pep508::{MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree};
+use uv_pep508::{
+    MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerVariant,
+    MarkerVariantsEnvironment,
+};
 use uv_pypi_types::{ConflictItem, ConflictKind, Conflicts, Inference};
 
 #[derive(Debug, thiserror::Error)]
@@ -383,8 +386,25 @@ impl UniversalMarker {
         E: Borrow<ExtraName>,
         G: Borrow<GroupName>,
     {
+        self.evaluate_with_variants(env, &MarkerVariant::Universal, projects, extras, groups)
+    }
+
+    /// Evaluate the marker for a selected wheel and activated projects, extras, and groups.
+    pub fn evaluate_with_variants<P, E, G>(
+        self,
+        env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
+        projects: impl Iterator<Item = P>,
+        extras: impl Iterator<Item = (P, E)>,
+        groups: impl Iterator<Item = (P, G)>,
+    ) -> bool
+    where
+        P: Borrow<PackageName>,
+        E: Borrow<ExtraName>,
+        G: Borrow<GroupName>,
+    {
         let activated = ActivatedConflictItems::new(projects, extras, groups);
-        self.evaluate_activated(env, &activated)
+        self.evaluate_activated_with_variants(env, variants, &activated)
     }
 
     /// Returns true if this universal marker is satisfied by an already encoded activated set.
@@ -393,7 +413,18 @@ impl UniversalMarker {
         env: &MarkerEnvironment,
         activated: &ActivatedConflictItems,
     ) -> bool {
-        self.marker.evaluate(env, &activated.0)
+        self.evaluate_activated_with_variants(env, &MarkerVariant::Universal, activated)
+    }
+
+    /// Evaluate the marker for a selected wheel and an already encoded activated set.
+    pub fn evaluate_activated_with_variants(
+        self,
+        env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
+        activated: &ActivatedConflictItems,
+    ) -> bool {
+        self.marker
+            .evaluate_with_variants(env, variants, &activated.0)
     }
 
     /// Returns true if the marker always evaluates to true if the given set of extras is activated.
@@ -455,6 +486,15 @@ impl UniversalMarker {
     /// conflict expressions. For example, given `sys_platform == 'linux' or extra == 'foo'`, the
     /// conflict marker is always true on Linux but still depends on `foo` elsewhere.
     pub fn conflict_for_environment(self, env: &MarkerEnvironment) -> ConflictMarker {
+        self.conflict_for_environment_with_variants(env, &MarkerVariant::Universal)
+    }
+
+    /// Keep conflict conditions after evaluating environment and selected-wheel markers.
+    pub fn conflict_for_environment_with_variants(
+        self,
+        env: &MarkerEnvironment,
+        variants: &impl MarkerVariantsEnvironment,
+    ) -> ConflictMarker {
         let mut remaining = MarkerTree::FALSE;
 
         'conjunctions: for conjunction in self.marker.to_dnf() {
@@ -465,7 +505,11 @@ impl UniversalMarker {
                         conflict = conflict.and(MarkerTree::expression(expression));
                     }
                     expression => {
-                        if !MarkerTree::expression(expression).evaluate(env, &[]) {
+                        if !MarkerTree::expression(expression).evaluate_with_variants(
+                            env,
+                            variants,
+                            &[],
+                        ) {
                             continue 'conjunctions;
                         }
                     }

@@ -12,7 +12,8 @@ use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
     CachedDist, ConfigSettings, DependencyMetadata, DistributionId, ExtraBuildRequires,
     ExtraBuildVariables, IndexCapabilities, IndexLocations, InstalledDist, IsBuildBackendError,
-    PackageConfigSettings, Requirement, SourceDist,
+    PackageConfigSettings, PluginVariantFeature, Requirement, SourceDist, VariantPolicy,
+    VariantProviderOptIn,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -102,6 +103,18 @@ pub trait BuildContext {
 
     /// Return a reference to the cache.
     fn cache(&self) -> &Cache;
+
+    /// User policy for wheel variant providers.
+    fn variant_policy(&self) -> Option<&VariantPolicy>;
+
+    /// Query an explicitly enabled PEP 850 provider in an isolated environment.
+    fn query_variant_provider<'a>(
+        &'a self,
+        requires: &'a [String],
+        plugin_api: Option<&'a str>,
+        opt_in: &'a VariantProviderOptIn,
+        require_hashes: bool,
+    ) -> impl Future<Output = anyhow::Result<Option<Vec<PluginVariantFeature>>>> + 'a;
 
     /// Return a reference to the Git resolver.
     fn git(&self) -> &GitResolver;
@@ -335,15 +348,30 @@ impl Deref for AnyErrorBuild {
 
 /// The stack of packages being built.
 #[derive(Debug, Clone, Default)]
-pub struct BuildStack(FxHashSet<DistributionId>);
+pub struct BuildStack {
+    distributions: FxHashSet<DistributionId>,
+    variant_provider: bool,
+}
 
 impl BuildStack {
     pub fn contains(&self, id: &DistributionId) -> bool {
-        self.0.contains(id)
+        self.distributions.contains(id)
     }
 
     /// Push a package onto the stack.
     pub fn insert(&mut self, id: DistributionId) -> bool {
-        self.0.insert(id)
+        self.distributions.insert(id)
+    }
+
+    /// Mark this dependency resolution as a variant provider installation.
+    pub fn for_variant_provider() -> Self {
+        Self {
+            variant_provider: true,
+            ..Self::default()
+        }
+    }
+
+    pub fn is_variant_provider(&self) -> bool {
+        self.variant_provider
     }
 }

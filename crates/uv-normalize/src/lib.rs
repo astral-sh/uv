@@ -4,7 +4,9 @@ use std::fmt::{Display, Formatter};
 pub use extra_name::{DefaultExtras, ExtraName};
 pub use group_name::{DEV_DEPENDENCIES, DefaultGroups, GroupName, PipGroupName};
 pub use package_name::PackageName;
-pub use variant::{InvalidVariantComponent, VariantFeature, VariantNamespace, VariantValue};
+pub use variant::{
+    InvalidVariantComponent, VariantFeature, VariantNamespace, VariantProperties, VariantValue,
+};
 
 use uv_small_str::SmallString;
 

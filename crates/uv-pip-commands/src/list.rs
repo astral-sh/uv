@@ -15,9 +15,10 @@ use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::ListFormat;
 use uv_configuration::{Concurrency, IndexStrategy, KeyringProviderType};
-use uv_distribution_filename::DistFilename;
+use uv_distribution_filename::{DistFilename, VariantLabel};
 use uv_distribution_types::{
-    DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, Name, RequiresPython,
+    DependencyMetadata, Diagnostic, IndexCapabilities, IndexLocations, InstalledDist, Name,
+    RequiresPython,
 };
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
@@ -187,6 +188,7 @@ pub async fn pip_list(
                 .map(|dist| Entry {
                     name: dist.name().clone(),
                     version: dist.version().clone(),
+                    variant: variant_label(dist),
                     latest_version: latest
                         .get(dist.name())
                         .and_then(|filename| filename.as_ref())
@@ -225,6 +227,17 @@ pub async fn pip_list(
                         .collect_vec(),
                 },
             ];
+
+            let variants = results.iter().map(|dist| variant_label(dist)).collect_vec();
+            if variants.iter().any(Option::is_some) {
+                columns.push(Column {
+                    header: String::from("Variant"),
+                    rows: variants
+                        .into_iter()
+                        .map(|variant| variant.map_or_else(String::new, |label| label.to_string()))
+                        .collect_vec(),
+                });
+            }
 
             // The latest version and type are only displayed if outdated.
             if outdated {
@@ -359,11 +372,20 @@ struct Entry {
     name: PackageName,
     version: Version,
     #[serde(skip_serializing_if = "Option::is_none")]
+    variant: Option<VariantLabel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     latest_version: Option<Version>,
     #[serde(skip_serializing_if = "Option::is_none")]
     latest_filetype: Option<FileType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     editable_project_location: Option<String>,
+}
+
+fn variant_label(dist: &InstalledDist) -> Option<VariantLabel> {
+    dist.read_variant()
+        .ok()
+        .flatten()
+        .and_then(|metadata| metadata.wheel_label().cloned())
 }
 
 /// A column in a table.
