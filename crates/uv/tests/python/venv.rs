@@ -1502,6 +1502,26 @@ fn create_venv_unknown_python_minor() {
     context.venv.assert(predicates::path::missing());
 }
 
+/// The hint for a range request must quote it, or the shell treats `<` and `>` as redirections.
+#[test]
+fn create_venv_python_downloads_manual_range_hint() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_python_sources();
+
+    uv_snapshot!(context.filters(), context.venv()
+        .arg(context.venv.as_os_str())
+        .arg("--python")
+        .arg(">=3.11, <3.12")
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "manual"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found for Python >=3.11, <3.12 in [PYTHON SOURCES]
+
+    hint: A managed Python download is available for Python >=3.11, <3.12, but Python downloads are set to 'manual', use `uv python install '>=3.11, <3.12'` to install the required version
+    ");
+
+    context.venv.assert(predicates::path::missing());
+}
+
 #[test]
 fn create_venv_unknown_python_patch() {
     let context = uv_test::test_context_with_versions!(&["3.12"]).with_filtered_python_sources();
