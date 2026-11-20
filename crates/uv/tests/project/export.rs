@@ -14342,8 +14342,7 @@ fn frozen_lockfile_root_default_groups() -> Result<()> {
     ]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `workspace:docs` in `uv.lock`).
+    error: The requested Python version `3.12` is incompatible with the project's Python requirement: `>=3.13` (from `workspace:docs` in `uv.lock`).
     ");
 
     // Revision 5 infers the dev default when it is omitted from the manifest.
@@ -14383,8 +14382,7 @@ fn frozen_lockfile_root_default_groups() -> Result<()> {
     ]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
-    error: The requested interpreter resolved to Python 3.12.[X], which is incompatible with the project's Python requirement: `>=3.13` (from `workspace:dev` in `uv.lock`).
+    error: The requested Python version `3.12` is incompatible with the project's Python requirement: `>=3.13` (from `workspace:dev` in `uv.lock`).
     ");
 
     Ok(())

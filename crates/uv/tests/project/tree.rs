@@ -157,8 +157,7 @@ fn tree_lockfile_incompatible_python() -> Result<()> {
         .args(["--frozen", "--preview-features", "frozen-lockfile", "--python", "3.13"]), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using CPython 3.13.[X] interpreter at: [PYTHON-3.13]
-    error: The requested interpreter resolved to Python 3.13.[X], which is incompatible with the project's Python requirement: `==3.12.*` (from `requires-python` in `uv.lock`).
+    error: The requested Python version `3.13` is incompatible with the project's Python requirement: `==3.12.*` (from `requires-python` in `uv.lock`).
     ");
     Ok(())
 }

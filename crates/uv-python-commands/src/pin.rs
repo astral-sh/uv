@@ -139,6 +139,22 @@ pub async fn pin(
         bail!("Requests for arbitrary names (e.g., `{name}`) are not supported in version files");
     }
 
+    // Reject a concrete version that cannot satisfy the project before discovering or downloading it.
+    let request_version = request.as_pep440_version();
+    if let Some(virtual_project) = &virtual_project
+        && let Some(request_version) = &request_version
+    {
+        assert_pin_compatible_with_project(
+            &Pin {
+                request: &request,
+                version: request_version,
+                resolved: false,
+                existing: false,
+            },
+            virtual_project,
+        )?;
+    }
+
     let reporter = PythonDownloadReporter::single(printer);
 
     let python = match PythonInstallation::find_or_download(
@@ -171,35 +187,24 @@ pub async fn pin(
         Err(err) => return Err(err.into()),
     };
 
-    if let Some(virtual_project) = &virtual_project {
-        if let Some(request_version) = request.as_pep440_version() {
-            assert_pin_compatible_with_project(
-                &Pin {
-                    request: &request,
-                    version: &request_version,
-                    resolved: false,
-                    existing: false,
-                },
-                virtual_project,
-            )?;
-        } else {
-            if let Some(python) = &python {
-                // Warn if the resolved Python is incompatible with the Python requirement unless --resolved is used
-                if let Err(err) = assert_pin_compatible_with_project(
-                    &Pin {
-                        request: &request,
-                        version: python.python_version(),
-                        resolved: true,
-                        existing: false,
-                    },
-                    virtual_project,
-                ) {
-                    if resolved {
-                        return Err(err);
-                    }
-                    warn_user_once!("{err}");
-                }
+    if let Some(virtual_project) = &virtual_project
+        && request_version.is_none()
+        && let Some(python) = &python
+    {
+        // Warn if the resolved Python is incompatible with the Python requirement unless --resolved is used
+        if let Err(err) = assert_pin_compatible_with_project(
+            &Pin {
+                request: &request,
+                version: python.python_version(),
+                resolved: true,
+                existing: false,
+            },
+            virtual_project,
+        ) {
+            if resolved {
+                return Err(err);
             }
+            warn_user_once!("{err}");
         }
     }
 

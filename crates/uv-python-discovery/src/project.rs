@@ -13,7 +13,7 @@ use uv_client::BaseClientBuilder;
 use uv_configuration::DependencyGroupsWithDefaults;
 use uv_distribution_types::RequiresPython;
 use uv_fs::Simplified;
-use uv_pep440::TildeVersionSpecifier;
+use uv_pep440::{TildeVersionSpecifier, Version, VersionSpecifiers};
 use uv_python_interpreter::{Interpreter, RequestedInterpreter};
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloads, PythonPreference, PythonRequest,
@@ -185,11 +185,86 @@ impl ProjectPythonRequest {
             return Ok(());
         };
         validate_python_requirement(
-            interpreter,
+            interpreter.python_version(),
             &requirement.requires_python,
             &self.source,
             &requirement.source,
         )
+    }
+
+    /// Check the Python request against the stored project and selected group requirements.
+    ///
+    /// Requests with version constraints that cannot satisfy the requirement are rejected before
+    /// discovery, so callers can avoid installing an incompatible interpreter. The selected
+    /// interpreter is still checked by [`Self::validate`], since an inexact request can resolve to
+    /// an incompatible interpreter.
+    pub fn check_request(&self) -> Result<(), PythonSelectionError> {
+        let Some(requirement) = &self.requirement else {
+            return Ok(());
+        };
+        let Some(request) = &self.python_request else {
+            return Ok(());
+        };
+        if request.intersects_specifiers(requirement.requires_python.specifiers()) {
+            return Ok(());
+        }
+
+        let conflicting_requires = conflicting_requires(&requirement.source, |specifiers| {
+            request.intersects_specifiers(specifiers)
+        });
+        let request = request.to_canonical_string().into_owned();
+        match &self.source {
+            PythonRequestSource::DotPythonVersion(file) => Err(
+                PythonSelectionError::DotPythonVersionRequestProjectIncompatibility {
+                    python_request: file.path().user_display().to_string(),
+                    request,
+                    requires_python: Box::new(requirement.requires_python.clone()),
+                    requires_python_sources: Box::new(conflicting_requires),
+                },
+            ),
+            PythonRequestSource::UserRequest => Err(
+                PythonSelectionError::RequestedPythonVersionProjectIncompatibility {
+                    request,
+                    requires_python: Box::new(requirement.requires_python.clone()),
+                    requires_python_sources: Box::new(conflicting_requires),
+                },
+            ),
+            // A request derived from `requires-python` always intersects the requirement.
+            PythonRequestSource::RequiresPython => Ok(()),
+        }
+    }
+
+    /// Check the request before downloading an interpreter unless one is already installed.
+    ///
+    /// Callers that may reuse an existing environment should let an installed interpreter reach
+    /// discovery even when its request cannot satisfy the project requirement. Without one, the
+    /// request is rejected before downloading.
+    pub fn check_request_if_missing(
+        &self,
+        environment_preference: EnvironmentPreference,
+        python_preference: PythonPreference,
+        python_arch: Option<PythonArchitecture>,
+        cache: &Cache,
+    ) -> Result<(), PythonSelectionError> {
+        let Err(err) = self.check_request() else {
+            return Ok(());
+        };
+        let request = self
+            .python_request
+            .as_ref()
+            .unwrap_or(&PythonRequest::Default);
+        if PythonInstallation::find_existing(
+            request,
+            environment_preference,
+            python_preference,
+            python_arch,
+            cache,
+        )
+        .is_ok()
+        {
+            return Ok(());
+        }
+        Err(err)
     }
 
     /// Validate a discovered interpreter before accepting it for a new project environment.
@@ -221,6 +296,7 @@ impl ProjectPythonRequest {
         reporter: &PythonDownloadReporter,
         install_mirrors: &PythonInstallMirrors,
     ) -> Result<CompatibleProjectPython, PythonSelectionError> {
+        self.check_request()?;
         let interpreter = PythonInstallation::find_or_download(
             self.python_request.as_ref(),
             environment_preference,
@@ -398,27 +474,72 @@ pub enum PythonRequirementSource {
     },
 }
 
-/// Returns an error if the [`Interpreter`] does not satisfy `requires_python`.
+/// Returns an error if `version` does not satisfy `requires_python`.
 ///
 /// The requirement source determines which conflicting declarations are included in the diagnostic.
 fn validate_python_requirement(
-    interpreter: &Interpreter,
+    version: &Version,
     requires_python: &RequiresPython,
     source: &PythonRequestSource,
     requirement_source: &PythonRequirementSource,
 ) -> Result<(), PythonSelectionError> {
-    if requires_python.contains(interpreter.python_version()) {
+    if requires_python.contains(version) {
         return Ok(());
     }
 
     let conflicting_requires = match requirement_source {
+        PythonRequirementSource::Workspace { .. } => {
+            conflicting_requires(requirement_source, |specifiers| {
+                specifiers.contains(version)
+            })
+        }
+        PythonRequirementSource::Lockfile { .. } => {
+            let version = version.only_release();
+            conflicting_requires(requirement_source, |specifiers| {
+                specifiers.contains(&version)
+            })
+        }
+    };
+
+    match source {
+        PythonRequestSource::UserRequest => {
+            Err(PythonSelectionError::RequestedPythonProjectIncompatibility(
+                version.clone(),
+                requires_python.clone(),
+                Box::new(conflicting_requires),
+            ))
+        }
+        PythonRequestSource::DotPythonVersion(file) => Err(
+            PythonSelectionError::DotPythonVersionProjectIncompatibility {
+                python_request: file.path().user_display().to_string(),
+                version: version.clone(),
+                requires_python: requires_python.clone(),
+                requires_python_sources: Box::new(conflicting_requires),
+            },
+        ),
+        PythonRequestSource::RequiresPython => {
+            Err(PythonSelectionError::RequiresPythonProjectIncompatibility(
+                version.clone(),
+                requires_python.clone(),
+                Box::new(conflicting_requires),
+            ))
+        }
+    }
+}
+
+/// Collect the requirement declarations that do not accept any version allowed by `accepts`.
+fn conflicting_requires(
+    requirement_source: &PythonRequirementSource,
+    accepts: impl Fn(&VersionSpecifiers) -> bool,
+) -> PythonRequirementConflicts {
+    match requirement_source {
         PythonRequirementSource::Workspace {
             sources,
             multiple_members,
         } => {
             let sources = sources
                 .iter()
-                .filter(|(.., requires)| !requires.contains(interpreter.python_version()))
+                .filter(|(.., requires)| !accepts(requires))
                 .map(|(key, requires)| (key.clone(), requires.clone()))
                 .collect();
             PythonRequirementConflicts::Workspace {
@@ -427,41 +548,15 @@ fn validate_python_requirement(
             }
         }
         PythonRequirementSource::Lockfile { locked, groups } => {
-            let version = interpreter.python_version().only_release();
             let groups = groups
                 .iter()
-                .filter(|(_, requires)| !requires.contains(&version))
+                .filter(|(_, requires)| !accepts(requires))
                 .map(|(key, requires)| (key.clone(), requires.clone()))
                 .collect();
             PythonRequirementConflicts::Lockfile {
-                locked: (!locked.contains(interpreter.python_version())).then(|| locked.clone()),
+                locked: (!accepts(locked.specifiers())).then(|| locked.clone()),
                 groups,
             }
-        }
-    };
-
-    match source {
-        PythonRequestSource::UserRequest => {
-            Err(PythonSelectionError::RequestedPythonProjectIncompatibility(
-                interpreter.python_version().clone(),
-                requires_python.clone(),
-                Box::new(conflicting_requires),
-            ))
-        }
-        PythonRequestSource::DotPythonVersion(file) => Err(
-            PythonSelectionError::DotPythonVersionProjectIncompatibility {
-                python_request: file.path().user_display().to_string(),
-                version: interpreter.python_version().clone(),
-                requires_python: requires_python.clone(),
-                requires_python_sources: Box::new(conflicting_requires),
-            },
-        ),
-        PythonRequestSource::RequiresPython => {
-            Err(PythonSelectionError::RequiresPythonProjectIncompatibility(
-                interpreter.python_version().clone(),
-                requires_python.clone(),
-                Box::new(conflicting_requires),
-            ))
         }
     }
 }
