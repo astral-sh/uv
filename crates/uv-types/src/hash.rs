@@ -188,25 +188,27 @@ impl HashStrategy {
         }
     }
 
-    /// Construct an identity only when verification requires a lookup.
     fn validation_for_id(&self, id: impl FnOnce() -> VersionId) -> HashValidation<'_> {
-        match &self.verification {
-            HashVerification::IfPresent(_) => {
-                let id = id();
-                if let Some(hashes) = self.hashes_for_id(&id) {
-                    return hash_validation(&id, hashes);
-                }
-            }
-            HashVerification::Required(hashes) => {
-                let id = id();
-                return hash_validation(
-                    &id,
-                    hashes.get(&id).map(Vec::as_slice).unwrap_or_default(),
-                );
-            }
-            HashVerification::Unspecified => {}
+        match self.lookup_for_verification(id) {
+            Some((id, hashes)) => hash_validation(&id, hashes),
+            None => HashValidation::None,
         }
-        HashValidation::None
+    }
+
+    /// Construct an identity only when verification requires a lookup.
+    fn lookup_for_verification(
+        &self,
+        id: impl FnOnce() -> VersionId,
+    ) -> Option<(VersionId, &[HashDigest])> {
+        let missing: Option<&[HashDigest]> = match self.verification {
+            HashVerification::Unspecified => return None,
+            HashVerification::IfPresent(_) => None,
+            // An empty list rejects every archive when a hash is required.
+            HashVerification::Required(_) => Some(&[]),
+        };
+        let id = id();
+        let hashes = self.hashes_for_id(&id).or(missing)?;
+        Some((id, hashes))
     }
 
     /// Look up supplied hashes, including public-version pins in verification mode.
