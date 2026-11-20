@@ -112,7 +112,7 @@ jobs:
       security-events: write
 
   check-actions-lock:
-    name: "check | zizmor"
+    name: "check | gh actions-lock"
     needs: plan
     if: ${{ needs.plan.outputs.run-checks == 'true' }}
     uses: $/.github/workflows/check-gh-actions-lock.yml
