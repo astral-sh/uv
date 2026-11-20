@@ -27,6 +27,11 @@ enum Key<'a> {
     Name(&'a str),
 }
 
+enum Lookup {
+    Directory(u32),
+    Missing,
+}
+
 pub(super) struct Resources {
     file: BufReader<File>,
     file_size: u64,
@@ -60,7 +65,15 @@ impl Resources {
             directory,
             rcdata: 0,
         };
-        resources.rcdata = resources.subdirectory(0, Key::Id(RT_RCDATA))?;
+        let Lookup::Directory(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
+            return None;
+        };
+        resources.rcdata = rcdata;
+        // With MUI configuration, FindResourceW can obtain a different target from
+        // a language-specific sidecar. Only infer ownership from a standalone image.
+        if let Lookup::Directory(_) = resources.subdirectory(0, Key::Name("MUI"))? {
+            return None;
+        }
         Some(resources)
     }
 
@@ -115,8 +128,8 @@ impl Resources {
         Some(usize::from(length).cmp(&name.encode_utf16().count()))
     }
 
-    /// Search just the sorted names or IDs in one directory.
-    fn subdirectory(&mut self, table: u32, key: Key<'_>) -> Option<u32> {
+    /// Search the sorted names or IDs. Return `None` if the directory cannot be searched.
+    fn subdirectory(&mut self, table: u32, key: Key<'_>) -> Option<Lookup> {
         let header: ResourceDirectoryTable = self.read_entry(table)?;
         let names = u32::from(header.number_of_name_entries);
         let mut range = match key {
@@ -132,19 +145,22 @@ impl Resources {
             };
             match order {
                 Ordering::Equal => {
-                    return entry
+                    let offset = entry
                         .data_entry_or_subdirectory_offset
-                        .checked_sub(DIRECTORY_FLAG);
+                        .checked_sub(DIRECTORY_FLAG)?;
+                    return Some(Lookup::Directory(offset));
                 }
                 Ordering::Less => range.start = mid + 1,
                 Ordering::Greater => range.end = mid,
             }
         }
-        None
+        Some(Lookup::Missing)
     }
 
     fn resource(&mut self, name: &str) -> Option<Take<&mut BufReader<File>>> {
-        let languages = self.subdirectory(self.rcdata, Key::Name(name))?;
+        let Lookup::Directory(languages) = self.subdirectory(self.rcdata, Key::Name(name))? else {
+            return None;
+        };
         let header: ResourceDirectoryTable = self.read_entry(languages)?;
         if header.number_of_name_entries != 0 || header.number_of_id_entries == 0 {
             return None;

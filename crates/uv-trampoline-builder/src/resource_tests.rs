@@ -5,7 +5,7 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::PathChild;
-use editpe::{Image, ResourceEntry, ResourceEntryName};
+use editpe::{Image, ResourceEntry, ResourceEntryName, ResourceTable};
 use fs_err::File;
 use goblin::pe::{
     PE, options::ParseOptions, resource::ResourceEntry as DirectoryEntry, utils::find_offset,
@@ -339,6 +339,28 @@ fn deeply_nested_unrelated_resource() -> Result<()> {
         table[20..24].copy_from_slice(&next.to_le_bytes());
     }
     fs_err::write(path.path(), &launcher)?;
+
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+/// MUI configuration permits the loader to obtain the Python path from a sidecar.
+#[test]
+fn mui_configuration_precludes_launcher_identification() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let launcher = windows_python_launcher("C:/Python312/python.exe", WindowMode::Console)?;
+    let mut image = Image::parse(launcher)?;
+    let mut resources = image
+        .resource_directory()
+        .context("Missing resources")?
+        .clone();
+    resources.root_mut().insert(
+        ResourceEntryName::from_string("MUI"),
+        ResourceEntry::Table(ResourceTable::default()),
+    );
+    image.set_resource_directory(resources)?;
+    fs_err::write(path.path(), image.data())?;
 
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
