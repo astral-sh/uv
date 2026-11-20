@@ -398,7 +398,7 @@ pub async fn check(
 
         let lock_target = LockTarget::Script(script);
         // Scripts always run in an isolated environment, so `--no-sync` has no effect.
-        let _environment_lock = venv
+        let environment_lock = venv
             .lock()
             .await
             .inspect_err(|err| {
@@ -467,6 +467,7 @@ pub async fn check(
             Ok(_) => {}
             Err(err) => return Err(UvError::from(err).into()),
         }
+        drop(environment_lock);
 
         if no_sync {
             warn_user!(
