@@ -95,12 +95,16 @@ impl Resources {
     }
 
     /// Table and name offsets are relative to the directory, whereas data entries carry RVAs.
-    fn seek_directory(&mut self, pos: u32, size: u32) -> Option<()> {
+    fn directory_offset(&self, pos: u32, size: u32) -> Option<u64> {
         if pos.checked_add(size)? > self.directory.size {
             return None;
         }
         let rva = self.directory.virtual_address.checked_add(pos)?;
-        let offset = self.offset(rva, size)?;
+        self.offset(rva, size)
+    }
+
+    fn seek_directory(&mut self, pos: u32, size: u32) -> Option<()> {
+        let offset = self.directory_offset(pos, size)?;
         self.file.seek(SeekFrom::Start(offset)).ok()?;
         Some(())
     }
@@ -123,7 +127,7 @@ impl Resources {
     fn compare_name(&mut self, offset: u32, name: &str) -> Option<Ordering> {
         let pos = offset.checked_sub(DIRECTORY_FLAG)?;
         let length = self.read_entry::<u16>(pos)?;
-        self.seek_directory(pos + 2, u32::from(length) * 2)?;
+        self.directory_offset(pos, 2 + u32::from(length) * 2)?;
         for expected in name.encode_utf16().take(usize::from(length)) {
             let order = u16::read_from_io(&mut self.file).ok()?.cmp(&expected);
             if order != Ordering::Equal {
