@@ -936,7 +936,7 @@ fn unpaired_surrogate_in_target_is_rejected() {
 fn interpreter_lookup_limits_path_allocation() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
-    let mut python = "界".repeat(32_767);
+    let python = "界".repeat(32_767);
     fs_err::write(
         path.path(),
         windows_python_launcher(&python, WindowMode::Console)?,
@@ -944,11 +944,10 @@ fn interpreter_lookup_limits_path_allocation() -> Result<()> {
     let (_, target) = super::read_launcher_target(path.path())?.context("Missing Python proxy")?;
     assert_eq!(target, temp_dir.path().join(&python));
 
-    python.push('x');
     // Exceed the limit by one byte that would cause a UTF-8 decoding error
     // if the reader didn't reject the declared size first.
     let mut payload = python.into_bytes();
-    *payload.last_mut().unwrap() = 0xff;
+    payload.push(0xff);
     fs_err::write(
         path.path(),
         write_resources(
