@@ -178,8 +178,9 @@ fn resource_file_offset(image: &PE<'_>) -> Result<usize> {
     .context("Missing resource file offset")
 }
 
-/// Locate the first named RCDATA entry, which is the Python path in these fixtures.
-fn path_resource(launcher: &[u8]) -> Result<(usize, DirectoryEntry)> {
+fn named_resource(launcher: &[u8], key: &str) -> Result<(usize, DirectoryEntry)> {
+    use goblin::pe::resource::ImageResourceDirectory;
+
     let image = PE::parse(launcher)?;
     let offset = resource_file_offset(&image)?;
     let rcdata = image
@@ -188,20 +189,35 @@ fn path_resource(launcher: &[u8]) -> Result<(usize, DirectoryEntry)> {
         .entries()
         .find_by_id(u16::try_from(RT_RCDATA)?)?
         .context("Missing RCDATA entry")?;
-    let name = rcdata
-        .next_depth(&launcher[offset..])?
-        .context("Missing named resource")?;
-    assert!(name.name_is_string());
-    let start = offset + usize::try_from(name.name_offset())?;
-    let ResourceEntryName::Name(expected) = ResourceEntryName::from_string(RESOURCE_PYTHON_PATH)
-    else {
+    let header = image
+        .header
+        .optional_header
+        .context("Missing PE optional header")?;
+    let mut directory = *header
+        .data_directories
+        .get_resource_table()
+        .context("Missing resource directory")?;
+    directory.virtual_address += rcdata.offset_to_directory();
+    let table = ImageResourceDirectory::parse(
+        launcher,
+        directory,
+        &image.sections,
+        header.windows_fields.file_alignment,
+    )?;
+    let entries = offset
+        + usize::try_from(rcdata.offset_to_directory())?
+        + size_of::<ImageResourceDirectory>();
+    let ResourceEntryName::Name(expected) = ResourceEntryName::from_string(key) else {
         unreachable!();
     };
-    assert!(
-        launcher[start..].starts_with(&expected),
-        "Expected {RESOURCE_PYTHON_PATH}"
-    );
-    Ok((offset, name))
+    for name in table.next_iter(entries, launcher)? {
+        let name = name?;
+        let start = offset + usize::try_from(name.name_offset())?;
+        if name.name_is_string() && launcher[start..].starts_with(&expected) {
+            return Ok((offset, name));
+        }
+    }
+    anyhow::bail!("Missing resource {key}")
 }
 
 /// A PE resource size is untrusted even when the Windows loader accepts the image.
@@ -209,23 +225,16 @@ fn path_resource(launcher: &[u8]) -> Result<(usize, DirectoryEntry)> {
 fn oversized_resource_is_rejected() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
-    let python_path = b"C:/Python312/python.exe";
-    let mut launcher = write_resources(
-        get_launcher_bin(false)?,
-        &[
-            (RESOURCE_TRAMPOLINE_KIND, &[2]),
-            (RESOURCE_PYTHON_PATH, python_path),
-        ],
-    )?;
+    let mut launcher = windows_python_launcher("python.exe", WindowMode::Console)?;
     fs_err::write(path.path(), &launcher)?;
     assert_eq!(
         Launcher::try_from_path(path.path())?
             .context("Missing launcher metadata")?
-            .python_path(),
-        Path::new("C:/Python312/python.exe"),
+            .kind,
+        LauncherKind::Python,
     );
 
-    let (resource_offset, name) = path_resource(&launcher)?;
+    let (resource_offset, name) = named_resource(&launcher, RESOURCE_TRAMPOLINE_KIND)?;
     let language = name
         .next_depth(&launcher[resource_offset..])?
         .context("Missing resource language")?;
@@ -237,11 +246,11 @@ fn oversized_resource_is_rejected() -> Result<()> {
         )?;
     let size_offset = entry_offset + 4;
     assert_eq!(
-        u32::from_le_bytes(launcher[size_offset..size_offset + 4].try_into()?) as usize,
-        python_path.len(),
+        u32::from_le_bytes(launcher[size_offset..size_offset + 4].try_into()?),
+        1,
     );
-    // The path starts inside the resource section. Claim one byte past its
-    // raw data, keeping the full extent on disk and below the path size limit.
+    // The kind is decoded from its first byte. Extend its range one byte
+    // past the section while keeping the entire range in the file.
     let image = PE::parse(&launcher)?;
     let section = image
         .sections
@@ -251,7 +260,6 @@ fn oversized_resource_is_rejected() -> Result<()> {
     let rva = u32::from_le_bytes(launcher[entry_offset..size_offset].try_into()?);
     let delta = rva - section.virtual_address;
     let size = section.size_of_raw_data - delta + 1;
-    assert!(usize::try_from(size)? < super::MAX_PYTHON_PATH_BYTES);
     launcher.push(0);
     assert!(resource_offset + usize::try_from(delta + size)? <= launcher.len());
     launcher[size_offset..size_offset + 4].copy_from_slice(&size.to_le_bytes());
@@ -492,7 +500,7 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
 
     // A binary search can find the second neutral entry when IDs are duplicated.
     let mut neutral = fs_err::read(path.path())?;
-    let (offset, name) = path_resource(&neutral)?;
+    let (offset, name) = named_resource(&neutral, RESOURCE_PYTHON_PATH)?;
     let second = offset + usize::try_from(name.offset_to_directory())? + 16 + 8;
     assert_eq!(&neutral[second..second + 4], &0x0407_u32.to_le_bytes());
     neutral[second..second + 4].fill(0);
