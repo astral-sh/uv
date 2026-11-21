@@ -24,6 +24,16 @@ use super::{
 
 // The high bit distinguishes a string from an integer ID and a subdirectory from a leaf.
 const DIRECTORY_FLAG: u32 = 1 << 31;
+const TABLE_SIZE: u32 = pe_size::<ResourceDirectoryTable>();
+const ENTRY_SIZE: u32 = pe_size::<ResourceDirectoryEntry>();
+
+const fn pe_size<T>() -> u32 {
+    const { assert!(size_of::<T>() <= u32::MAX as usize) }
+    #[expect(clippy::cast_possible_truncation, reason = "checked at compile time")]
+    {
+        size_of::<T>() as u32
+    }
+}
 
 #[derive(Clone, Copy)]
 enum Key<'a> {
@@ -171,12 +181,12 @@ impl Resources {
     }
 
     fn read_entry<T: FromBytes>(&mut self, pos: u32) -> Option<T> {
-        self.seek_directory(pos, u32::try_from(size_of::<T>()).ok()?)?;
+        self.seek_directory(pos, pe_size::<T>())?;
         T::read_from_io(&mut self.file).ok()
     }
 
     fn compare_entry(&mut self, table: u32, index: u32, key: Key<'_>) -> Option<(Ordering, u32)> {
-        let pos = table.checked_add(16 + 8 * index)?;
+        let pos = table.checked_add(TABLE_SIZE + ENTRY_SIZE * index)?;
         let entry: ResourceDirectoryEntry = self.read_entry(pos)?;
         let order = match key {
             Key::Id(id) => entry.name_offset_or_integer_id.cmp(&id),
@@ -245,7 +255,7 @@ impl Resources {
         if matches!(policy, Languages::Single) && count > 1 {
             return None;
         }
-        self.seek_directory(languages + 16, 8 * count)?;
+        self.seek_directory(languages + TABLE_SIZE, ENTRY_SIZE * count)?;
         let entry = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
         let mut language = u16::try_from(entry.name_offset_or_integer_id).ok()?;
         // uv writes neutral resources. With several localized variants and no neutral
