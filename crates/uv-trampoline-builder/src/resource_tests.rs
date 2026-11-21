@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::PathChild;
 use editpe::{Image, ResourceEntry, ResourceEntryName, ResourceTable};
+use fs_err::File;
 use goblin::pe::{
     PE, options::ParseOptions, resource::ResourceEntry as DirectoryEntry, utils::find_offset,
 };
@@ -16,8 +17,8 @@ use windows::core::PCWSTR;
 
 use super::{
     Launcher, LauncherKind, RESOURCE_PYTHON_PATH, RESOURCE_SCRIPT_DATA, RESOURCE_TRAMPOLINE_KIND,
-    RT_RCDATA, WindowMode, get_launcher_bin, script_archive, windows_python_launcher,
-    windows_script_launcher, write_resources,
+    RT_RCDATA, WindowMode, get_launcher_bin, windows_python_launcher, windows_script_launcher,
+    write_resources,
 };
 
 /// Use the Windows resource editor as an independent reference for resource readback.
@@ -601,12 +602,11 @@ fn duplicate_script_names_are_rejected() -> Result<()> {
     Ok(())
 }
 
-/// A Python proxy doesn't pass itself to zipimport, even if it contains an archive.
 #[test]
 fn python_proxy_keeps_its_optional_payload() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
-    let mut bytes = write_resources(
+    let bytes = write_resources(
         get_launcher_bin(false)?,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[2]),
@@ -614,7 +614,6 @@ fn python_proxy_keeps_its_optional_payload() -> Result<()> {
             (RESOURCE_SCRIPT_DATA, b"optional payload"),
         ],
     )?;
-    bytes.extend(script_archive("print('appended')")?);
     fs_err::write(path.path(), bytes)?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
     assert_eq!(
@@ -654,8 +653,11 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
         windows_python_launcher("python.exe", WindowMode::Console)?,
     )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
+    let mut file = File::create(path.path())?;
     assert!(matches!(
-        launcher.with_python_path("".into()).into_bytes(false),
+        launcher
+            .with_python_path("".into())
+            .write_to_file(&mut file, false),
         Err(super::Error::EmptyPath)
     ));
     Ok(())
@@ -754,11 +756,12 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         .context("Missing original script data")?;
     assert!(script_data.len() > 65_536);
 
-    let bytes = launcher
-        .with_python_path(python.clone())
-        .into_bytes(false)?
-        .context("Could not rewrite launcher")?;
-    fs_err::write(rewritten_path.path(), bytes)?;
+    {
+        let mut file = File::create(rewritten_path.path())?;
+        launcher
+            .with_python_path(python.clone())
+            .write_to_file(&mut file, false)?;
+    }
     let launcher = Launcher::try_from_path(rewritten_path.path())?
         .context("Rewritten launcher was not recognized")?;
     assert_eq!(launcher.python_path, python);
@@ -766,10 +769,10 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         launcher.script_data.as_deref(),
         Some(script_data.as_slice())
     );
-    let bytes = launcher
-        .into_bytes(false)?
-        .context("Could not rewrite launcher")?;
-    fs_err::write(repeated_path.path(), bytes)?;
+    {
+        let mut file = File::create(repeated_path.path())?;
+        launcher.write_to_file(&mut file, false)?;
+    }
 
     for path in [rewritten_path.path(), repeated_path.path()] {
         Command::new(path)

@@ -1745,28 +1745,6 @@ fn run_with_pyvenv_cfg_file() -> Result<()> {
 }
 
 #[test]
-#[cfg(all(windows, feature = "test-pypi"))]
-fn run_with_native_executable_takes_precedence_over_base_launcher() -> Result<()> {
-    let context = uv_test::test_context!("3.12");
-    let scripts = uv_test::venv_bin_path(&context.venv);
-    let launcher = uv_trampoline_builder::windows_script_launcher(
-        "print('base environment')",
-        false,
-        scripts.join("python.exe"),
-    )?;
-    fs_err::write(scripts.join("Ruff.exe"), launcher)?;
-    // Ruff's native executable runs from its own environment on PATH.
-    context
-        .run()
-        .env(EnvVars::VIRTUAL_ENV, context.venv.path())
-        .args(["--no-project", "--with", "ruff==0.3.4", "ruff", "--version"])
-        .assert()
-        .success()
-        .stdout(contains("ruff 0.3.4"));
-    Ok(())
-}
-
-#[test]
 fn run_with_overlay_interpreter() -> Result<()> {
     let context = uv_test::test_context!("3.12")
         .with_filtered_virtualenv_bin()

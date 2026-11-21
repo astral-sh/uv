@@ -6,6 +6,8 @@ use std::str::Utf8Error;
 use editpe::{
     Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
 };
+#[cfg(windows)]
+use fs_err::File;
 use thiserror::Error;
 
 use uv_fs::Simplified;
@@ -14,8 +16,6 @@ use uv_fs::Simplified;
 mod resource_reader;
 #[cfg(all(test, windows))]
 mod resource_tests;
-#[cfg(windows)]
-mod script_zip;
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-i686-gui.exe");
@@ -85,8 +85,10 @@ impl Launcher {
         resource_reader::read_launcher(path)
     }
 
-    /// Serialize the launcher, declining a layout that changes the visible ZIP.
-    pub fn into_bytes(self, is_gui: bool) -> Result<Option<Vec<u8>>, Error> {
+    /// Write this trampoline launcher to a file.
+    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
+        use std::io::Write;
+
         let python_path = encode_python_path(&self.python_path)?;
 
         let launcher_bin = get_launcher_bin(is_gui)?;
@@ -101,14 +103,8 @@ impl Launcher {
         }
 
         let output = write_resources(launcher_bin, &resources)?;
-        // Changing the interpreter path changes the padding after the script.
-        if self.kind == LauncherKind::Script
-            && let Some(payload) = self.script_data.as_deref()
-            && !script_zip::can_embed(payload, &output)
-        {
-            return Ok(None);
-        }
-        Ok(Some(output))
+        file.write_all(&output)?;
+        Ok(())
     }
 
     #[must_use]
@@ -306,8 +302,21 @@ pub fn windows_script_launcher(
     is_gui: bool,
     python_executable: impl AsRef<Path>,
 ) -> Result<Vec<u8>, Error> {
-    let launcher_bin = get_launcher_bin(is_gui)?;
-    let payload = script_archive(launcher_python_script)?;
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use futures_lite::future::block_on;
+    use futures_lite::io::Cursor;
+
+    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+
+    // Store the launcher script without compression.
+    // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
+    // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
+    let mut archive = ZipFileWriter::new(Cursor::new(Vec::new()));
+    let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
+    block_on(archive.write_entry_whole(entry, launcher_python_script.as_bytes()))?;
+    let payload = block_on(archive.close())?.into_inner();
+
     let python_path = encode_python_path(python_executable.as_ref())?;
 
     let resources: &[(&str, &[u8])] = &[
@@ -320,22 +329,6 @@ pub fn windows_script_launcher(
     ];
 
     write_resources(launcher_bin, resources)
-}
-
-#[cfg(windows)]
-fn script_archive(script: &str) -> Result<Vec<u8>, Error> {
-    use async_zip::base::write::ZipFileWriter;
-    use async_zip::{Compression, ZipEntryBuilder};
-    use futures_lite::future::block_on;
-    use futures_lite::io::Cursor;
-
-    // Store the launcher script without compression.
-    // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
-    // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
-    let mut archive = ZipFileWriter::new(Cursor::new(Vec::new()));
-    let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
-    block_on(archive.write_entry_whole(entry, script.as_bytes()))?;
-    Ok(block_on(archive.close())?.into_inner())
 }
 
 /// Construct a Windows Python launcher.
