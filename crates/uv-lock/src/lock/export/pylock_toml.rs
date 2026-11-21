@@ -44,7 +44,7 @@ use uv_warnings::warn_user_once;
 use uv_resolver_types::{AnnotatedDist, ResolverOutput};
 
 use crate::lock::export::{ExportableRequirements, VirtualPackages};
-use crate::lock::{Source, WheelTagHint, is_wheel_unreachable_for_marker};
+use crate::lock::{Source, WheelTagHint, is_wheel_unreachable_for_marker, select_fallback_wheel};
 use crate::{Installable, LockError, LockHashError};
 
 /// Format an array so that each element is on its own line and has a trailing comma.
@@ -690,10 +690,11 @@ impl<'lock> PylockToml {
         build_options: &BuildOptions,
         index_locations: &IndexLocations,
     ) -> Result<(Option<PylockTomlSdist>, Option<Vec<PylockTomlWheel>>), PylockTomlErrorKind> {
+        let sdist = sdist.filter(|_| !build_options.no_build_package(node.name()));
         let wheels = if build_options.no_binary_package(node.name()) {
             Vec::new()
         } else {
-            wheels
+            let mut matching = wheels
                 .iter()
                 .filter(|wheel| {
                     !is_wheel_unreachable_for_marker(
@@ -703,13 +704,21 @@ impl<'lock> PylockToml {
                         tags,
                     )
                 })
+                .peekable();
+
+            let fallback = if sdist.is_none() && matching.peek().is_none() {
+                select_fallback_wheel(node, requires_python, tags, index_locations)
+            } else {
+                None
+            };
+            matching
+                .chain(fallback)
                 .map(|wheel| {
                     PylockTomlWheel::from_registry(wheel, &wheel.filename.name, index_locations)
                 })
                 .collect::<Result<Vec<_>, _>>()?
         };
         let sdist = sdist
-            .filter(|_| !build_options.no_build_package(node.name()))
             .map(|sdist| PylockTomlSdist::from_registry(sdist, index_locations))
             .transpose()?;
         Ok((sdist, (!wheels.is_empty()).then_some(wheels)))
@@ -796,9 +805,15 @@ impl<'lock> PylockToml {
             // direct path instead map to the `packages.archive` field.
             let wheels = match &package.id.source {
                 Source::Registry(source) => {
+                    let fallback = if package.wheels.is_empty() && package.sdist.is_none() {
+                        package.fallback_wheel.as_deref()
+                    } else {
+                        None
+                    };
                     let wheels = package
                         .wheels
                         .iter()
+                        .chain(fallback)
                         .map(|wheel| wheel.to_registry_wheel(source, target.install_path()))
                         .collect::<Result<Vec<RegistryBuiltWheel>, LockError>>()?;
                     Some(
@@ -1663,6 +1678,7 @@ impl PylockTomlWheel {
         });
 
         Ok(RegistryBuiltWheel {
+            rejected_yank: false,
             filename,
             file,
             index,

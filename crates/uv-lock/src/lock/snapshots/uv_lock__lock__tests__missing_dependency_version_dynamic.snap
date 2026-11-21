@@ -60,6 +60,7 @@ Ok(
                         "path/to/a",
                     ),
                 },
+                fallback_wheel: None,
                 sdist: None,
                 wheels: [],
                 fork_markers: [],
@@ -90,6 +91,7 @@ Ok(
                         ),
                     ),
                 },
+                fallback_wheel: None,
                 sdist: Some(
                     Url {
                         url: UrlString(
@@ -137,6 +139,7 @@ Ok(
                         ),
                     ),
                 },
+                fallback_wheel: None,
                 sdist: Some(
                     Url {
                         url: UrlString(

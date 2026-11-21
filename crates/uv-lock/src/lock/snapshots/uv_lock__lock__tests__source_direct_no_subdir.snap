@@ -67,6 +67,7 @@ Ok(
                         },
                     ),
                 },
+                fallback_wheel: None,
                 sdist: None,
                 wheels: [],
                 fork_markers: [],

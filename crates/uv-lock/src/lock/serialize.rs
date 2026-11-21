@@ -313,6 +313,12 @@ fn write_package(
         )?;
     }
 
+    if let Some(wheel) = &package.fallback_wheel {
+        writer.key_start("fallback-wheel")?;
+        write_wheel_inline(writer, wheel)?;
+        writer.raw("\n");
+    }
+
     if let Some(source_dist) = &package.sdist {
         writer.key_start("sdist")?;
         write_source_dist_inline(writer, source_dist)?;

@@ -1398,6 +1398,120 @@ async fn proxy_index_pip_compile_pylock_preserves_canonical_artifact_and_hash() 
     Ok(())
 }
 
+/// When no platform matches, both pylock writers select one unyanked wheel with a proxy hash.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn proxy_index_selects_hashed_fallback_wheels() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let canonical = MockServer::start().await;
+    let proxy = MockServer::start().await;
+    let file = |filename: &str, hash: Option<&str>| {
+        advertised_file(filename, &format!("{}/files/{filename}", proxy.uri()), hash)
+    };
+    // Pinning the version allows yanked build 10 alongside selected build 20. Its filename
+    // sorts before builds 2 and 20, so the fallback must also consider its yanked status.
+    let mut yanked = file("demo-1.0-10-py3-none-win32.whl", Some(WHEEL_HASH));
+    yanked["yanked"] = json!(true);
+    mount_simple(
+        &proxy,
+        "demo",
+        vec![
+            file("demo-1.0-1-py3-none-win32.whl", None),
+            yanked,
+            file("demo-1.0-20-py3-none-win32.whl", Some(WHEEL_HASH)),
+            file("demo-1.0-2-py3-none-win32.whl", Some(WHEEL_HASH)),
+        ],
+        2,
+    )
+    .await;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo==1.0; sys_platform == 'freebsd'"]
+
+        [tool.uv]
+        preview-features = ["proxy-index"]
+
+        [[tool.uv.index]]
+        name = "canonical"
+        url = "{canonical}/simple/"
+        artifact-base-url = "{canonical}/packages/"
+        default = true
+
+        [[tool.uv.proxy-index]]
+        name = "proxy"
+        url = "{proxy}/simple/"
+        artifact-base-url = "{proxy}/files/"
+        proxy-for = "canonical"
+
+        [[tool.uv.dependency-metadata]]
+        name = "demo"
+        version = "1.0"
+        requires-dist = []
+    "#, canonical = canonical.uri(), proxy = proxy.uri()})?;
+
+    uv_snapshot!(context.filters(), context
+        .pip_compile()
+        .arg("pyproject.toml")
+        .arg("--universal")
+        .arg("--format").arg("pylock.toml")
+        .arg("--no-header"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "demo"
+    version = "1.0"
+    marker = "sys_platform == 'freebsd'"
+    index = "http://[LOCALHOST]/simple/"
+    wheels = [{ url = "http://[LOCALHOST]/packages/demo-1.0-2-py3-none-win32.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" } }]
+
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    "#);
+
+    let context = context.with_cache_dir("export-cache");
+    uv_snapshot!(context.filters(), context.lock(), @r"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context
+        .export()
+        .arg("--frozen")
+        .arg("--format").arg("pylock.toml")
+        .arg("--no-header"), @r#"
+    exit_code: 0 (success)
+    ----- stdout -----
+    lock-version = "1.0"
+    created-by = "uv"
+    requires-python = ">=3.12"
+
+    [[packages]]
+    name = "demo"
+    version = "1.0"
+    marker = "sys_platform == 'freebsd'"
+    index = "http://[LOCALHOST]/simple/"
+    wheels = [{ url = "http://[LOCALHOST]/packages/demo-1.0-2-py3-none-win32.whl", upload-time = 2024-03-24T00:00:00Z, hashes = { sha256 = "7b6229db79b5800e4e98a351b5628c1c8a944533a2d428aeeaa7275a30d4ea82" } }]
+    "#);
+
+    let requirements = context.export().arg("--frozen").output()?;
+    assert!(requirements.status.success());
+    let requirements = String::from_utf8(requirements.stdout)?;
+    assert!(requirements.contains("demo==1.0"));
+    assert!(!requirements.contains(WHEEL_HASH));
+    assert_no_requests(&canonical, "canonical index").await?;
+    Ok(())
+}
+
 #[tokio::test]
 async fn proxy_index_pip_installs_hashless_live_artifact() -> Result<()> {
     let context = uv_test::test_context!("3.12");
