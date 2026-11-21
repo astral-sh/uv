@@ -1021,6 +1021,11 @@ fn empty_script_resource_is_preserved() -> Result<()> {
         .context("Launcher with an empty script resource was not recognized")?;
     assert_eq!(launcher.script_data, Some(Vec::new()));
 
+    let destination = temp_dir.child("rewritten.exe");
+    launcher.write_to_file(&mut File::create(destination.path())?)?;
+    let rewritten = Launcher::try_from_path(destination.path())?
+        .context("Rewritten launcher with an empty script resource was not recognized")?;
+    assert_eq!(rewritten.script_data, Some(Vec::new()));
     Ok(())
 }
 
