@@ -36,9 +36,10 @@ enum Lookup<T> {
     Missing,
 }
 
-struct Payload {
-    range: Range<u64>,
-    languages: u16,
+#[derive(Clone, Copy)]
+enum Languages {
+    Single,
+    PreferNeutral,
 }
 
 pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
@@ -71,15 +72,14 @@ pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
     let Some((kind, python_path)) = resources.target()? else {
         return Ok(None);
     };
-    let script_data = match resources.locate(RESOURCE_SCRIPT_DATA) {
+    let languages = match kind {
+        LauncherKind::Script => Languages::Single,
+        LauncherKind::Python => Languages::PreferNeutral,
+    };
+    let script_data = match resources.locate(RESOURCE_SCRIPT_DATA, languages) {
         Some(Lookup::Missing) if kind == LauncherKind::Python => None,
         Some(Lookup::Missing) | None => return Ok(None),
-        Some(Lookup::Found(payload)) => {
-            if kind == LauncherKind::Script && payload.languages != 1 {
-                return Ok(None);
-            }
-            Some(resources.read(payload.range)?)
-        }
+        Some(Lookup::Found(range)) => Some(resources.read(range)?),
     };
     Ok(Some(Launcher {
         kind,
@@ -232,7 +232,7 @@ impl Resources {
         Some(Lookup::Missing)
     }
 
-    fn locate(&mut self, name: &str) -> Option<Lookup<Payload>> {
+    fn locate(&mut self, name: &str, policy: Languages) -> Option<Lookup<Range<u64>>> {
         let Lookup::Found(languages) = self.subdirectory(self.rcdata, Key::Name(name))? else {
             return Some(Lookup::Missing);
         };
@@ -241,6 +241,9 @@ impl Resources {
             return None;
         }
         let count = u32::from(header.number_of_id_entries);
+        if matches!(policy, Languages::Single) && count > 1 {
+            return None;
+        }
         self.seek_directory(languages + 16, 8 * count)?;
         let entry = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
         let mut language = u16::try_from(entry.name_offset_or_integer_id).ok()?;
@@ -270,30 +273,30 @@ impl Resources {
         } else {
             self.offset(data.data_rva, data.size)?
         };
-        Some(Lookup::Found(Payload {
-            range: offset..offset + u64::from(data.size),
-            languages: header.number_of_id_entries,
-        }))
+        Some(Lookup::Found(offset..offset + u64::from(data.size)))
     }
 
     fn target(&mut self) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-        let Some(Lookup::Found(payload)) = self.locate(RESOURCE_TRAMPOLINE_KIND) else {
+        let Some(Lookup::Found(payload)) =
+            self.locate(RESOURCE_TRAMPOLINE_KIND, Languages::PreferNeutral)
+        else {
             return Ok(None);
         };
-        if payload.range.is_empty() {
+        if payload.is_empty() {
             return Err(Error::UnprocessableMetadata);
         }
-        self.file.seek(SeekFrom::Start(payload.range.start))?;
+        self.file.seek(SeekFrom::Start(payload.start))?;
         let value = u8::read_from_io(&mut self.file)?;
         let kind = LauncherKind::from_resource_value(value).ok_or(Error::UnprocessableMetadata)?;
-        let Some(Lookup::Found(path)) = self.locate(RESOURCE_PYTHON_PATH) else {
+        let Some(Lookup::Found(path)) = self.locate(RESOURCE_PYTHON_PATH, Languages::PreferNeutral)
+        else {
             return Ok(None);
         };
-        let length = path.range.end - path.range.start;
+        let length = path.end - path.start;
         if length == 0 || length > super::MAX_PYTHON_PATH_BYTES as u64 {
             return Ok(None);
         }
-        let path = String::from_utf8(self.read(path.range)?)
+        let path = String::from_utf8(self.read(path)?)
             .map_err(|err| Error::InvalidPath(err.utf8_error()))?;
         Ok(Some((kind, PathBuf::from(path))))
     }
