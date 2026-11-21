@@ -230,11 +230,21 @@ fn oversized_resource_is_rejected() -> Result<()> {
         u32::from_le_bytes(launcher[size_offset..size_offset + 4].try_into()?) as usize,
         python_path.len(),
     );
-    // The path starts within the image. Claiming a full image's worth of bytes
-    // extends past its section, but the trailing padding keeps the range inside the file.
-    let size = u32::try_from(launcher.len())?;
+    // The path starts inside the resource section. Claim one byte past its
+    // raw data, keeping the full extent on disk and below the path size limit.
+    let image = PE::parse(&launcher)?;
+    let section = image
+        .sections
+        .iter()
+        .find(|section| section.pointer_to_raw_data as usize == resource_offset)
+        .context("Missing resource section")?;
+    let rva = u32::from_le_bytes(launcher[entry_offset..size_offset].try_into()?);
+    let delta = rva - section.virtual_address;
+    let size = section.size_of_raw_data - delta + 1;
+    assert!(usize::try_from(size)? < super::MAX_PYTHON_PATH_BYTES);
+    launcher.push(0);
+    assert!(resource_offset + usize::try_from(delta + size)? <= launcher.len());
     launcher[size_offset..size_offset + 4].copy_from_slice(&size.to_le_bytes());
-    launcher.resize(2 * launcher.len(), 0);
     fs_err::write(path.path(), &launcher)?;
 
     assert!(Launcher::try_from_path(path.path())?.is_none());
