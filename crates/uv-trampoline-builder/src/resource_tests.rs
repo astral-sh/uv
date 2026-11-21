@@ -668,6 +668,18 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
 }
 
 #[test]
+fn unpaired_surrogate_in_target_is_rejected() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    let python = OsString::from_wide(&[0xd800]);
+    assert!(matches!(
+        windows_python_launcher(&python, WindowMode::Console),
+        Err(super::Error::NonUtf8Path)
+    ));
+}
+
+#[test]
 fn interpreter_path_resource_size_limit() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");

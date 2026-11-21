@@ -171,6 +171,9 @@ pub enum Error {
     #[error("A Windows launcher requires a nonempty Python path")]
     EmptyPath,
     #[cfg(windows)]
+    #[error("The Python path cannot be encoded as UTF-8 in a Windows launcher")]
+    NonUtf8Path,
+    #[cfg(windows)]
     #[error("The Python path is too long for a Windows launcher")]
     PathTooLong,
     #[error(
@@ -277,8 +280,8 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
 }
 
 #[cfg(windows)]
-fn encode_python_path(path: &Path) -> Result<String, Error> {
-    let path = path.simplified_display().to_string();
+fn encode_python_path(path: &impl AsRef<Path>) -> Result<&str, Error> {
+    let path = path.simplified().to_str().ok_or(Error::NonUtf8Path)?;
     if path.is_empty() {
         return Err(Error::EmptyPath);
     }
@@ -328,7 +331,7 @@ pub fn windows_script_launcher(
     block_on(archive.write_entry_whole(entry, launcher_python_script.as_bytes()))?;
     let payload = block_on(archive.close())?.into_inner();
 
-    let python_path = encode_python_path(python_executable.as_ref())?;
+    let python_path = encode_python_path(&python_executable)?;
 
     let resources: &[(&str, &[u8])] = &[
         (
@@ -366,7 +369,7 @@ pub fn windows_python_launcher(
 ) -> Result<Vec<u8>, Error> {
     let launcher_bin: &[u8] = get_launcher_bin(matches!(window_mode, WindowMode::Windowed))?;
 
-    let python_path = encode_python_path(python_executable.as_ref())?;
+    let python_path = encode_python_path(&python_executable)?;
 
     let resources: &[(&str, &[u8])] = &[
         (
