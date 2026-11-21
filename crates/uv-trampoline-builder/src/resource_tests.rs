@@ -920,28 +920,19 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
     let launcher = Launcher::try_from_path(original_path.path())?
         .context("Original launcher was not recognized")?;
     assert_eq!(launcher.python_path(), original_python);
+    let launcher = launcher.with_python_path(&python)?;
     let script_data = launcher
         .script_data
-        .clone()
+        .as_deref()
         .context("Missing original script data")?;
     assert!(script_data.len() > 65_536);
 
-    {
-        let launcher = launcher.with_python_path(&python)?;
-        let mut file = File::create(rewritten_path.path())?;
-        launcher.write_to_file(&mut file)?;
-    }
-    let launcher = Launcher::try_from_path(rewritten_path.path())?
+    launcher.write_to_file(&mut File::create(rewritten_path.path())?)?;
+    let rewritten = Launcher::try_from_path(rewritten_path.path())?
         .context("Rewritten launcher was not recognized")?;
-    assert_eq!(launcher.python_path(), python);
-    assert_eq!(
-        launcher.script_data.as_deref(),
-        Some(script_data.as_slice())
-    );
-    {
-        let mut file = File::create(repeated_path.path())?;
-        launcher.write_to_file(&mut file)?;
-    }
+    assert_eq!(rewritten.python_path(), python);
+    assert_eq!(rewritten.script_data.as_deref(), Some(script_data));
+    rewritten.write_to_file(&mut File::create(repeated_path.path())?)?;
 
     for path in [rewritten_path.path(), repeated_path.path()] {
         Command::new(path)

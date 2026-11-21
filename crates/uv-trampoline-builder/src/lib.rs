@@ -95,7 +95,7 @@ impl Launcher {
     }
 
     /// Write this trampoline launcher to a file.
-    pub fn write_to_file(self, file: &mut File) -> Result<(), Error> {
+    pub fn write_to_file(&self, file: &mut File) -> Result<(), Error> {
         use std::io::Write;
 
         let launcher_bin = get_launcher_bin(self.window_mode == WindowMode::Windowed)?;
