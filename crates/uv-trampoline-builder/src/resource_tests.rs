@@ -318,6 +318,9 @@ fn relocated_resource_directory() -> Result<()> {
     let size = directory.size as usize;
     let field = image.header.dos_header.pe_pointer as usize + 24 + directory_end - 8;
     launcher.copy_within(directory_offset..directory_offset + size, offset);
+    // Invalidate the old root while retaining the payloads referenced by RVA.
+    let root_size = size_of::<editpe::types::ResourceDirectoryTable>();
+    launcher[directory_offset..directory_offset + root_size].fill(0);
     assert_eq!(
         &launcher[field..field + 4],
         &directory.virtual_address.to_le_bytes()
