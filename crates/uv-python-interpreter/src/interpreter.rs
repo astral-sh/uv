@@ -909,6 +909,14 @@ struct ExecutableTarget<'a> {
     trampoline_target: Option<PathBuf>,
 }
 
+/// The launcher's target and the timestamps of the links used to resolve it.
+#[cfg(windows)]
+#[derive(PartialEq, Eq)]
+struct LinkSnapshot {
+    target: PathBuf,
+    ancestor_timestamps: Vec<(u64, u64)>,
+}
+
 impl<'a> ExecutableTarget<'a> {
     fn identify(path: &'a Path) -> Option<Self> {
         debug_assert!(
@@ -997,22 +1005,26 @@ impl<'a> ExecutableTarget<'a> {
     /// Replacing a junction changes its containing directory even if the original
     /// junction is subsequently moved back into place.
     #[cfg(windows)]
-    fn link_timestamps(&self, canonical: &Path) -> Option<Vec<(u64, u64)>> {
+    fn snapshot_links(&self, canonical: &Path) -> Option<LinkSnapshot> {
         use std::os::windows::fs::MetadataExt;
 
-        let Some(target) = &self.trampoline_target else {
-            return Some(Vec::new());
+        let stored = self.trampoline_target.as_deref()?;
+        let mut snapshot = LinkSnapshot {
+            target: std::path::absolute(dunce::simplified(stored)).ok()?,
+            ancestor_timestamps: Vec::new(),
         };
-        let mut target = std::path::absolute(dunce::simplified(target)).ok()?;
-        let mut times = Vec::new();
+        let mut target = snapshot.target.as_path();
+        let mut resolved;
         for _ in 0..=40 {
             if target == canonical {
-                return Some(times);
+                return Some(snapshot);
             }
             let mut redirect = None;
             for path in target.ancestors() {
                 let metadata = fs::symlink_metadata(path).ok()?;
-                times.push((metadata.creation_time(), metadata.last_write_time()));
+                snapshot
+                    .ancestor_timestamps
+                    .push((metadata.creation_time(), metadata.last_write_time()));
                 if canonical.starts_with(path) {
                     break;
                 }
@@ -1028,7 +1040,7 @@ impl<'a> ExecutableTarget<'a> {
                 return target
                     .as_os_str()
                     .eq_ignore_ascii_case(canonical.as_os_str())
-                    .then_some(times);
+                    .then_some(snapshot);
             };
             let destination = fs::read_link(link).ok()?;
             let mut next = link.with_file_name(dunce::simplified(&destination));
@@ -1036,7 +1048,8 @@ impl<'a> ExecutableTarget<'a> {
             if !suffix.as_os_str().is_empty() {
                 next.push(suffix);
             }
-            target = std::path::absolute(next).ok()?;
+            resolved = std::path::absolute(next).ok()?;
+            target = &resolved;
         }
         None
     }
@@ -1637,7 +1650,7 @@ impl InterpreterInfo {
         };
 
         #[cfg(windows)]
-        let link_timestamps = target.link_timestamps(&canonical);
+        let links = target.snapshot_links(&canonical);
 
         trace!(
             "Querying interpreter executable at `{}`",
@@ -1650,7 +1663,7 @@ impl InterpreterInfo {
             &absolute,
             &canonical,
             #[cfg(windows)]
-            link_timestamps.as_deref(),
+            links.as_ref(),
             &wire,
             probe_start,
             &mut file_timestamps,
@@ -1713,7 +1726,7 @@ impl InterpreterInfo {
         executable: &Path,
         absolute: &Path,
         canonical: &Path,
-        #[cfg(windows)] link_timestamps: Option<&[(u64, u64)]>,
+        #[cfg(windows)] links: Option<&LinkSnapshot>,
         wire: &InterpreterInfoWire,
         probe_start: Option<Timestamp>,
         file_timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
@@ -1742,13 +1755,19 @@ impl InterpreterInfo {
             {
                 return false;
             }
-            // Python can report a junction path as its base executable. It may
-            // have pointed at another installation while Python was starting up.
-            if base != canonical
-                && (link_timestamps.is_none()
-                    || link_timestamps != target.link_timestamps(canonical).as_deref())
-            {
+            // A shim may have run Python through a separate junction that now
+            // points back to the shim. Only trust the alias we tracked from the launcher.
+            let Ok(base) = std::path::absolute(dunce::simplified(base)) else {
                 return false;
+            };
+            if base != canonical {
+                let Some(links) = links else {
+                    return false;
+                };
+                if links.target != base || target.snapshot_links(canonical).as_ref() != Some(links)
+                {
+                    return false;
+                }
             }
         }
 
@@ -2080,7 +2099,7 @@ mod tests {
             windows_python_launcher(&alias, WindowMode::Console)?,
         )?;
         let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
-        assert!(target.link_timestamps(&canonical).is_none());
+        assert!(target.snapshot_links(&canonical).is_none());
         Ok(())
     }
 
@@ -2189,6 +2208,46 @@ mod tests {
 
     fn unexpected_probe() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error> {
         Err(io::Error::other("expected an interpreter cache hit").into())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn launcher_probe_reports_a_separate_junction() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let shim = dir.path().join("shim");
+        let installation = dir.path().join("installation");
+        for home in [&shim, &installation] {
+            fs::create_dir(home)?;
+            fs::write(home.join("python.exe"), [])?;
+        }
+        fs::write(
+            &proxy,
+            windows_python_launcher(r"shim\python.exe", WindowMode::Console)?,
+        )?;
+        let alias = dir.path().join("alias");
+        uv_fs::create_symlink(&installation, &alias)?;
+        let reported = alias.join("python.exe");
+        let canonical = canonicalize_executable(&proxy)?;
+        assert_ne!(dunce::canonicalize(&reported)?, canonical);
+        let cache = Cache::temp()?.init().await?;
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(reported.clone());
+        InterpreterInfo::query_cached(&proxy, &cache, || {
+            // The shim runs Python through its own junction. By the time the
+            // probe returns, that path can identify the shim itself.
+            uv_fs::replace_symlink(&shim, &alias)?;
+            Ok((response, None))
+        })?;
+        assert_eq!(dunce::canonicalize(&reported)?, canonical);
+        assert!(
+            !InterpreterInfo::cache_entry(&proxy, &canonical, &cache)
+                .path()
+                .exists()
+        );
+        Ok(())
     }
 
     #[cfg(windows)]
