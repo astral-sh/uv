@@ -1040,9 +1040,15 @@ fn python_find_unsupported_version() {
 #[test]
 #[cfg(windows)]
 fn python_find_venv_missing_home() -> Result<()> {
-    let context = uv_test::test_context!("3.12")
+    let context = uv_test::test_context_with_versions!(&["3.12"])
         .with_filtered_python_names()
         .with_filtered_virtualenv_bin();
+    context
+        .python_command()
+        .args(["-m", "venv", "--without-pip"])
+        .arg(context.venv.as_os_str())
+        .assert()
+        .success();
     let home = context.temp_dir.join("removed");
     context
         .venv
