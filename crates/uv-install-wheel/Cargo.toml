@@ -33,8 +33,10 @@ uv-warnings = { workspace = true }
 
 astral-ini = { workspace = true }
 astral-mail-headers = { workspace = true }
+cap-primitives = { workspace = true }
 csv = { workspace = true }
 data-encoding = { workspace = true }
+fastrand = { workspace = true }
 fs-err = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
