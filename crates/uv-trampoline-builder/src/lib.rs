@@ -6,8 +6,6 @@ use std::str::Utf8Error;
 use editpe::{
     Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
 };
-#[cfg(windows)]
-use fs_err::File;
 use thiserror::Error;
 
 use uv_fs::Simplified;
@@ -16,6 +14,8 @@ use uv_fs::Simplified;
 mod resource_reader;
 #[cfg(all(test, windows))]
 mod resource_tests;
+#[cfg(windows)]
+mod script_zip;
 
 #[cfg(all(windows, target_arch = "x86"))]
 const LAUNCHER_I686_GUI: &[u8] = include_bytes!("../trampolines/uv-trampoline-i686-gui.exe");
@@ -85,10 +85,8 @@ impl Launcher {
         resource_reader::read_launcher(path)
     }
 
-    /// Write this trampoline launcher to a file.
-    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
-        use std::io::Write;
-
+    /// Serialize the launcher, declining a layout that changes the visible ZIP.
+    pub fn into_bytes(self, is_gui: bool) -> Result<Option<Vec<u8>>, Error> {
         let python_path = encode_python_path(&self.python_path)?;
 
         let launcher_bin = get_launcher_bin(is_gui)?;
@@ -103,8 +101,14 @@ impl Launcher {
         }
 
         let output = write_resources(launcher_bin, &resources)?;
-        file.write_all(&output)?;
-        Ok(())
+        // Changing the interpreter path changes the padding after the script.
+        if self.kind == LauncherKind::Script
+            && let Some(payload) = self.script_data.as_deref()
+            && !script_zip::can_embed(payload, &output)
+        {
+            return Ok(None);
+        }
+        Ok(Some(output))
     }
 
     #[must_use]

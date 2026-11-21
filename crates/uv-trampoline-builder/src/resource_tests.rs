@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::PathChild;
 use editpe::{Image, ResourceEntry, ResourceEntryName, ResourceTable};
-use fs_err::File;
 use goblin::pe::{
     PE, options::ParseOptions, resource::ResourceEntry as DirectoryEntry, utils::find_offset,
 };
@@ -655,11 +654,8 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
         windows_python_launcher("python.exe", WindowMode::Console)?,
     )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
-    let mut file = File::create(path.path())?;
     assert!(matches!(
-        launcher
-            .with_python_path("".into())
-            .write_to_file(&mut file, false),
+        launcher.with_python_path("".into()).into_bytes(false),
         Err(super::Error::EmptyPath)
     ));
     Ok(())
@@ -758,12 +754,11 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         .context("Missing original script data")?;
     assert!(script_data.len() > 65_536);
 
-    {
-        let mut file = File::create(rewritten_path.path())?;
-        launcher
-            .with_python_path(python.clone())
-            .write_to_file(&mut file, false)?;
-    }
+    let bytes = launcher
+        .with_python_path(python.clone())
+        .into_bytes(false)?
+        .context("Could not rewrite launcher")?;
+    fs_err::write(rewritten_path.path(), bytes)?;
     let launcher = Launcher::try_from_path(rewritten_path.path())?
         .context("Rewritten launcher was not recognized")?;
     assert_eq!(launcher.python_path, python);
@@ -771,10 +766,10 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         launcher.script_data.as_deref(),
         Some(script_data.as_slice())
     );
-    {
-        let mut file = File::create(repeated_path.path())?;
-        launcher.write_to_file(&mut file, false)?;
-    }
+    let bytes = launcher
+        .into_bytes(false)?
+        .context("Could not rewrite launcher")?;
+    fs_err::write(repeated_path.path(), bytes)?;
 
     for path in [rewritten_path.path(), repeated_path.path()] {
         Command::new(path)

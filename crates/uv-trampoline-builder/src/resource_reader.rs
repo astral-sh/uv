@@ -70,7 +70,14 @@ pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
         Some(Lookup::Missing) if kind == LauncherKind::Python => None,
         Some(Lookup::Missing) | None => return Ok(None),
         Some(Lookup::Found(payload)) => {
-            if kind == LauncherKind::Script && payload.languages != 1 {
+            if kind == LauncherKind::Script
+                && (payload.languages != 1
+                    || !super::script_zip::can_extract(
+                        &mut resources.file,
+                        resources.file_size,
+                        &payload.range,
+                    )?)
+            {
                 return Ok(None);
             }
             Some(resources.read(payload.range)?)
@@ -85,7 +92,7 @@ pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
 
 // Take tracks the cursor within the file length. Its absolute seeks use
 // seek_relative on the BufReader, retaining buffered bytes for nearby entries.
-type ImageFile = Take<BufReader<File>>;
+pub(super) type ImageFile = Take<BufReader<File>>;
 
 struct Resources {
     file: ImageFile,
