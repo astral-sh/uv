@@ -902,7 +902,14 @@ fn wow64_proxy_target_depends_on_the_launchers_view() -> Result<()> {
         Some((LauncherKind::Python, ordinary))
     );
 
-    let shared = Path::new(&windows).join(r"System32\drivers\etc\python.exe");
+    let drivers = Path::new(&windows).join(r"System32\drivers");
+    write_proxy(&drivers.join("python.exe"))?;
+    assert!(matches!(
+        super::read_launcher_target(proxy.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
+
+    let shared = drivers.join(r"etc\python.exe");
     write_proxy(&shared)?;
     assert_eq!(
         super::read_launcher_target(proxy.path())?,
