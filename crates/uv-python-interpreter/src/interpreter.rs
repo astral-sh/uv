@@ -1010,14 +1010,14 @@ impl<'a> ExecutableTarget<'a> {
 
     /// Resolve the target and canonical path used to key an interpreter cache entry.
     fn for_cache(&self, executable: &Path) -> Result<Option<CacheTarget<'_>>, Error> {
-        let Some(canonical) = self.cache_input(executable, self.canonicalize())? else {
-            return Ok(None);
-        };
         // A script runs its embedded payload. Even if it forwards a probe to
         // Python, its stored interpreter path cannot identify the result.
         if matches!(self.launcher, Some((LauncherKind::Script, _))) {
             return Ok(None);
         }
+        let Some(canonical) = self.cache_input(executable, self.canonicalize())? else {
+            return Ok(None);
+        };
         Ok(Some(CacheTarget {
             target: self,
             canonical,
@@ -2671,6 +2671,14 @@ mod tests {
         InterpreterInfo::query_cached(&executable, &cache, &mut probe)?;
         InterpreterInfo::query_cached(&executable, &cache, probe)?;
         assert_eq!(probes, 3);
+
+        // Eviction has no entry to remove even after the interpreter disappears.
+        fs::remove_file(&target)?;
+        Interpreter::clear_cache(&executable, &cache)?;
+        let Err(Error::BrokenLink(link)) = Interpreter::query(&executable, &cache) else {
+            anyhow::bail!("expected a broken script launcher");
+        };
+        assert_eq!(link.target(), Some(target.as_path()));
         Ok(())
     }
 
