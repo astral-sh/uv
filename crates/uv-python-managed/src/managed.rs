@@ -647,9 +647,24 @@ impl ManagedPythonInstallation {
             let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
                 return None;
             };
-            // Resolve minor version junctions. A dangling proxy can still
-            // identify its installation by the stored target.
-            let target = dunce::canonicalize(&target).unwrap_or(target);
+            let target = match dunce::canonicalize(&target) {
+                Ok(target) => target,
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                    // The parent of a missing interpreter can still resolve
+                    // through a minor version junction to its installation.
+                    return installations.find(|installation| {
+                        let executable = installation.executable(false);
+                        executable == target
+                            || (executable.file_name() == target.file_name()
+                                && executable.parent().zip(target.parent()).is_some_and(
+                                    |(dir, parent)| {
+                                        same_file::is_same_file(dir, parent).unwrap_or_default()
+                                    },
+                                ))
+                    });
+                }
+                Err(_) => target,
+            };
             installations.find(|installation| installation.executable(false) == target)
         } else {
             unreachable!("Only Windows and Unix are supported")
@@ -1100,6 +1115,35 @@ mod tests {
     use uv_python_types::{
         ImplementationName, LenientImplementationName, PythonInstallationKey, PythonVariant,
     };
+
+    #[cfg(windows)]
+    #[test]
+    fn dangling_relative_proxy_through_minor_version_junction() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let installed = dir.path().join("cpython-3.12.3-windows-x86_64-none");
+        let bin = dir.path().join("bin");
+        fs_err::create_dir(&installed)?;
+        fs_err::create_dir(&bin)?;
+        replace_symlink(&installed, dir.path().join("current"))?;
+        let installation = ManagedPythonInstallation::from_path(installed)?;
+        let proxy = bin.join("python.exe");
+        for (target, owned) in [
+            (r"..\current\python.exe", true),
+            (r"..\current\other.exe", false),
+            (r"..\python.exe", false),
+        ] {
+            fs_err::write(
+                &proxy,
+                windows_python_launcher(target, WindowMode::Console)?,
+            )?;
+            let found = ManagedPythonInstallation::find_bin_link_for_removal(
+                &proxy,
+                std::iter::once(&installation),
+            );
+            assert_eq!(found.is_some(), owned, "{target}");
+        }
+        Ok(())
+    }
 
     fn create_test_installation(
         implementation: ImplementationName,
