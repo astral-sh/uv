@@ -71,6 +71,10 @@ pub fn supported_variant_properties(
     let detected = metadata
         .provider_requests()
         .filter_map(|(namespace, request)| {
+            // The resolver checks ABI requirements against the resolved package versions.
+            if let VariantProviderRequest::Builtin("abi_dependency") = request {
+                return None;
+            }
             let Some(provider) = find_vendored_provider(namespace, request) else {
                 // TODO(konsti): Support installing and running variant provider plugins.
                 let provider_name = match request {

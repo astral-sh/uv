@@ -6,7 +6,7 @@ use tracing::{debug, instrument};
 
 use uv_cache::Cache;
 use uv_configuration::BuildOptions;
-use uv_distribution::{DistributionDatabase, LocalWheel};
+use uv_distribution::{DistributionDatabase, LocalWheel, check_wheel_variant_compatibility};
 use uv_distribution_types::{
     BuildableSource, CachedDist, DerivationChain, Dist, DistErrorKind, Hashed, Identifier, Name,
     RemoteSource, Resolution,
@@ -75,6 +75,14 @@ impl<'a, Context: BuildContext> Preparer<'a, Context> {
                     .get_wheel((*dist).clone(), in_flight, resolution)
                     .boxed_local()
                     .await?;
+                // The same download can serve build environments with different ABI dependencies.
+                check_wheel_variant_compatibility(
+                    wheel.filename(),
+                    wheel.path(),
+                    self.tags.python_platform(),
+                    resolution,
+                )
+                .map_err(|err| Error::from_dist((*dist).clone(), err, resolution))?;
                 if let Some(reporter) = self.reporter.as_ref() {
                     reporter.on_progress(&wheel);
                 }
