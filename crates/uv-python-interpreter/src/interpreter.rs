@@ -2273,9 +2273,12 @@ mod tests {
             .write(true)
             .open(&target)?
             .set_modified(UNIX_EPOCH)?;
-        InterpreterInfo::query_cached(&proxy, &cache, probe)?;
-        assert_eq!(probes, 2);
+        InterpreterInfo::query_cached(&proxy, &cache, &mut probe)?;
         InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+
+        Interpreter::clear_cache(&proxy, &cache)?;
+        InterpreterInfo::query_cached(&proxy, &cache, probe)?;
+        assert_eq!(probes, 3);
         Ok(())
     }
 
