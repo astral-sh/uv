@@ -33,8 +33,8 @@ use crate::virtualenv_discovery::virtualenv_from_working_dir;
 #[cfg(windows)]
 use crate::windows_registry::{WindowsPython, registry_pythons};
 use uv_python_interpreter::{
-    BrokenLink, Interpreter, InterpreterError, StatusCodeError, UnexpectedResponseError,
-    VirtualEnvError, virtualenv_python_executable,
+    Interpreter, InterpreterError, StatusCodeError, UnexpectedResponseError, VirtualEnvError,
+    virtualenv_python_executable,
 };
 use uv_python_managed::ManagedPythonInstallations;
 use uv_python_managed::PythonMinorVersionLink;
@@ -822,6 +822,17 @@ fn source_satisfies_environment_preference(
 /// Returns false when an error could be due to a faulty Python installation and we should continue searching for a working one.
 impl Error {
     pub(crate) fn is_critical(&self) -> bool {
+        let missing_is_critical = |source: &PythonSource, path: &Path| {
+            // A missing interpreter breaks an active virtual environment.
+            if matches!(source, PythonSource::ActiveEnvironment)
+                && uv_fs::is_virtualenv_executable(path)
+            {
+                true
+            } else {
+                trace!("Skipping missing interpreter at `{}`", path.display());
+                false
+            }
+        };
         match self {
             // When querying the Python interpreter fails, we will only raise errors that demonstrate that something is broken
             // If the Python interpreter returned a bad response, we'll continue searching for one that works
@@ -860,19 +871,8 @@ impl Error {
                     );
                     false
                 }
-                InterpreterError::NotFound(path)
-                | InterpreterError::BrokenLink(BrokenLink { path, .. }) => {
-                    // If the interpreter is from an active, valid virtual environment, we should
-                    // fail because it's broken
-                    if matches!(source, PythonSource::ActiveEnvironment)
-                        && uv_fs::is_virtualenv_executable(path)
-                    {
-                        true
-                    } else {
-                        trace!("Skipping missing interpreter at `{}`", path.display());
-                        false
-                    }
-                }
+                InterpreterError::NotFound(path) => missing_is_critical(source, path),
+                InterpreterError::BrokenLink(link) => missing_is_critical(source, link.path()),
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
                 trace!("Skipping broken virtualenv at `{}`", path.display());

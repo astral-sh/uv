@@ -1170,7 +1170,7 @@ impl uv_errors::Hinted for Error {
 
 #[derive(Debug, Error)]
 pub struct BrokenLink {
-    pub path: PathBuf,
+    path: PathBuf,
     kind: BrokenLinkKind,
     /// Whether the interpreter path looks like a virtual environment.
     venv: bool,
@@ -1189,6 +1189,11 @@ impl BrokenLink {
             kind,
             venv: uv_fs::is_virtualenv_executable(path),
         }
+    }
+
+    /// The interpreter path where the broken link was detected.
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     /// Return the path of the broken link and its target if known.
