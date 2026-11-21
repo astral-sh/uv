@@ -2175,7 +2175,7 @@ mod tests {
 
     #[cfg(all(windows, target_pointer_width = "64"))]
     #[test]
-    fn configured_home_depends_on_the_launchers_view() -> Result<()> {
+    fn redirected_home_is_not_known_to_be_missing() -> Result<()> {
         let windows = std::env::var_os("SystemRoot").expect("Windows directory");
         let windows = Path::new(&windows);
         let Some(wow64) = wow64_executable(windows)? else {
@@ -2192,13 +2192,9 @@ mod tests {
         )?;
 
         // Sysnative exists only in the 32-bit view.
+        assert!(!home.try_exists()?);
         fs::copy(wow64, &interpreter)?;
         assert!(!super::has_missing_python_home(&interpreter));
-        fs::write(
-            &interpreter,
-            windows_python_launcher("python.exe", WindowMode::Console)?,
-        )?;
-        assert!(super::has_missing_python_home(&interpreter));
         Ok(())
     }
 

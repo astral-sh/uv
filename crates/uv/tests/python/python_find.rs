@@ -1038,6 +1038,30 @@ fn python_find_unsupported_version() {
 }
 
 #[test]
+#[cfg(windows)]
+fn python_find_venv_missing_home() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let home = context.temp_dir.join("removed");
+    context
+        .venv
+        .child("pyvenv.cfg")
+        .write_str(&format!("home = {}\n", home.display()))?;
+
+    // CPython's venv launcher exits unsuccessfully when its configured home is gone.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
+      cause: Broken Python trampoline at `.venv/[BIN]/[PYTHON]`, was the underlying Python interpreter removed?
+
+    hint: Consider recreating the environment (e.g., with `uv venv`)
+    ");
+    Ok(())
+}
+
+#[test]
 fn python_find_venv_invalid() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()
