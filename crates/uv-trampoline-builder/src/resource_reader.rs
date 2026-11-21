@@ -78,6 +78,11 @@ enum Languages {
     PreferNeutral,
 }
 
+fn integer_id(entry: ResourceDirectoryEntry) -> Result<u16, ReadError> {
+    // The loader can compare just the low word of an integer ID.
+    u16::try_from(entry.name_offset_or_integer_id).map_err(|_| Inconclusive)
+}
+
 pub(super) fn read_stored_target(file: File) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
     Ok(LauncherFile::read(file)?
         .map(|launcher| (launcher.kind, PathBuf::from(launcher.python_path))))
@@ -215,7 +220,7 @@ impl Resources {
             .ok_or(Inconclusive)?;
         let entry: ResourceDirectoryEntry = self.read_entry(pos)?;
         let order = match key {
-            Key::Id(id) => entry.name_offset_or_integer_id.cmp(&id),
+            Key::Id(id) => u32::from(integer_id(entry)?).cmp(&id),
             Key::Name(name) => self.compare_name(entry.name_offset_or_integer_id, name)?,
         };
         Ok((order, entry.data_entry_or_subdirectory_offset))
@@ -297,8 +302,7 @@ impl Resources {
         }
         self.seek_directory(languages + TABLE_SIZE, ENTRY_SIZE * count)?;
         let entry = ResourceDirectoryEntry::read_from_io(&mut self.file)?;
-        let mut language =
-            u16::try_from(entry.name_offset_or_integer_id).map_err(|_| Inconclusive)?;
+        let mut language = integer_id(entry)?;
         // uv writes neutral resources. With several localized variants and no neutral
         // entry, the target selected by FindResourceW depends on the user's language.
         // Uninstall needs an unambiguous target to establish ownership of the link.
@@ -309,7 +313,7 @@ impl Resources {
         // can make it select a different entry from the first.
         for _ in 1..count {
             let other = ResourceDirectoryEntry::read_from_io(&mut self.file)?;
-            let next = u16::try_from(other.name_offset_or_integer_id).map_err(|_| Inconclusive)?;
+            let next = integer_id(other)?;
             if next <= language {
                 return Err(Inconclusive);
             }

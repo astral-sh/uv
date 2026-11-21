@@ -453,6 +453,33 @@ fn mui_configuration_precludes_launcher_identification() -> Result<()> {
 }
 
 #[test]
+fn ambiguous_rcdata_id_precludes_launcher_identification() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let launcher = windows_python_launcher("python.exe", WindowMode::Console)?;
+    let mut image = Image::parse(launcher)?;
+    let rcdata = image
+        .resource_directory()
+        .context("Missing resources")?
+        .root()
+        .get(ResourceEntryName::ID(RT_RCDATA))
+        .context("Missing RCDATA")?
+        .clone();
+    let mut resources = editpe::ResourceDirectory::default();
+    resources
+        .root_mut()
+        .insert(ResourceEntryName::ID(0x1_0000 | RT_RCDATA), rcdata);
+    image.set_resource_directory(resources)?;
+    fs_err::write(path.path(), image.data())?;
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
