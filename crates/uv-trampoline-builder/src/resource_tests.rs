@@ -342,6 +342,10 @@ fn oversized_resource_is_rejected() -> Result<()> {
             Launcher::try_from_path(path.path())?.is_none(),
             "{virtual_size}"
         );
+        assert!(matches!(
+            super::read_launcher_target(path.path()),
+            Err(super::Error::UnprocessableMetadata)
+        ));
     }
     Ok(())
 }
@@ -369,6 +373,10 @@ fn truncated_kind_resource_is_rejected() -> Result<()> {
     launcher.truncate(offset + 1);
     fs_err::write(path.path(), launcher)?;
     assert!(Launcher::try_from_path(path.path())?.is_none());
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
     Ok(())
 }
 
