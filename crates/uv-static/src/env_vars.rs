@@ -77,6 +77,12 @@ impl EnvVars {
     #[attr_added_in("0.1.2")]
     pub const UV_NO_CACHE: &'static str = "UV_NO_CACHE";
 
+    /// Equivalent to the `cache-tracking` setting. If set to `false`, uv will stop recording
+    /// which packages each Python environment has installed, which prevents `uv cache prune
+    /// --unused` from removing cache entries that are no longer used by any environment.
+    #[attr_added_in("0.13.9")]
+    pub const UV_CACHE_TRACKING: &'static str = "UV_CACHE_TRACKING";
+
     /// Equivalent to the `--resolution` command-line argument. For example, if set to
     /// `lowest-direct`, uv will install the lowest compatible versions of all direct dependencies.
     #[attr_added_in("0.1.27")]

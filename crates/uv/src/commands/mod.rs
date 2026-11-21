@@ -5,7 +5,7 @@ pub(crate) use auth::logout::logout as auth_logout;
 pub(crate) use auth::token::token as auth_token;
 pub(crate) use cache_clean::cache_clean;
 pub(crate) use cache_dir::cache_dir;
-pub(crate) use cache_prune::cache_prune;
+pub(crate) use cache_prune::{UnusedEntries, cache_prune};
 pub(crate) use cache_size::cache_size;
 pub(crate) use help::help;
 pub(crate) use pip::check::pip_check;

@@ -608,3 +608,169 @@ fn prune_temporary_build_environment() -> Result<()> {
 
     Ok(())
 }
+
+/// `cache prune --unused` should retain the cache entries that a recorded environment references.
+#[test]
+fn prune_unused_keeps_installed_entries() {
+    let context = uv_test::test_context!("3.12");
+
+    context.venv().arg("--clear").assert().success();
+    context.pip_install().arg("iniconfig").assert().success();
+
+    uv_snapshot!(context.filters(), context.prune().arg("--unused"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+}
+
+/// `cache prune --unused` should remove the cache entries that no recorded environment references.
+#[test]
+fn prune_unused_removes_unreferenced_entries() {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
+
+    context.venv().arg("--clear").assert().success();
+    context.pip_install().arg("iniconfig").assert().success();
+
+    // Reusing the environment records the packages that are now installed, which no longer include
+    // `iniconfig`.
+    context.venv().arg("--clear").assert().success();
+    context.pip_install().arg("anyio").assert().success();
+
+    uv_snapshot!(context.filters(), context.prune().arg("--unused"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+}
+
+/// `cache prune --unused --dry-run` should report the entries without removing them.
+#[test]
+fn prune_unused_dry_run() {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((
+            "Would remove \\d+ files?".to_string(),
+            "Would remove [N] files".to_string(),
+        ))
+        .with_filtered_file_counts()
+        .with_filtered_sizes_and_units();
+
+    context.venv().arg("--clear").assert().success();
+    context.pip_install().arg("iniconfig").assert().success();
+    context.venv().arg("--clear").assert().success();
+    context.pip_install().arg("anyio").assert().success();
+
+    uv_snapshot!(context.filters(), context.prune().arg("--unused").arg("--dry-run"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Checking for unused cache entries in: [CACHE_DIR]/
+    Would remove [N] files ([SIZE])
+    ");
+
+    // The entry is still cached, so pruning it for real reports the same removal.
+    uv_snapshot!(context.filters(), context.prune().arg("--unused"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    Removed [N] files ([SIZE])
+    ");
+}
+
+/// `cache prune --unused` should skip the removal when the cache holds no environment records.
+#[test]
+fn prune_unused_requires_an_environment() {
+    let context = uv_test::test_context!("3.12");
+
+    context.venv().arg("--clear").assert().success();
+    context
+        .pip_install()
+        .arg("iniconfig")
+        .env(EnvVars::UV_CACHE_TRACKING, "false")
+        .assert()
+        .success();
+
+    assert!(
+        !context
+            .cache_dir
+            .child("environment-refs-v0")
+            .path()
+            .exists()
+    );
+
+    uv_snapshot!(context.filters(), context.prune().arg("--unused"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    warning: Skipping removal of unused cache entries: no recorded environments; run `uv sync` in a project, or pass `--environment` to include an environment
+    No unused entries found
+    ");
+}
+
+/// `cache prune --unused --environment` should consider an environment that the cache hasn't
+/// recorded.
+#[test]
+fn prune_unused_environment() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    // Disabling recording in the project's configuration leaves the cache without any records.
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str("cache-tracking = false\n")?;
+
+    context.venv().arg("--clear").assert().success();
+    context.pip_install().arg("iniconfig").assert().success();
+
+    uv_snapshot!(context.filters(), context.prune().arg("--unused"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    warning: Skipping removal of unused cache entries: no recorded environments; run `uv sync` in a project, or pass `--environment` to include an environment
+    No unused entries found
+    ");
+
+    uv_snapshot!(context.filters(), context
+        .prune()
+        .arg("--unused")
+        .arg("--environment")
+        .arg(".venv"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Pruning cache at: [CACHE_DIR]/
+    No unused entries found
+    ");
+
+    Ok(())
+}
+
+/// `--dry-run` and `--environment` only apply to `--unused`, so they cannot be passed alone.
+#[test]
+fn prune_unused_requires_unused() {
+    let context = uv_test::test_context!("3.12");
+
+    uv_snapshot!(context.filters(), context.prune().arg("--dry-run"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      --unused
+
+    Usage: uv cache prune --unused --cache-dir [CACHE_DIR] --dry-run
+
+    For more information, try '--help'.
+    ");
+
+    uv_snapshot!(context.filters(), context.prune().arg("--environment").arg(".venv"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: the following required arguments were not provided:
+      --unused
+
+    Usage: uv cache prune --unused --cache-dir [CACHE_DIR] --environment <PATH>
+
+    For more information, try '--help'.
+    ");
+}

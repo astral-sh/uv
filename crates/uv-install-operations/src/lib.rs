@@ -530,6 +530,21 @@ impl InstallationPlan {
         // Notify the user of any environment modifications.
         logger.on_complete(&changelog, printer, dry_run)?;
 
+        // Record the packages that the environment references, so that `uv cache prune --unused`
+        // can determine which cache entries are still in use.
+        if cache.tracking() {
+            let site_packages = venv
+                .site_packages()
+                .map(|site_packages| site_packages.to_path_buf())
+                .collect::<Vec<_>>();
+            if let Err(err) = cache.track_environment(venv.root(), &site_packages) {
+                warn_user!(
+                    "Failed to record the environment at `{}` in the cache: {err}",
+                    venv.root().display()
+                );
+            }
+        }
+
         Ok(changelog)
     }
 }

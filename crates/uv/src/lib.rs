@@ -59,7 +59,7 @@ use uv_threads::{RAYON_PARALLELISM, min_stack_size};
 use uv_warnings::{warn_user, warn_user_once};
 use uv_workspace::{DiscoveryOptions, Workspace, WorkspaceCache};
 
-use crate::commands::{ParsedRunCommand, RunCommand, ScriptPath};
+use crate::commands::{ParsedRunCommand, RunCommand, ScriptPath, UnusedEntries};
 
 mod commands;
 #[cfg(not(feature = "self-update"))]
@@ -304,10 +304,13 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     // 3. The nearest configuration file (`uv.toml` or `pyproject.toml`) in the directory tree,
     //    starting from the current directory.
 
-    // Pass the (possibly non-existent) cache dir path to the initial workspace discovery.
+    // Pass the (possibly non-existent) cache dir path to the initial workspace discovery. The
+    // tracking preference is only known once the workspace is discovered, and the discovery cache
+    // is never used to record an environment.
     let discovery_cache = Cache::from_settings(
         cli.top_level.cache_args.no_cache,
         cli.top_level.cache_args.cache_dir.clone(),
+        true,
     )?;
     let workspace_cache = WorkspaceCache::default();
     let filesystem = if let Some(config_file) = cli.top_level.config_file.as_ref() {
@@ -598,7 +601,11 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     if cache_settings.no_cache {
         debug!("Disabling the uv cache due to `--no-cache`");
     }
-    let cache = Cache::from_settings(cache_settings.no_cache, cache_settings.cache_dir)?;
+    let cache = Cache::from_settings(
+        cache_settings.no_cache,
+        cache_settings.cache_dir,
+        cache_settings.tracking,
+    )?;
     // This check happens after the first (fallible) workspace discovery, which we need to resolve
     // the settings that go into the cache constructor, but the check happens before the first
     // workspace discovery that's used beyond settings discovery.
@@ -1291,7 +1298,21 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
             command: CacheCommand::Prune(args),
         }) => {
             show_settings!(args);
-            commands::cache_prune(args.ci, args.force, cache, printer, globals.preview).await
+            let unused = match (args.unused, args.dry_run) {
+                (false, false | true) => UnusedEntries::Keep,
+                (true, false) => UnusedEntries::Remove,
+                (true, true) => UnusedEntries::Report,
+            };
+            commands::cache_prune(
+                args.ci,
+                args.force,
+                unused,
+                args.environment,
+                cache,
+                printer,
+                globals.preview,
+            )
+            .await
         }
         Commands::Cache(CacheNamespace {
             command: CacheCommand::Dir,
