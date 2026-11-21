@@ -2009,10 +2009,39 @@ mod tests {
             assert!(!entry.path().exists());
         }
 
-        // A direct target can be tracked by its own timestamp.
-        let mut response = mocked_interpreter_response(&proxy)?;
-        response.metadata.sys_base_executable = Some(target);
-        InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn direct_launcher_cache_tracks_target() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let target = dir.path().join("base.exe");
+        fs::write(&target, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(&target, WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let mut probes = 0;
+        let mut probe = || {
+            probes += 1;
+            let mut response = mocked_interpreter_response(&proxy).expect("Valid mocked metadata");
+            response.metadata.sys_base_executable = Some(target.clone());
+            Ok((response, None))
+        };
+        InterpreterInfo::query_cached(&proxy, &cache, &mut probe)?;
+        InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&target)?
+            .set_modified(UNIX_EPOCH)?;
+        InterpreterInfo::query_cached(&proxy, &cache, probe)?;
+        assert_eq!(probes, 2);
         InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
         Ok(())
     }
