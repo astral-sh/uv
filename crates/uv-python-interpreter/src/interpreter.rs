@@ -946,19 +946,22 @@ impl<'a> ExecutableTarget<'a> {
         // works. An error resolving a cache input would stop Python discovery,
         // even when the failure is local to one launcher (e.g., a junction loop).
         if let Self::Trampoline(target) = self {
-            if err.kind() != io::ErrorKind::NotFound || !matches!(target.try_exists(), Ok(false)) {
-                trace!(
-                    "Skipping interpreter cache for launcher targeting `{}`: {err}",
-                    target.display()
-                );
-                return Ok(None);
-            }
-            if absolute.is_file() {
+            if err.kind() == io::ErrorKind::NotFound
+                && matches!(target.try_exists(), Ok(false))
+                && let Some(ExecutableTarget::Trampoline(current)) =
+                    ExecutableTarget::identify(absolute)
+                && current == *target
+            {
                 return Err(Error::BrokenLink(BrokenLink::new(
                     executable,
-                    BrokenLinkKind::Trampoline(Some(target.clone())),
+                    BrokenLinkKind::Trampoline(Some(current)),
                 )));
             }
+            trace!(
+                "Skipping interpreter cache for launcher targeting `{}`: {err}",
+                target.display()
+            );
+            return Ok(None);
         }
 
         if err.kind() != io::ErrorKind::NotFound {
@@ -2274,6 +2277,39 @@ mod tests {
             let input = target.cache_input::<()>(&proxy, &proxy, Err(error.into()))?;
             assert!(input.is_none());
         }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn missing_target_diagnostic_checks_current_launcher() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let first = dir.path().join("first.exe");
+        let second = dir.path().join("second.exe");
+        fs::write(&first, [])?;
+        fs::write(&second, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(&first, WindowMode::Console)?,
+        )?;
+        let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
+        let resolve = || target.cache_input(&proxy, &proxy, target.canonicalize());
+
+        fs::remove_file(&first)?;
+        let Err(Error::BrokenLink(link)) = resolve() else {
+            anyhow::bail!("expected a broken trampoline");
+        };
+        assert_eq!(link.into_paths(), (proxy.clone(), Some(first)));
+
+        // The target read before the lookup can belong to a replaced launcher.
+        fs::write(
+            &proxy,
+            windows_python_launcher(&second, WindowMode::Console)?,
+        )?;
+        assert!(resolve()?.is_none());
         Ok(())
     }
 
