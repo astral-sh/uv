@@ -748,6 +748,37 @@ fn rewrite_declines_a_zip_hidden_by_section_padding() -> Result<()> {
 }
 
 #[test]
+fn overlay_shadowing_zip64_record_is_not_rewritten() -> Result<()> {
+    use async_zip::base::write::ZipFileWriter;
+    use async_zip::{Compression, ZipEntryBuilder};
+    use futures_lite::future::block_on;
+    use futures_lite::io::Cursor;
+
+    let mut archive = ZipFileWriter::new(Cursor::new(Vec::new())).force_zip64();
+    let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
+    block_on(archive.write_entry_whole(entry, b"pass"))?;
+    let payload = block_on(archive.close())?.into_inner();
+    assert_eq!(&payload[payload.len() - 98..][..4], b"PK\x06\x06");
+
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let mut bytes = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_PYTHON_PATH, b"python.exe"),
+            (RESOURCE_SCRIPT_DATA, &payload),
+        ],
+    )?;
+    fs_err::write(path.path(), &bytes)?;
+    assert!(Launcher::try_from_path(path.path())?.is_some());
+    bytes.extend_from_slice(b"PK\x06\x06");
+    fs_err::write(path.path(), bytes)?;
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn truncated_appended_end_record_is_not_rewritten() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");

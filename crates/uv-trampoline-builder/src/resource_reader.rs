@@ -47,6 +47,12 @@ struct Payload {
     languages: u16,
 }
 
+#[derive(PartialEq, Eq)]
+struct Archive {
+    range: Range<u64>,
+    zip64: bool,
+}
+
 pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
     let Some(mut resources) = Resources::open(path) else {
         return Ok(None);
@@ -283,18 +289,20 @@ impl Resources {
         if payload.languages != 1 {
             return Ok(false);
         }
-        if let Some(archive) = self.last_archive(0..self.file_size)? {
-            return Ok(archive.start >= payload.range.start
-                && archive.end <= payload.range.end
-                && self.file_size - archive.end <= ZIP_MAX_COMMENT);
+        let source = self.last_archive(0..self.file_size)?;
+        if let Some(archive) = &source
+            && (archive.range.start < payload.range.start
+                || archive.range.end > payload.range.end
+                || self.file_size - archive.range.end > ZIP_MAX_COMMENT)
+        {
+            return Ok(false);
         }
-        // Dropping trailing data can reveal an archive that was outside Python's
-        // search window. Check the payload itself if the search didn't cover it.
-        Ok(self.file_size - payload.range.start <= ZIP_SEARCH_SIZE
-            || self.last_archive(payload.range.clone())?.is_none())
+        // Dropping trailing data can expose a hidden end record or change
+        // whether zipimport selects the ZIP64 end record.
+        Ok(source == self.last_archive(payload.range.clone())?)
     }
 
-    fn last_archive(&mut self, range: Range<u64>) -> io::Result<Option<Range<u64>>> {
+    fn last_archive(&mut self, range: Range<u64>) -> io::Result<Option<Archive>> {
         let start = range.start.max(range.end.saturating_sub(ZIP_SEARCH_SIZE));
         // Reading the resource table of a small launcher often buffers the ZIP
         // through EOF. Use it if it includes room for all the end records.
@@ -302,7 +310,7 @@ impl Resources {
         let buffered = self.file_size - self.file.limit();
         if buffered >= start && buffered + buffer.len() as u64 == range.end {
             if let Some(archive) = archive_range(buffer, buffered)
-                && archive.end - buffered >= ZIP_RECORDS_SIZE
+                && archive.range.end - buffered >= ZIP_RECORDS_SIZE
             {
                 return Ok(Some(archive));
             }
@@ -345,27 +353,38 @@ impl Resources {
 }
 
 /// Return the archive bytes visible within the search window common to supported Pythons.
-pub(super) fn visible_archive(bytes: &[u8]) -> Option<&[u8]> {
+pub(super) fn visible_archive(bytes: &[u8]) -> Option<(&[u8], bool)> {
     let len = bytes.len() as u64;
     let start = len.saturating_sub(ZIP_SEARCH_SIZE);
-    let archive = archive_range(&bytes[usize::try_from(start).ok()?..], start)?;
-    if len.checked_sub(archive.end)? > ZIP_MAX_COMMENT {
+    let Archive { range, zip64 } = archive_range(&bytes[usize::try_from(start).ok()?..], start)?;
+    if len.checked_sub(range.end)? > ZIP_MAX_COMMENT {
         return None;
     }
-    bytes.get(usize::try_from(archive.start).ok()?..usize::try_from(archive.end).ok()?)
+    let data = bytes.get(usize::try_from(range.start).ok()?..usize::try_from(range.end).ok()?)?;
+    Some((data, zip64))
 }
 
 /// Locate the last ZIP's start by subtracting the central directory size and
 /// its archive-relative offset from the position of the end record.
-fn archive_range(tail: &[u8], start: u64) -> Option<Range<u64>> {
+fn archive_range(tail: &[u8], start: u64) -> Option<Archive> {
     let pos = tail.windows(4).rposition(|bytes| bytes == b"PK\x05\x06")?;
     let end = start + pos as u64 + 22;
     if tail.len() - pos < 22 {
         // zipimport selects the last signature before checking its length.
         // The required record extends beyond EOF and thus beyond the payload.
-        return Some(start + pos as u64..end);
+        return Some(Archive {
+            range: start + pos as u64..end,
+            zip64: false,
+        });
     }
-    let (header, size, offset) = if pos >= 76 && tail[pos - 76..].starts_with(b"PK\x06\x06") {
+    // zipimport uses the ZIP64 record only if the *last* ZIP64 signature is
+    // 76 bytes before the ordinary end record.
+    let zip64 = pos >= 76
+        && tail[pos - 76..]
+            .windows(4)
+            .rposition(|bytes| bytes == b"PK\x06\x06")
+            == Some(0);
+    let (header, size, offset) = if zip64 {
         let record = &tail[pos - 76..pos];
         let size = u64::read_from_bytes(&record[40..48]).ok()?;
         let offset = u64::read_from_bytes(&record[48..56]).ok()?;
@@ -379,7 +398,10 @@ fn archive_range(tail: &[u8], start: u64) -> Option<Range<u64>> {
     let base = (start + header as u64)
         .saturating_sub(size)
         .saturating_sub(offset);
-    Some(base..end)
+    Some(Archive {
+        range: base..end,
+        zip64,
+    })
 }
 
 /// Read the resource data directory and the sections used to resolve its addresses.
