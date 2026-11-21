@@ -65,6 +65,18 @@ impl Launcher {
         self.kind
     }
 
+    /// Read the launcher kind and interpreter path without inspecting the script payload.
+    #[cfg(windows)]
+    pub fn try_read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+        resource_reader::read_target(path)
+    }
+
+    /// Returns `Ok(None)` on platforms without Windows trampolines.
+    #[cfg(not(windows))]
+    pub fn try_read_target(_path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+        Ok(None)
+    }
+
     /// Attempt to read [`Launcher`] metadata from a trampoline executable file.
     ///
     /// On Unix, this always returns [`None`]. Trampolines are a Windows-specific feature and cannot

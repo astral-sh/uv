@@ -41,20 +41,20 @@ struct Payload {
     languages: u16,
 }
 
+pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+    let Some(mut resources) = Resources::open(path) else {
+        return Ok(None);
+    };
+    resources.target()
+}
+
 pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
     let Some(mut resources) = Resources::open(path) else {
         return Ok(None);
     };
-    let Some(kind) = resources.kind()? else {
+    let Some((kind, python_path)) = resources.target()? else {
         return Ok(None);
     };
-    let Some(Lookup::Found(path)) = resources.locate(RESOURCE_PYTHON_PATH) else {
-        return Ok(None);
-    };
-    let path_data = resources.read(path.range)?;
-    let python_path = PathBuf::from(
-        String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-    );
     let script_data = match resources.locate(RESOURCE_SCRIPT_DATA) {
         Some(Lookup::Missing) if kind == LauncherKind::Python => None,
         Some(Lookup::Missing) | None => return Ok(None),
@@ -295,7 +295,7 @@ impl Resources {
         Ok(archive_range(&tail, start))
     }
 
-    fn kind(&mut self) -> Result<Option<LauncherKind>, Error> {
+    fn target(&mut self) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
         let Some(Lookup::Found(payload)) = self.locate(RESOURCE_TRAMPOLINE_KIND) else {
             return Ok(None);
         };
@@ -305,7 +305,12 @@ impl Resources {
         self.file.seek(SeekFrom::Start(payload.range.start))?;
         let value = u8::read_from_io(&mut self.file)?;
         let kind = LauncherKind::from_resource_value(value).ok_or(Error::UnprocessableMetadata)?;
-        Ok(Some(kind))
+        let Some(Lookup::Found(path)) = self.locate(RESOURCE_PYTHON_PATH) else {
+            return Ok(None);
+        };
+        let path = String::from_utf8(self.read(path.range)?)
+            .map_err(|err| Error::InvalidPath(err.utf8_error()))?;
+        Ok(Some((kind, PathBuf::from(path))))
     }
 
     fn read(&mut self, range: Range<u64>) -> io::Result<Vec<u8>> {

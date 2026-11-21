@@ -624,6 +624,36 @@ fn python_proxy_keeps_its_optional_payload() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn python_proxy_target_is_independent_of_script_languages() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("proxy.exe");
+    let python = "C:/Python312/python.exe";
+    let bytes = write_native_resources(
+        path.path(),
+        get_launcher_bin(false)?,
+        0x0407,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[2]),
+            (RESOURCE_PYTHON_PATH, python.as_bytes()),
+            (RESOURCE_SCRIPT_DATA, b"unused"),
+        ],
+    )?;
+    assert!(Launcher::try_from_path(path.path())?.is_some());
+    write_native_resources(
+        path.path(),
+        &bytes,
+        0x0409,
+        &[(RESOURCE_SCRIPT_DATA, b"unused")],
+    )?;
+    assert_eq!(
+        Launcher::try_read_target(path.path())?,
+        Some((LauncherKind::Python, python.into()))
+    );
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
 /// Python searches from the end of the file for a ZIP, including the PE overlay.
 #[test]
 fn appended_archive_is_not_rewritten() -> Result<()> {

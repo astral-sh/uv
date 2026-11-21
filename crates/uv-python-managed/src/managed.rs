@@ -638,17 +638,13 @@ impl ManagedPythonInstallation {
         if cfg!(unix) {
             same_file::is_same_file(path, self.executable(false)).unwrap_or_default()
         } else if cfg!(windows) {
-            let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
+            let Ok(Some((LauncherKind::Python, target))) = Launcher::try_read_target(path) else {
                 return false;
             };
-            if launcher.kind() != LauncherKind::Python {
-                return false;
-            }
             // We canonicalize the target path of the launcher in case it includes a minor version
             // junction directory. If canonicalization fails, we check against the launcher path
             // directly.
-            dunce::canonicalize(&launcher.python_path).unwrap_or(launcher.python_path)
-                == self.executable(false)
+            dunce::canonicalize(&target).unwrap_or(target) == self.executable(false)
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
