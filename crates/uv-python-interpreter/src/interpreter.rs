@@ -954,7 +954,7 @@ impl<'a> ExecutableTarget<'a> {
         // launcher selects by home and reports localized errors if it's removed.
         let missing = match &self.launcher {
             Some((_, target)) => matches!(target.try_exists(), Ok(false)),
-            None => has_missing_python_home(self.absolute),
+            None => has_missing_python_home(executable),
         };
         if !missing {
             return None;
@@ -2097,6 +2097,21 @@ fn has_missing_python_home(interpreter: &Path) -> bool {
     let Some(root) = parent.parent() else {
         return false;
     };
+    #[cfg(unix)]
+    {
+        // A copied interpreter can lose its standard library when its home is
+        // removed. A symlink to an external installation identifies the base
+        // directly, even when the configured home is stale.
+        let Ok(target) = fs::canonicalize(interpreter) else {
+            return false;
+        };
+        if target
+            .parent()
+            .is_none_or(|dir| !is_same_file(dir, parent).unwrap_or(false))
+        {
+            return false;
+        }
+    }
     #[cfg(windows)]
     let view = uv_fs::wow64::FileSystemView::for_executable(interpreter);
     let directories = [
@@ -2195,6 +2210,34 @@ mod tests {
         assert!(!home.try_exists()?);
         fs::copy(wow64, &interpreter)?;
         assert!(!super::has_missing_python_home(&interpreter));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stale_home_does_not_hide_symlink_probe_failure() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir()?;
+        let venv = dir.path().join(".venv");
+        let bin = venv.join("bin");
+        fs::create_dir_all(&bin)?;
+        fs::write(
+            venv.join("pyvenv.cfg"),
+            format!("home = {}\n", dir.path().join("missing").display()),
+        )?;
+        let base = dir.path().join("python");
+        fs::write(&base, "#!/bin/sh\nexit 42\n")?;
+        fs::set_permissions(&base, std::fs::Permissions::from_mode(0o755))?;
+        let link = bin.join("python");
+        fs::os::unix::fs::symlink(&base, &link)?;
+
+        let cache = Cache::temp()?.init().await?;
+        let err = Interpreter::query(&link, &cache).unwrap_err();
+        assert!(
+            matches!(err, Error::StatusCode(ref e) if e.code.code() == Some(42)),
+            "{err}"
+        );
         Ok(())
     }
 
