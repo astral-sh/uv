@@ -895,31 +895,41 @@ impl Interpreter {
 /// but will resolve junctions if they are part of a trampoline target.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
-    Ok(cache_target(path)?.unwrap_or_else(|| path.to_path_buf()))
+    match ExecutableTarget::identify(path) {
+        Some(target) => target.canonicalize(),
+        None => Ok(path.to_path_buf()),
+    }
 }
 
-/// The canonical executable for the cache key, if the target can be identified.
-fn cache_target(path: &Path) -> io::Result<Option<PathBuf>> {
-    debug_assert!(
-        path.is_absolute(),
-        "path must be absolute: {}",
-        path.display()
-    );
+enum ExecutableTarget<'a> {
+    Executable(&'a Path),
+    Trampoline(PathBuf),
+}
 
-    #[cfg(windows)]
-    {
+impl<'a> ExecutableTarget<'a> {
+    fn identify(path: &'a Path) -> Option<Self> {
+        debug_assert!(
+            path.is_absolute(),
+            "path must be absolute: {}",
+            path.display()
+        );
         match uv_trampoline_builder::read_launcher_target(path) {
-            Ok(Some((_, target))) => dunce::canonicalize(target).map(Some),
-            Ok(None) => Ok(Some(path.to_path_buf())),
+            Ok(Some((_, target))) => Some(Self::Trampoline(target)),
+            Ok(None) => Some(Self::Executable(path)),
             Err(err) => {
                 trace!("Unresolved launcher target for `{}`: {err}", path.display());
-                Ok(None)
+                None
             }
         }
     }
 
-    #[cfg(unix)]
-    fs_err::canonicalize(path).map(Some)
+    fn canonicalize(&self) -> io::Result<PathBuf> {
+        match self {
+            Self::Trampoline(target) => dunce::canonicalize(target),
+            Self::Executable(path) if cfg!(windows) => Ok(path.to_path_buf()),
+            Self::Executable(path) => fs_err::canonicalize(path),
+        }
+    }
 }
 
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
@@ -1067,11 +1077,20 @@ impl uv_errors::Hinted for Error {
 #[derive(Debug, Error)]
 pub struct BrokenLink {
     pub path: PathBuf,
-    /// Whether we have a broken symlink (Unix) or whether the shim returned that the underlying
-    /// Python went away (Windows).
+    /// Whether the broken link is a symlink or a Windows trampoline.
     pub unix: bool,
     /// Whether the interpreter path looks like a virtual environment.
     pub venv: bool,
+}
+
+impl BrokenLink {
+    fn trampoline(path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            unix: false,
+            venv: uv_fs::is_virtualenv_executable(path),
+        }
+    }
 }
 
 impl Display for BrokenLink {
@@ -1288,11 +1307,7 @@ impl InterpreterInfo {
             // whether the `home` from `pyvenv.cfg` still exists, it's missing if the Python
             // interpreter was uninstalled.
             if python_home(interpreter).is_some_and(|home| !home.exists()) {
-                return Err(Error::BrokenLink(BrokenLink {
-                    path: interpreter.to_path_buf(),
-                    unix: false,
-                    venv: uv_fs::is_virtualenv_executable(interpreter),
-                }));
+                return Err(Error::BrokenLink(BrokenLink::trampoline(interpreter)));
             }
 
             // If the Python version is too old, we may not even be able to invoke the query script
@@ -1471,11 +1486,19 @@ impl InterpreterInfo {
     ) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
-        // Provide a better error message if the link is broken or the file does not exist. Since
-        // `canonicalize_executable` does not resolve the file on Windows, we must re-use this logic
-        // for the subsequent metadata read as we may not have actually resolved the path.
+        let Some(target) = ExecutableTarget::identify(&absolute) else {
+            // A venv launcher reports itself as `sys.executable`. Its timestamp
+            // cannot invalidate metadata when the selected interpreter changes.
+            let (wire, _) = probe()?;
+            return Self::from_probe(executable, wire, HashMap::new());
+        };
+
+        // A missing executable can surface during canonicalization or the metadata read.
         let handle_io_error = |err: io::Error| -> Error {
             if err.kind() == io::ErrorKind::NotFound {
+                if matches!(target, ExecutableTarget::Trampoline(_)) && absolute.is_file() {
+                    return Error::BrokenLink(BrokenLink::trampoline(executable));
+                }
                 // Check if it looks like a venv interpreter where the underlying Python
                 // installation was removed.
                 if absolute
@@ -1495,12 +1518,7 @@ impl InterpreterInfo {
             }
         };
 
-        let Some(canonical) = cache_target(&absolute).map_err(handle_io_error)? else {
-            // A venv launcher reports itself as `sys.executable`. Its timestamp
-            // cannot invalidate metadata when the selected interpreter changes.
-            let (wire, _) = probe()?;
-            return Self::from_probe(executable, wire, HashMap::new());
-        };
+        let canonical = target.canonicalize().map_err(handle_io_error)?;
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
@@ -1600,7 +1618,7 @@ impl InterpreterInfo {
             };
             if !base.is_absolute()
                 || !is_same_file(base, canonical).unwrap_or(false)
-                || !matches!(cache_target(absolute), Ok(Some(current)) if current == canonical)
+                || !canonicalize_executable(absolute).is_ok_and(|current| current == canonical)
             {
                 return false;
             }

@@ -3410,7 +3410,9 @@ fn uninstall_last_patch() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      cause: Python interpreter not found at `[VENV]/[BIN]/python`
+      cause: Broken Python trampoline at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
+
+    hint: Consider recreating the environment (e.g., with `uv venv`)
     "
     );
 }
