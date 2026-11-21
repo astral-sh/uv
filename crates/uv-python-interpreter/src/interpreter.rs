@@ -117,8 +117,11 @@ impl Interpreter {
 
     /// Remove any cached metadata for the given Python executable.
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
-        let absolute = std::path::absolute(executable.as_ref())?;
-        let canonical = canonicalize_executable(&absolute)?;
+        let executable = executable.as_ref();
+        let absolute = std::path::absolute(executable)?;
+        let Some((_, canonical)) = ExecutableTarget::for_cache(&absolute, executable)? else {
+            return Ok(());
+        };
         let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache);
 
         match fs::remove_file(cache_entry.path()) {
@@ -933,6 +936,19 @@ impl<'a> ExecutableTarget<'a> {
         }
     }
 
+    /// Resolve the target and canonical path used to key an interpreter cache entry.
+    fn for_cache(absolute: &'a Path, executable: &Path) -> Result<Option<(Self, PathBuf)>, Error> {
+        let Some(target) = Self::identify(absolute) else {
+            // A venv launcher reports itself as `sys.executable`. Its timestamp
+            // cannot invalidate metadata when the selected interpreter changes.
+            return Ok(None);
+        };
+        let Some(canonical) = target.cache_input(executable, target.canonicalize())? else {
+            return Ok(None);
+        };
+        Ok(Some((target, canonical)))
+    }
+
     fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
         let err = match input {
             Ok(value) => return Ok(Some(value)),
@@ -1607,13 +1623,7 @@ impl InterpreterInfo {
         let absolute = std::path::absolute(executable)?;
 
         let uncached = |(wire, _)| Self::from_probe(executable, wire, HashMap::new());
-        let Some(target) = ExecutableTarget::identify(&absolute) else {
-            // A venv launcher reports itself as `sys.executable`. Its timestamp
-            // cannot invalidate metadata when the selected interpreter changes.
-            return uncached(probe()?);
-        };
-
-        let Some(canonical) = target.cache_input(executable, target.canonicalize())? else {
+        let Some((target, canonical)) = ExecutableTarget::for_cache(&absolute, executable)? else {
             return uncached(probe()?);
         };
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
@@ -2359,6 +2369,7 @@ mod tests {
         assert_eq!(info.metadata.sys_prefix, prefix);
         let proxy_entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
         assert!(!proxy_entry.path().exists());
+        Interpreter::clear_cache(&proxy, &cache)?;
 
         uv_fs::remove_symlink(&home)?;
         fs::rename(&saved, &home)?;
@@ -2389,7 +2400,10 @@ mod tests {
         // Seed an entry keyed on the proxy alone, with a fresh timestamp.
         info.file_timestamps
             .insert(proxy.clone(), Some(Timestamp::from_path(&proxy)?));
-        assert_bypasses_fresh_entry(&cache, &entry, &proxy, &info)
+        assert_bypasses_fresh_entry(&cache, &entry, &proxy, &info)?;
+        Interpreter::clear_cache(&proxy, &cache)?;
+        assert!(entry.path().exists());
+        Ok(())
     }
 
     #[cfg(windows)]
