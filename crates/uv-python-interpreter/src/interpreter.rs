@@ -120,7 +120,10 @@ impl Interpreter {
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
         let executable = executable.as_ref();
         let absolute = std::path::absolute(executable)?;
-        let Some(resolved) = CacheTarget::resolve(&absolute, executable)? else {
+        let Some(target) = ExecutableTarget::identify(&absolute) else {
+            return Ok(());
+        };
+        let Some(resolved) = target.for_cache(executable)? else {
             return Ok(());
         };
         let cache_entry = resolved.cache_entry(cache);
@@ -938,19 +941,33 @@ impl<'a> ExecutableTarget<'a> {
     }
 
     fn diagnose_probe_error(&self, executable: &Path, error: Error) -> Error {
-        // A uv launcher selects the interpreter from its resources; a stale
-        // configured home says nothing about it. CPython's venv launcher
-        // selects by home and reports localized errors when Python is removed.
-        if self.launcher.is_none()
-            && matches!(error, Error::StatusCode(_))
-            && has_missing_python_home(executable)
+        if matches!(error, Error::StatusCode(_))
+            && let Some(link) = self.broken_launcher(executable)
         {
-            return Error::BrokenLink(BrokenLink::new(
-                executable,
-                BrokenLinkKind::Trampoline(None),
-            ));
+            return Error::BrokenLink(link);
         }
         error
+    }
+
+    fn broken_launcher(&self, executable: &Path) -> Option<BrokenLink> {
+        // A uv launcher selects Python from its resources. CPython's venv
+        // launcher selects by home and reports localized errors if it's removed.
+        let missing = match &self.launcher {
+            Some((_, target)) => matches!(target.try_exists(), Ok(false)),
+            None => has_missing_python_home(self.absolute),
+        };
+        if !missing {
+            return None;
+        }
+        let current = Self::identify(self.absolute)?;
+        if current.launcher != self.launcher {
+            return None;
+        }
+        let target = current.launcher.map(|(_, target)| target);
+        Some(BrokenLink::new(
+            executable,
+            BrokenLinkKind::Trampoline(target),
+        ))
     }
 
     fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
@@ -964,15 +981,9 @@ impl<'a> ExecutableTarget<'a> {
         // even when the failure is local to one launcher (e.g., a junction loop).
         if let Some((_, target)) = &self.launcher {
             if err.kind() == io::ErrorKind::NotFound
-                && matches!(target.try_exists(), Ok(false))
-                && let Some((_, current)) =
-                    Self::identify(self.absolute).and_then(|target| target.launcher)
-                && current == *target
+                && let Some(link) = self.broken_launcher(executable)
             {
-                return Err(Error::BrokenLink(BrokenLink::new(
-                    executable,
-                    BrokenLinkKind::Trampoline(Some(current)),
-                )));
+                return Err(Error::BrokenLink(link));
             }
             trace!(
                 "Skipping interpreter cache for launcher targeting `{}`: {err}",
@@ -996,33 +1007,31 @@ impl<'a> ExecutableTarget<'a> {
         }
         Err(Error::NotFound(executable.to_path_buf()))
     }
-}
 
-/// The executable and its resolved path when querying the interpreter cache.
-struct CacheTarget<'a> {
-    target: ExecutableTarget<'a>,
-    canonical: PathBuf,
-}
-
-impl<'a> CacheTarget<'a> {
     /// Resolve the target and canonical path used to key an interpreter cache entry.
-    fn resolve(absolute: &'a Path, executable: &Path) -> Result<Option<Self>, Error> {
-        let Some(target) = ExecutableTarget::identify(absolute) else {
-            // A venv launcher reports itself as `sys.executable`. Its timestamp
-            // cannot invalidate metadata when the selected interpreter changes.
-            return Ok(None);
-        };
-        let Some(canonical) = target.cache_input(executable, target.canonicalize())? else {
+    fn for_cache(&self, executable: &Path) -> Result<Option<CacheTarget<'_>>, Error> {
+        let Some(canonical) = self.cache_input(executable, self.canonicalize())? else {
             return Ok(None);
         };
         // A script runs its embedded payload. Even if it forwards a probe to
         // Python, its stored interpreter path cannot identify the result.
-        if matches!(target.launcher, Some((LauncherKind::Script, _))) {
+        if matches!(self.launcher, Some((LauncherKind::Script, _))) {
             return Ok(None);
         }
-        Ok(Some(Self { target, canonical }))
+        Ok(Some(CacheTarget {
+            target: self,
+            canonical,
+        }))
     }
+}
 
+/// The executable and its resolved path when querying the interpreter cache.
+struct CacheTarget<'a> {
+    target: &'a ExecutableTarget<'a>,
+    canonical: PathBuf,
+}
+
+impl CacheTarget<'_> {
     /// Return the cache entry for an interpreter's absolute and canonical executable paths.
     fn cache_entry(&self, cache: &Cache) -> CacheEntry {
         // We use the absolute path for the cache entry to avoid cache collisions for relative
@@ -1085,7 +1094,10 @@ impl<'a> CacheTarget<'a> {
             return false;
         }
         // A managed junction can redirect the launcher during the probe.
-        let Ok(Some(current)) = Self::resolve(self.target.absolute, self.target.absolute) else {
+        let Some(target) = ExecutableTarget::identify(self.target.absolute) else {
+            return false;
+        };
+        let Ok(Some(current)) = target.for_cache(self.target.absolute) else {
             return false;
         };
         if current.target.launcher != self.target.launcher || current.canonical != self.canonical {
@@ -1829,10 +1841,15 @@ impl InterpreterInfo {
         let absolute = std::path::absolute(executable)?;
 
         let uncached = |(wire, _)| Self::from_probe(executable, wire, HashMap::new());
-        let Some(resolved) = CacheTarget::resolve(&absolute, executable)? else {
+        let Some(target) = ExecutableTarget::identify(&absolute) else {
+            // A venv launcher reports itself as `sys.executable`. Its timestamp
+            // cannot invalidate metadata when the selected interpreter changes.
             return uncached(probe()?);
         };
-        let probe = || probe().map_err(|err| resolved.target.diagnose_probe_error(executable, err));
+        let probe = || probe().map_err(|err| target.diagnose_probe_error(executable, err));
+        let Some(resolved) = target.for_cache(executable)? else {
+            return uncached(probe()?);
+        };
         let cache_entry = resolved.cache_entry(cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
@@ -2136,11 +2153,11 @@ mod tests {
     use uv_trampoline_builder::{WindowMode, windows_python_launcher, windows_script_launcher};
 
     use crate::Interpreter;
-    use crate::interpreter::{
-        CacheTarget, Error, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire,
-    };
     #[cfg(windows)]
-    use crate::interpreter::{ExecutableTarget, LinkSnapshot, canonicalize_executable};
+    use crate::interpreter::{CacheTarget, LinkSnapshot, canonicalize_executable};
+    use crate::interpreter::{
+        Error, ExecutableTarget, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire,
+    };
 
     #[cfg(all(windows, target_pointer_width = "64"))]
     fn wow64_executable(windows: &Path) -> io::Result<Option<std::path::PathBuf>> {
@@ -2317,7 +2334,8 @@ mod tests {
             windows_python_launcher(&target, WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
         let entry = resolved.cache_entry(&cache);
         // Ensure the directory update is observable even within a single clock tick.
         fs::OpenOptions::new()
@@ -2369,7 +2387,8 @@ mod tests {
             windows_python_launcher(link.join("python.exe"), WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
         assert_eq!(
             resolved.canonical,
             dunce::canonicalize(first.join("python.exe"))?
@@ -2424,7 +2443,9 @@ mod tests {
             windows_python_launcher(&target, WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let entry = CacheTarget::resolve(&executable, &executable)?
+        let entry = ExecutableTarget::identify(&executable)
+            .expect("executable target")
+            .for_cache(&executable)?
             .expect("cache target")
             .cache_entry(&cache);
         let mut response = mocked_interpreter_response(&executable)?;
@@ -2466,7 +2487,8 @@ mod tests {
         let alias = dir.path().join("alias");
         uv_fs::create_symlink(&installation, &alias)?;
         let reported = alias.join("python.exe");
-        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
         assert_ne!(dunce::canonicalize(&reported)?, resolved.canonical);
         let cache = Cache::temp()?.init().await?;
         let mut response = mocked_interpreter_response(&proxy)?;
@@ -2505,7 +2527,8 @@ mod tests {
             windows_python_launcher("base.exe", WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
         let entry = resolved.cache_entry(&cache);
         let mut response = mocked_interpreter_response(&proxy)?;
         response.metadata.sys_base_executable = Some(base.clone());
@@ -2699,6 +2722,33 @@ mod tests {
 
     #[cfg(windows)]
     #[tokio::test]
+    async fn proxy_target_removed_during_probe() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let target = dir.path().join("base.exe");
+        fs::write(&target, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher("base.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let err = InterpreterInfo::query_cached(&proxy, &cache, || {
+            // The cache inputs exist when checked, but the proxy can no longer start Python.
+            fs::remove_file(&target)?;
+            InterpreterInfo::query(&proxy, &cache)
+        })
+        .unwrap_err();
+        let Error::BrokenLink(link) = err else {
+            anyhow::bail!("expected a broken proxy, got {err}");
+        };
+        assert_eq!(link.path, proxy);
+        assert_eq!(link.target(), Some(target.as_path()));
+        assert!(!target.try_exists()?);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
     async fn failed_proxy_probe_with_stale_home() -> Result<()> {
         let dir = tempdir()?;
         let scripts = dir.path().join("Scripts");
@@ -2805,7 +2855,7 @@ mod tests {
     #[cfg(windows)]
     fn proxy_only_entry(proxy: &Path, cache: &Cache) -> uv_cache::CacheEntry {
         CacheTarget {
-            target: ExecutableTarget {
+            target: &ExecutableTarget {
                 absolute: proxy,
                 launcher: None,
             },
@@ -2865,7 +2915,8 @@ mod tests {
         );
 
         let absolute = std::path::absolute(&mocked_interpreter)?;
-        let resolved = CacheTarget::resolve(&absolute, &absolute)?.expect("cache target");
+        let identified = ExecutableTarget::identify(&absolute).expect("executable target");
+        let resolved = identified.for_cache(&absolute)?.expect("cache target");
         let cache_entry = resolved.cache_entry(&cache);
         let mut cached: InterpreterInfo = rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(
