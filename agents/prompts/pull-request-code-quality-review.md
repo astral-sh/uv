@@ -41,10 +41,12 @@ defaults with the repository's instructions and concrete constraints:
    duplicated representations. Follow local naming, import, and error conventions. Explain the
    concrete readability or maintenance benefit; fewer lines alone is insufficient.
 5. **Trace behavior across boundaries.** Check error paths, configuration precedence, cache and
-   serialized formats, older versions, and platform differences. Preserve useful error causes and
-   actionable context. Follow validation through shortcuts as well as normal paths. For concurrency
-   changes, reason about resource lifetimes, interprocess behavior, and consistency across related
-   data; passing race tests do not establish those guarantees.
+   serialized formats, older versions, and platform differences. When the change affects state,
+   trace what the next operation reads after success, failure, or retry. Include reuse of existing
+   locks, caches, and installed packages where relevant. Preserve useful error causes and actionable
+   context. Follow validation through shortcuts as well as normal paths. For concurrency changes,
+   reason about resource lifetimes, interprocess behavior, and consistency across related data;
+   passing race tests do not establish those guarantees.
 6. **Keep tests direct and focused.** Read neighboring tests and check existing coverage before
    recommending more cases. Follow the repository's test style throughout setup, commands, and
    assertions, and use the relevant existing test module. Integration scenarios should use explicit
@@ -75,10 +77,11 @@ contextual choices, not automatic findings.
 
 Decide what belongs in this review before assigning a priority.
 
-- Report defects the PR introduces or worsens, including in unchanged code, and cases where the
-  intended fix is incomplete. If a defect may predate the PR, compare the same trigger at the merge
-  base (`base` in `revisions.json`) and head. If it occurs on the base, say so and explain what
-  changes in reachability or impact, or which part of the intended fix is missing.
+- Before dismissing a possible defect as pre-existing or out of scope, trace the same input or
+  sequence from the same starting state at the merge base (`base` in `revisions.json`) and head.
+  Report newly broken behavior, new exposure to an existing defect, and incomplete intended fixes,
+  even in unchanged code. Explain what changes for the user. If the defect exists on the base, say
+  so.
 - Keep design, style, and test suggestions tied to a concrete cost or gap in the change. If a small
   correction here suffices, ask for that and leave the broader redesign for a separate PR.
 - Omit independent work by default, even at priority 3. Touching the same code is insufficient
@@ -86,8 +89,9 @@ Decide what belongs in this review before assigning a priority.
   affects what should land here. Say explicitly when it can follow in a separate PR. If it needs to
   land first, explain what would break if this PR merged without it.
 - On later pushes, an earlier suggestion doesn't expand the PR's goal. Respect corrections,
-  withdrawals, and deferrals. Don't repeat a finding or reopen deferred work unless you can explain
-  what new evidence changes the decision, such as a regression introduced by a follow-up fix.
+  withdrawals, and deferrals. Don't repeat a finding or reopen deferred work without new evidence
+  that changes the decision. If a regression can be fixed without the deferred work, ask for the
+  smallest correction here and make clear that the broader work can still wait.
 
 Return only JSON matching `$REVIEW_CONFIG/schema.json`. Each finding needs a precise diff location,
 triggering condition or concrete maintenance cost, evidence, and the smallest useful correction.
