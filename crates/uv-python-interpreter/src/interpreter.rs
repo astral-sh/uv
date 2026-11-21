@@ -2493,7 +2493,7 @@ mod tests {
         let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((response, None)))?;
         assert!(!entry.path().exists());
 
-        // A previous version of uv could have cached the 32-bit response.
+        // Seed the incompatible response directly to check that cache reads reject it.
         fs::create_dir_all(entry.dir())?;
         fs::write(entry.path(), rmp_serde::to_vec(&info)?)?;
         let mut native = mocked_interpreter_response(&executable)?;
