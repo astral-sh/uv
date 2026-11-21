@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 use arcstr::ArcStr;
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use thiserror::Error;
 #[cfg(feature = "unsafe-url")]
 #[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
@@ -569,7 +570,16 @@ impl Pep508Url for VerbatimUrl {
     }
 
     fn displayable_with_credentials(&self) -> impl Display {
-        self.url.displayable_with_credentials()
+        // Network URLs may contain environment variable references that must not be expanded
+        // into project metadata. Whitespace still needs escaping in a PEP 508 URL.
+        if self.scheme() != "file"
+            && let Some(given) = self.given()
+            && env_var_references(given).next().is_some()
+        {
+            const REQUIREMENT_WHITESPACE: &AsciiSet = &CONTROLS.add(b' ');
+            return Cow::from(utf8_percent_encode(given, REQUIREMENT_WHITESPACE));
+        }
+        Cow::Borrowed(self.url.as_str())
     }
 }
 
@@ -606,6 +616,20 @@ pub enum VerbatimUrlError {
     NotAUrl(String),
 }
 
+/// The ranges and names of environment variable references recognized in a requirement.
+fn env_var_references(s: &str) -> impl Iterator<Item = (std::ops::Range<usize>, &str)> {
+    s.match_indices("${").filter_map(move |(start, _)| {
+        let remaining = &s[start + 2..];
+        let length = remaining.bytes().position(|byte| {
+            !byte.is_ascii_uppercase() && !byte.is_ascii_digit() && byte != b'_'
+        })?;
+        if length == 0 || remaining.as_bytes()[length] != b'}' {
+            return None;
+        }
+        Some((start..start + 2 + length + 1, &remaining[..length]))
+    })
+}
+
 /// Expand all available environment variables.
 ///
 /// This is modeled off of pip's environment variable expansion, which states:
@@ -631,28 +655,15 @@ pub fn expand_env_vars(s: &str) -> Cow<'_, str> {
 
     let mut expanded = None;
     let mut previous_end = 0;
-    for (start, _) in s.match_indices("${") {
-        let remaining = &s[start + 2..];
-        let Some(length) = remaining
-            .bytes()
-            .position(|byte| !byte.is_ascii_uppercase() && !byte.is_ascii_digit() && byte != b'_')
-        else {
-            continue;
-        };
-        if length == 0 || remaining.as_bytes()[length] != b'}' {
-            continue;
-        }
-
-        let name = &remaining[..length];
-        let end = start + 2 + length + 1;
+    for (range, name) in env_var_references(s) {
         let expanded = expanded.get_or_insert_with(|| String::with_capacity(s.len()));
-        expanded.push_str(&s[previous_end..start]);
+        expanded.push_str(&s[previous_end..range.start]);
+        previous_end = range.end;
         match std::env::var(name) {
             Ok(value) => expanded.push_str(&value),
             Err(_) if name == "PROJECT_ROOT" => expanded.push_str(&PROJECT_ROOT_FRAGMENT),
-            Err(_) => expanded.push_str(&s[start..end]),
+            Err(_) => expanded.push_str(&s[range]),
         }
-        previous_end = end;
     }
 
     if let Some(mut expanded) = expanded {
