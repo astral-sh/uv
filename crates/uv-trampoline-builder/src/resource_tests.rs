@@ -970,21 +970,30 @@ fn interpreter_lookup_limits_path_allocation() -> Result<()> {
 fn long_stored_paths_can_be_rewritten() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("script.exe");
-    let python = format!("{}python.exe", r".\".repeat(50_000));
+    let replacement = which::which("python")?;
+    let python = replacement
+        .with_file_name(r".\".repeat(50_000))
+        .join(replacement.file_name().unwrap());
+    assert!(python.as_os_str().len() > 3 * 32_767);
     fs_err::write(
         path.path(),
-        windows_script_launcher("print('rewritten')", false, &python)?,
+        windows_script_launcher("print('long path')", false, &python)?,
     )?;
-    let launcher = Launcher::try_from_path(path.path())?.context("Missing script launcher")?;
-    assert_eq!(launcher.python_path().as_os_str(), python.as_str());
-    let replacement = which::which("python")?;
-    launcher
-        .with_python_path(&replacement)?
-        .write_to_file(&mut File::create(path.path())?)?;
     Command::new(path.path())
         .assert()
         .success()
-        .stdout("rewritten\r\n");
+        .stdout("long path\r\n");
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing script launcher")?;
+    assert_eq!(launcher.python_path().as_os_str(), python.as_os_str());
+    launcher
+        .with_python_path(&replacement)?
+        .write_to_file(&mut File::create(path.path())?)?;
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing rewritten launcher")?;
+    assert_eq!(launcher.python_path().as_os_str(), replacement.as_os_str());
+    Command::new(path.path())
+        .assert()
+        .success()
+        .stdout("long path\r\n");
     Ok(())
 }
 
