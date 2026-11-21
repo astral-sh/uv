@@ -7491,7 +7491,6 @@ dependencies = [
  "uv-scripts",
  "uv-settings",
  "uv-shell",
- "uv-trampoline-builder",
  "uv-warnings",
  "uv-workspace",
 ]

@@ -4,9 +4,10 @@
 use uv_static::EnvVars;
 
 pub use managed::{
-    Error, ManagedPythonInstallation, ManagedPythonInstallations, PythonExecutable,
-    PythonMinorVersionLink, UpgradePolicy, compare_build_versions, create_link_to_executable,
-    platform_key_from_env, python_executable_dir, replace_link_to_executable,
+    BinLinkOperation, Error, ManagedPythonInstallation, ManagedPythonInstallations,
+    PythonExecutable, PythonMinorVersionLink, UpgradePolicy, compare_build_versions,
+    create_link_to_executable, platform_key_from_env, python_executable_dir,
+    replace_link_to_executable,
 };
 
 pub mod downloads;

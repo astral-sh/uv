@@ -16,8 +16,8 @@ use uv_command_support::Printer;
 use uv_command_support::{ExitStatus, elapsed};
 use uv_fs::Simplified;
 use uv_python_managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, PythonMinorVersionLink,
-    python_executable_dir,
+    BinLinkOperation, ManagedPythonInstallation, ManagedPythonInstallations,
+    PythonMinorVersionLink, python_executable_dir,
 };
 use uv_python_types::{
     PythonDownloadRequest, PythonInstallationKey, PythonInstallationMinorVersionKey, PythonRequest,
@@ -196,9 +196,10 @@ async fn do_uninstall(
         })
         .sorted()
     {
-        let Some(installation) = ManagedPythonInstallation::find_bin_link_for_removal(
+        let Some(installation) = ManagedPythonInstallation::find_bin_link(
             &executable,
             matching_installations.iter(),
+            BinLinkOperation::Uninstall,
         ) else {
             continue;
         };

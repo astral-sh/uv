@@ -327,6 +327,13 @@ pub struct ManagedPythonInstallation {
     build: Option<Cow<'static, str>>,
 }
 
+/// The operation for which a managed executable link is being identified.
+#[derive(Debug, Clone, Copy)]
+pub enum BinLinkOperation {
+    Install,
+    Uninstall,
+}
+
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
         let implementation = ImplementationName::try_from(&download.key().implementation)?;
@@ -633,20 +640,36 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
-    /// Find the installation that owns an executable link during uninstall.
-    pub fn find_bin_link_for_removal<'a>(
+    /// Find the installation that owns an executable link. Installation checks
+    /// for a live symlink or proxy. Uninstall also cleans up Unix hard links
+    /// and Windows proxies whose interpreter has been removed.
+    pub fn find_bin_link<'a>(
         path: &Path,
         mut installations: impl Iterator<Item = &'a Self>,
+        operation: BinLinkOperation,
     ) -> Option<&'a Self> {
         if cfg!(unix) {
-            installations.find(|installation| {
-                same_file::is_same_file(path, installation.executable(false)).unwrap_or_default()
-            })
+            match operation {
+                BinLinkOperation::Install => {
+                    if !path.is_symlink() {
+                        return None;
+                    }
+                    let target = fs_err::canonicalize(path).ok()?;
+                    installations.find(|installation| installation.executable(false) == target)
+                }
+                BinLinkOperation::Uninstall => installations.find(|installation| {
+                    same_file::is_same_file(path, installation.executable(false))
+                        .unwrap_or_default()
+                }),
+            }
         } else if cfg!(windows) {
             let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
                 return None;
             };
-            let target = dunce::canonicalize(&target).unwrap_or(target);
+            let target = match operation {
+                BinLinkOperation::Install => dunce::canonicalize(target).ok()?,
+                BinLinkOperation::Uninstall => dunce::canonicalize(&target).unwrap_or(target),
+            };
             installations.find(|installation| installation.owns_proxy_target(&target))
         } else {
             unreachable!("Only Windows and Unix are supported")
@@ -1153,15 +1176,21 @@ mod tests {
                         &proxy,
                         windows_python_launcher(target, WindowMode::Console)?,
                     )?;
-                    let found = ManagedPythonInstallation::find_bin_link_for_removal(
-                        &proxy,
-                        std::iter::once(&installation),
-                    );
-                    assert_eq!(
-                        found.is_some(),
-                        owned,
-                        "{key}: {target} (present={present})"
-                    );
+                    for (operation, expected) in [
+                        (BinLinkOperation::Install, owned && present),
+                        (BinLinkOperation::Uninstall, owned),
+                    ] {
+                        let found = ManagedPythonInstallation::find_bin_link(
+                            &proxy,
+                            std::iter::once(&installation),
+                            operation,
+                        );
+                        assert_eq!(
+                            found.is_some(),
+                            expected,
+                            "{operation:?} {key}: {target} (present={present})"
+                        );
+                    }
                 }
             }
             fs_err::remove_file(dir.path().join("python.exe"))?;
