@@ -19,7 +19,7 @@ use std::{env, iter};
 use fs_err as fs;
 use indoc::formatdoc;
 use itertools::Itertools;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde::de::{self, IntoDeserializer, SeqAccess, Visitor, value};
 use serde::{Deserialize, Deserializer};
 use tempfile::TempDir;
@@ -498,11 +498,7 @@ impl SourceBuild {
                     .chain(extra_requires)
                     .collect();
                 let resolution = build_context
-                    .resolve(
-                        &requirements,
-                        Some(resolved_requirements.hasher()),
-                        build_stack,
-                    )
+                    .resolve(&requirements, Some(&resolved_requirements), build_stack)
                     .await
                     .map_err(|err| {
                         Error::RequirementsResolve(
@@ -669,6 +665,93 @@ impl SourceBuild {
                     .map_err(|err| Error::RequirementsResolve(dependency_sources, err.into()))?
             },
         )
+    }
+
+    /// Read a published project's build declaration independently of its runtime metadata.
+    /// Some sdists provide valid PKG-INFO but have legacy or incomplete `[project]` tables.
+    /// Fall back to source discovery for declarations that need workspace source mappings.
+    fn archive_build_system(contents: &str) -> Result<Option<(String, Vec<Requirement>)>, Error> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "kebab-case")]
+        struct Declaration {
+            build_system: Option<BuildSystem>,
+        }
+
+        let document = toml_edit::Document::from_str(contents)?;
+        let source_names: FxHashSet<_> = document
+            .get("tool")
+            .and_then(|tool| tool.get("uv"))
+            .and_then(|uv| uv.get("sources"))
+            .and_then(toml_edit::Item::as_table_like)
+            .into_iter()
+            .flat_map(|sources| sources.iter())
+            .filter_map(|(name, _)| PackageName::from_str(name).ok())
+            .collect();
+        let declaration = Declaration::deserialize(document.into_deserializer())?;
+        match declaration.build_system {
+            // Published archives need not contain the entire development workspace. Only
+            // discover it when a build requirement itself uses one of the source mappings.
+            Some(system)
+                if system
+                    .requires
+                    .iter()
+                    .any(|req| source_names.contains(&req.name)) =>
+            {
+                Ok(None)
+            }
+            Some(system) => Ok(Some((
+                system
+                    .build_backend
+                    .unwrap_or_else(|| DEFAULT_BACKEND.backend.clone()),
+                system.requires.into_iter().map(Requirement::from).collect(),
+            ))),
+            None => Ok(Some((
+                DEFAULT_BACKEND.backend.clone(),
+                DEFAULT_BACKEND.requirements.clone(),
+            ))),
+        }
+    }
+
+    /// Inspect an extracted archive. A missing pyproject uses the legacy setuptools backend.
+    pub async fn read_archive_build_system(
+        tree: &Path,
+    ) -> Result<Option<(String, Vec<Requirement>)>, Error> {
+        match fs::tokio::read_to_string(tree.join("pyproject.toml")).await {
+            Ok(contents) => Self::archive_build_system(&contents),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(Some((
+                DEFAULT_BACKEND.backend.clone(),
+                DEFAULT_BACKEND.requirements.clone(),
+            ))),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    /// Read the declared backend and its lowered requirements without creating an environment
+    /// or running any backend hooks.
+    pub async fn read_build_system(
+        source_tree: &Path,
+        package_name: &PackageName,
+        locations: &IndexLocations,
+        sources: &NoSources,
+        stop_discovery_at: Option<&Path>,
+        cache: &Cache,
+        workspace_cache: &WorkspaceCache,
+        credentials_cache: &CredentialsCache,
+    ) -> Result<(String, Vec<Requirement>), Error> {
+        let (backend, _) = Self::extract_pep517_backend(
+            source_tree,
+            source_tree,
+            Some(package_name),
+            locations,
+            sources,
+            stop_discovery_at,
+            cache,
+            workspace_cache,
+            credentials_cache,
+        )
+        .await
+        .map_err(|err| *err)?;
+        Ok((backend.backend, backend.requirements))
     }
 
     /// Extract the PEP 517 backend from the `pyproject.toml` or `setup.py` file.
@@ -1403,5 +1486,53 @@ impl Write for Printer {
             Self::Quiet => {}
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SourceBuild;
+
+    #[test]
+    fn archive_build_system_ignores_unrelated_project_metadata() {
+        let (backend, requires) = SourceBuild::archive_build_system(
+            r#"
+            [project]
+            name = 17
+
+            [build-system]
+            requires = ["flit-core>=3"]
+            build-backend = "flit_core.buildapi"
+            "#,
+        )
+        .expect("valid build declaration")
+        .expect("declared build system");
+
+        assert_eq!(backend, "flit_core.buildapi");
+        assert_eq!(requires.len(), 1);
+        assert_eq!(requires[0].name.as_str(), "flit-core");
+    }
+
+    #[test]
+    fn only_discover_archive_workspace_for_mapped_build_requirements() {
+        let project = r#"
+            [build-system]
+            requires = ["flit-core"]
+
+            [tool.uv.sources]
+            runtime-client = { workspace = true }
+
+            [tool.uv.workspace]
+            members = ["packages/runtime-client"]
+        "#;
+        assert!(matches!(
+            SourceBuild::archive_build_system(project),
+            Ok(Some(_))
+        ));
+        let mapped_backend = project.replace("runtime-client =", "Flit_Core =");
+        assert!(matches!(
+            SourceBuild::archive_build_system(&mapped_backend),
+            Ok(None)
+        ));
     }
 }

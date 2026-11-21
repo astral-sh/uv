@@ -281,6 +281,12 @@ mod tests {
         machine-readable output for use by other tools. The JSON schemas are experimental and may
         change without warning; enabling this feature silences the preview warning.
 
+        ### `lock-build-dependencies` {#lock-build-dependencies}
+
+        Lock declared build requirements recursively in `uv.lock`. Isolated builds during
+        [project installation](./projects/build.md#locking-build-dependencies) install only locked
+        artifacts, including when the build environment conflicts with runtime dependencies.
+
         ### `lock-without-metadata` {#lock-without-metadata}
 
         uv omits the `package.metadata` tables from `uv.lock`, except for remote URL and Git

@@ -2610,6 +2610,330 @@ fn lock_wheel_path_relock_hash_mismatch() -> Result<()> {
     Ok(())
 }
 
+/// Re-locking on one platform cannot authorize new bytes for a different platform's wheel.
+/// Its filename is already locked, even though resolving metadata never downloads that wheel.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_retains_other_platform_wheel_hash_until_upgrade() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let name = "demo-pkg".parse()?;
+    let version = "1.0.0".parse()?;
+    let (filename, wheel) = WheelBuilder::new(&name, &version).build();
+    let (windows_filename, windows_wheel) = WheelBuilder::new(&name, &version)
+        .tag("cp312-cp312-win_amd64")
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let windows_path = context.temp_dir.child(&windows_filename);
+    windows_path.write_binary(&windows_wheel)?;
+    let original = hex::encode(Sha256::digest(windows_wheel));
+    let index = context.temp_dir.child("index.html");
+    let listing = formatdoc! {r#"
+        <a href="{filename}#sha256={}">{filename}</a>
+        <a href="{windows_filename}#sha256={original}">{windows_filename}</a>
+    "#, hex::encode(Sha256::digest(wheel))};
+    index.write_str(&listing)?;
+    let pyproject = context.temp_dir.child("pyproject.toml");
+    let project = indoc! {r#"
+        [project]
+        name = "project"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["demo-pkg"]
+        build-backend = "demo_pkg"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["index.html"]
+    "#};
+    pyproject.write_str(project)?;
+    context
+        .lock()
+        .args(["--preview-features", "lock-build-dependencies"])
+        .assert()
+        .success();
+    let locked = context.read("uv.lock");
+    assert!(locked.contains(&original));
+
+    let (_, replacement) = WheelBuilder::new(&name, &version)
+        .tag("cp312-cp312-win_amd64")
+        .files(&[("replacement.py", "")])
+        .build();
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    windows_path.write_binary(&replacement)?;
+    index.write_str(&listing.replace(&original, &replacement_digest))?;
+    pyproject.write_str(&project.replace(">=3.12", ">=3.12.1"))?;
+    uv_snapshot!(context.filters(), context.lock().arg("--no-cache"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    assert_eq!(
+        context.read("uv.lock"),
+        locked.replace(">=3.12", ">=3.12.1")
+    );
+
+    context
+        .lock()
+        .args(["--upgrade-package", "demo-pkg"])
+        .assert()
+        .success();
+    assert!(context.read("uv.lock").contains(&replacement_digest));
+    Ok(())
+}
+
+/// A forced resolution under `--locked` must not run metadata hooks from a moved Git branch,
+/// even if the package is only needed at build time and build isolation is disabled.
+#[cfg(all(feature = "test-universal", feature = "test-git"))]
+#[test]
+fn lock_build_pins_git_commit_before_metadata_hook() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let repo = context.temp_dir.child("helper");
+    repo.create_dir_all()?;
+    let git = || {
+        let mut git = Command::new("git");
+        git.current_dir(repo.path()).args([
+            "-c",
+            "user.name=Example",
+            "-c",
+            "user.email=example@example.org",
+        ]);
+        git
+    };
+    git().args(["init", "-b", "main"]).assert().success();
+    let project = repo.child("pyproject.toml");
+    project.write_str(indoc! {r#"
+        [project]
+        name = "helper"
+        version = "1"
+
+        [build-system]
+        requires = []
+        build-backend = "backend"
+        backend-path = ["."]
+    "#})?;
+    git().args(["add", "."]).assert().success();
+    git()
+        .args(["commit", "-m", "Static metadata"])
+        .assert()
+        .success();
+
+    let url = SafeUrl::from_directory_path(repo.path())
+        .map_err(|()| anyhow!("expected a file URL for the Git repository"))?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["helper @ git+{url}@main"]
+        build-backend = "helper"
+    "#})?;
+    context
+        .lock()
+        .args(["--preview-features", "lock-build-dependencies", "--offline"])
+        .assert()
+        .success();
+    let locked = context.read("uv.lock");
+
+    let sentinel = context.temp_dir.child("backend-executed");
+    repo.child("backend.py").write_str(&formatdoc! {r#"
+        from pathlib import Path
+        Path({path:?}).touch()
+        raise RuntimeError("unexpected metadata hook from moved branch")
+    "#, path = sentinel.path().to_string_lossy()})?;
+    project.write_str(
+        &fs_err::read_to_string(&project)?.replace("version = \"1\"", "dynamic = [\"version\"]"),
+    )?;
+    git().args(["add", "."]).assert().success();
+    git()
+        .args(["commit", "-m", "Require backend execution"])
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.lock().args([
+        "--no-index", "--locked", "--resolution", "lowest-direct", "--refresh", "--no-build-isolation",
+    ]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Ignoring existing lockfile due to change in resolution mode: `highest` vs. `lowest-direct`
+    Resolved 2 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolution mode changed from `highest` to `lowest-direct`
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    assert!(!sentinel.exists());
+    assert_eq!(context.read("uv.lock"), locked);
+    Ok(())
+}
+
+/// Approving only a wheel must not let its sibling sdist introduce new build requirements.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_rejects_unapproved_sdist_before_reading_its_requirements() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist = context.temp_dir.child("dist");
+    let (filename, wheel) = WheelBuilder::new(&"demo-pkg".parse()?, &"1.0".parse()?).build();
+    let trusted = hex::encode(Sha256::digest(&wheel));
+    dist.child(filename).write_binary(&wheel)?;
+    let mut sdist = Vec::new();
+    write_tar_gz(
+        &mut sdist,
+        &[(
+            "demo_pkg-1.0/pyproject.toml",
+            indoc! {r#"
+            [build-system]
+            requires = ["injected"]
+            build-backend = "injected"
+        "#},
+        )],
+    )?;
+    dist.child("demo_pkg-1.0.tar.gz").write_binary(&sdist)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["demo-pkg"]
+        build-backend = "demo_pkg"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["dist"]
+        build-constraint-dependencies = [
+            {{ requirement = "demo-pkg==1.0", hashes = ["sha256:{trusted}"] }},
+        ]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Source archive for `demo-pkg==1.0` does not match the allowed build hashes
+      cause: In `--verify-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: demo-pkg==1.0
+    ");
+    Ok(())
+}
+
+/// An installed wheel can ship a different pyproject.toml than the sdist uv will build.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_requirements_come_from_sdist_not_cached_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let dist = context.temp_dir.child("dist");
+    let name = "demo-pkg".parse()?;
+    let version = "1.0.0".parse()?;
+    let (filename, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[(
+            "pyproject.toml",
+            indoc! {r#"
+                [build-system]
+                requires = ["only-in-the-wheel"]
+                build-backend = "only_in_the_wheel"
+            "#},
+        )])
+        .build();
+    dist.child(filename).write_binary(&wheel)?;
+    dist.child("demo_pkg-1.0.0.tar.gz")
+        .write_binary(&generate_source_archive(&name, &version, "", None)?)?;
+    let server = uv_test::find_links::FindLinksServer::new(dist.path());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo-pkg"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["{}"]
+    "#, server.url()})?;
+
+    // Populate the wheel cache without fetching the sdist.
+    context.sync().assert().success();
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Resolving a build-only dependency can run its metadata hook even when nothing is installed.
+/// A build constraint must authenticate the sdist before that hook runs on the first lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_constraint_rejects_sdist_before_metadata_hook() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let other_platform = if cfg!(windows) { "linux" } else { "win32" };
+    let sentinel = context.temp_dir.child("backend-executed");
+    let name = "demo-pkg".parse()?;
+    let version = "1.0.0".parse()?;
+    let trusted = generate_source_archive(&name, &version, "", None)?;
+    let replacement = generate_source_archive(&name, &version, "", Some(sentinel.path()))?;
+    let trusted_digest = hex::encode(Sha256::digest(trusted));
+    let replacement_digest = hex::encode(Sha256::digest(&replacement));
+    let context = context
+        .with_filter((trusted_digest.clone(), "[TRUSTED_HASH]"))
+        .with_filter((replacement_digest.clone(), "[REPLACEMENT_HASH]"));
+    context
+        .temp_dir
+        .child("dist/demo_pkg-1.0.0.tar.gz")
+        .write_binary(&replacement)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["demo-pkg==1.0.0 ; sys_platform == '{other_platform}'"]
+        build-backend = "demo_pkg"
+
+        [tool.uv]
+        no-index = true
+        find-links = ["dist"]
+
+        [[tool.uv.build-constraint-dependencies]]
+        requirement = "demo-pkg==1.0.0 ; sys_platform == '{other_platform}'"
+        hashes = ["sha256:{trusted_digest}"]
+
+        [[tool.uv.build-constraint-dependencies]]
+        requirement = "demo-pkg==1.0.0 ; sys_platform != '{other_platform}'"
+        hashes = ["sha256:{trusted_digest}", "sha256:{replacement_digest}"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `demo-pkg==1.0.0`
+      cause: Hash mismatch for `demo-pkg==1.0.0`
+
+             Expected:
+               sha256:[TRUSTED_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+    ");
+    assert!(!sentinel.exists(), "the unverified backend was executed");
+    Ok(())
+}
+
 /// Unrelated project changes retain direct archive hashes until an explicit upgrade releases them.
 #[cfg(feature = "test-universal")]
 #[tokio::test]

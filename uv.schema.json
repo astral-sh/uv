@@ -1928,7 +1928,8 @@
             "build-dependency-hashes",
             "wheel-variants",
             "http2-keep-alive",
-            "proxy-index"
+            "proxy-index",
+            "lock-build-dependencies"
           ]
         },
         {

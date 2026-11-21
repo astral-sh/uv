@@ -66,6 +66,7 @@ Ok(
                         ),
                     ),
                 },
+                build: None,
                 sdist: Some(
                     Url {
                         url: UrlString(
@@ -113,6 +114,7 @@ Ok(
                         ),
                     ),
                 },
+                build: None,
                 sdist: Some(
                     Url {
                         url: UrlString(
@@ -171,6 +173,7 @@ Ok(
                 },
             },
         ],
+        build: None,
         by_id: {
             PackageId {
                 name: PackageName(

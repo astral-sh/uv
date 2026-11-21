@@ -85,7 +85,12 @@ integrity, credentials, execution, and filesystem destinations while handling th
   means binary-only selection but permits backend execution for an explicitly selected editable
   source unless a stronger policy applies. Build-backend execution crosses a security boundary only
   if it happens before package selection, bypasses the rules that actually apply, escapes build
-  isolation, or runs with greater privilege.
+  isolation, or runs with greater privilege. When a lockfile includes build dependencies, installing
+  into an isolated build environment follows locked edges and checks downloaded build artifacts
+  against their locked hashes, including for nested builds. Backend hooks cannot authorize new
+  downloads by supplying their own requirements or hashes. Local source trees and pinned Git
+  checkouts are identified by path and commit respectively. uv may reuse a cached wheel built with
+  different inputs. None of these checks restrict what a running backend can do itself.
 - **Archives, installation, and cleanup:** Selecting an artifact authorizes its files and build
   code. Its metadata must not cause writes or deletions outside the chosen root and any
   intentionally followed symlink or junction targets. Trusted `.venv`, cache, configuration,

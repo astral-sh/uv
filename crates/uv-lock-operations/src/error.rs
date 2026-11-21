@@ -108,6 +108,8 @@ pub enum LockMismatchReason {
     },
     #[error("Pre-release policy changed")]
     Prerelease,
+    #[error("Build dependency locking settings or requirements changed")]
+    BuildDependencies,
     #[error("Required hash algorithms changed")]
     HashAlgorithms,
     #[error(transparent)]
@@ -367,6 +369,7 @@ impl From<ScriptRequirementsError> for LockError {
 impl From<LockValidationError> for LockError {
     fn from(error: LockValidationError) -> Self {
         match error {
+            e @ LockValidationError::BuildInputs(_) => Self::from(anyhow::Error::new(e)),
             LockValidationError::Lock(error) => Self::Lock(error),
             LockValidationError::Tags(error) => Self::Tags(error),
         }
@@ -376,6 +379,9 @@ impl From<LockValidationError> for LockError {
 /// A failure while validating an existing lockfile against its requirements.
 #[derive(Debug, thiserror::Error)]
 pub enum LockValidationError {
+    #[error("Failed to validate build requirements")]
+    BuildInputs(#[source] anyhow::Error),
+
     #[error(transparent)]
     Lock(#[from] LockDataError),
 

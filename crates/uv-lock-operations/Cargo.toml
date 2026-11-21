@@ -48,6 +48,7 @@ uv-workspace = { workspace = true }
 
 anyhow = { workspace = true }
 fs-err = { workspace = true }
+futures = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
@@ -56,3 +57,4 @@ toml = { workspace = true }
 toml_edit = { workspace = true }
 toml_parser = { workspace = true }
 tracing = { workspace = true }
+version-ranges = { workspace = true }

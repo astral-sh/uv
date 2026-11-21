@@ -477,6 +477,10 @@ pub enum PreviewFeature {
     Http2KeepAlive,
     /// Allows using [proxy indexes](./indexes.md#proxy-indexes).
     ProxyIndex,
+    /// Lock declared build requirements recursively in `uv.lock`. Isolated builds during
+    /// [project installation](./projects/build.md#locking-build-dependencies) install only locked
+    /// artifacts, including when the build environment conflicts with runtime dependencies.
+    LockBuildDependencies,
 }
 
 impl Display for PreviewFeature {

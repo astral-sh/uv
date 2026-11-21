@@ -18969,6 +18969,432 @@ fn build_hash_project_in_subdirectory() -> Result<(TestContext, String)> {
     Ok((context, hash))
 }
 
+/// Requesting enforcement with a runtime-only lock must fail before any backend runs.
+#[test]
+fn locked_build_refuses_runtime_only_lock() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: The lockfile does not include build dependencies. Run `uv lock --preview-features lock-build-dependencies` to update it.
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+    Ok(())
+}
+
+/// A locked build must verify a wheel even when the index (here, a local wheel directory)
+/// supplies no hashes of its own. Reject replacement bytes before importing the backend.
+#[test]
+fn locked_build_rejects_replaced_wheel() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let (filename, replacement) =
+        WheelBuilder::new(&"build-dependency".parse()?, &"1.0.0".parse()?)
+            .files(&[("unexpected.py", "")])
+            .build();
+    context
+        .temp_dir
+        .child("wheels")
+        .child(filename)
+        .write_binary(&replacement)?;
+    // Force a new resolution after the replacement. Keeping the build package at the same
+    // version must keep its original hash, even if the registry still advertises no digest.
+    let project = context.read("pyproject.toml").replace(
+        "[build-system]",
+        "dependencies = [\"dynamic-dependency\"]\n\n[build-system]",
+    );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&project)?;
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Added dynamic-dependency v1.0.0
+    ");
+    let context = context.with_filter((
+        hex::encode(Sha256::digest(&replacement)),
+        "[REPLACEMENT_HASH]",
+    ));
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-cache", "--no-editable"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to install requirements from `build-system.requires`
+      cause: Failed to download `build-dependency==1.0.0`
+      cause: Hash mismatch for `build-dependency==1.0.0`
+
+             Expected:
+               sha256:[BUILD_HASH]
+
+             Computed:
+               sha256:[REPLACEMENT_HASH]
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::missing());
+    Ok(())
+}
+
+#[test]
+fn locked_build_rejects_undeclared_hook_requirement() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable"])
+        .env("UV_TEST_DYNAMIC_BUILD_REQUIRES", r#"["dynamic-dependency==1.0.0"]"#), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to build `project @ file://[TEMP_DIR]/`
+      cause: Failed to resolve requirements from `build-system.requires`
+      cause: The build backend requested requirements outside its locked build environment
+      cause: Invalid locked build dependencies: no locked package satisfies build requirement `dynamic-dependency==1.0.0` for `project==0.1.0 @ editable+.`
+
+    hint: Declare additional build requirements in `tool.uv.extra-build-dependencies` and run `uv lock`.
+    ");
+    context
+        .temp_dir
+        .child("backend-executed")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+/// An explicitly configured hook dependency must participate in freshness checking and be
+/// available in the initial isolated environment, before the backend asks for it.
+#[test]
+fn locked_build_configured_extra() -> Result<()> {
+    let (context, _) = build_hash_project()?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    let project = context.read("pyproject.toml");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        {project}
+        [tool.uv.extra-build-dependencies]
+        project = ["dynamic-dependency"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build dependency locking settings or requirements changed
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
+    uv_snapshot!(context.filters(), context.lock().arg("--offline"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    Added dynamic-dependency v1.0.0
+    ");
+    let backend = context.read("backend.py").replace(
+        "import build_dependency",
+        "import build_dependency, dynamic_dependency",
+    );
+    context.temp_dir.child("backend.py").write_str(&backend)?;
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--offline", "--no-editable"])
+        .env("UV_TEST_DYNAMIC_BUILD_REQUIRES", r#"["dynamic-dependency==1.0.0"]"#), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+/// Both environments install the same backend wheel. Its outgoing edge must select version 2
+/// in the isolated build while runtime continues to install version 1.
+#[test]
+fn locked_build_shared_backend_with_conflicting_transitive_dependency() -> Result<()> {
+    let server = PackseServer::new("build/shared-backend.toml");
+    let (context, _) = build_hash_project()?;
+    let context = context.with_env(EnvVars::UV_DEFAULT_INDEX, server.index_url());
+    let project = context
+        .read("pyproject.toml")
+        .split("[tool.uv]")
+        .next()
+        .expect("project metadata precedes tool settings")
+        .replace(
+            "[build-system]",
+            "dependencies = [\"build-dependency==1.0.0\", \"shared-helper==1\"]\n\n[build-system]",
+        )
+        .replace(
+            "requires = [\"build-dependency==1.0.0\"]",
+            "requires = [\"build-dependency==1.0.0\", \"shared-helper==2\"]",
+        );
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&project)?;
+    let backend = context.read("backend.py");
+    context.temp_dir.child("backend.py").write_str(&format!(
+        "from importlib.metadata import version\nassert version('shared-helper') == '2'\n{backend}"
+    ))?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        lock-build-dependencies = true
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "build-dependency"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        universes = ["@runtime"]
+        dependencies = [
+            { name = "shared-helper", version = "1", source = { registry = "http://[LOCALHOST]/simple/" } },
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/build_dependency-1.0.0-py3-none-any.whl", hash = "sha256:d2b369818c7b40f383ce94f335e4730391341b30f3a886552c635d166bc3efe4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "build-dependency"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        universes = ["backend"]
+        dependencies = [
+            { name = "shared-helper", version = "2", source = { registry = "http://[LOCALHOST]/simple/" } },
+        ]
+        wheels = [
+            { url = "http://[LOCALHOST]/files/build_dependency-1.0.0-py3-none-any.whl", hash = "sha256:d2b369818c7b40f383ce94f335e4730391341b30f3a886552c635d166bc3efe4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { editable = "." }
+        build-inputs = { requires = [{ name = "build-dependency", specifier = "==1.0.0" }, { name = "shared-helper", specifier = "==2" }] }
+        build-dependencies-universe = "backend"
+        dependencies = [
+            { name = "build-dependency" },
+            { name = "shared-helper", version = "1", source = { registry = "http://[LOCALHOST]/simple/" } },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "build-dependency", specifier = "==1.0.0" },
+            { name = "shared-helper", specifier = "==1" },
+        ]
+
+        [[package]]
+        name = "recursive-helper"
+        version = "1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/recursive_helper-1-py3-none-any.whl", hash = "sha256:01f677d15469f4063fee108332d052f0b218c9ac1fd141ca36d0395257994e0d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "shared-helper"
+        version = "1"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/shared_helper-1-py3-none-any.whl", hash = "sha256:6ec546e9242c91d5c18af40ca2adccba74d378c08b280fb648b51a1621c8d27e", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "shared-helper"
+        version = "2"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/shared_helper-2.tar.gz", hash = "sha256:92b8fee05064cac58de6a843f3ef551d8942abc7bdcb465f1f38788972111bbc", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/shared_helper-2-py3-none-any.whl", hash = "sha256:cc35e00de808cf6234a002843584185b2719203785cca32971bfae26e8718476", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        "#);
+    });
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-editable"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + build-dependency==1.0.0
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+     + shared-helper==1
+    ");
+    Ok(())
+}
+
+/// Build three sdists from a single frozen lock. Two packages pin incompatible helpers;
+/// the third needs an explicit lock edge because its declaration alone matches both versions.
+#[test]
+fn locked_build_disambiguates_direct_requirements() -> Result<()> {
+    let server = PackseServer::new("build/direct-pins.toml");
+    let context =
+        uv_test::test_context!("3.12").with_env(EnvVars::UV_DEFAULT_INDEX, server.index_url());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["legacy", "modern", "unspecified"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 12 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-cache"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 3 packages in [TIME]
+    Installed 3 packages in [TIME]
+     + legacy==1
+     + modern==1
+     + unspecified==1
+    ");
+    Ok(())
+}
+
+/// A workspace member can select a named index only for its backend. A fresh lock must
+/// recognize that declaration without contacting the index again.
+#[test]
+fn locked_build_member_index_freshness() -> Result<()> {
+    let server = PackseServer::new("build/shared-backend.toml");
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "member"
+        version = "1"
+        requires-python = ">=3.12"
+
+        [build-system]
+        requires = ["recursive-helper"]
+        build-backend = "recursive_helper"
+
+        [[tool.uv.index]]
+        name = "private"
+        url = "{}"
+        explicit = true
+
+        [tool.uv.sources]
+        recursive-helper = {{ index = "private" }}
+    "#, server.index_url()})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    drop(server);
+    uv_snapshot!(context.filters(), context.lock().args(["--locked", "--offline", "--no-cache"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// Only a 3.12+ runtime dependency needs the bridge. The bridge's own build backend doesn't
+/// have to support 3.11, even though neither of the two build edges declares a marker.
+#[test]
+fn locked_build_propagates_python_version_to_nested_builds() -> Result<()> {
+    let server = PackseServer::new("build/python-scope.toml");
+    let context =
+        uv_test::test_context!("3.12").with_env(EnvVars::UV_DEFAULT_INDEX, server.index_url());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["modern; python_version >= '3.12'"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 10 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-cache"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + modern==1
+    ");
+    Ok(())
+}
+
+/// Dropping platform markers makes these declarations look identical. Their combined solve
+/// fails, but each build works independently on both sides of the platform marker.
+#[test]
+fn locked_build_cluster_with_conflicting_platform_tools() -> Result<()> {
+    let server = PackseServer::new("build/markers.toml");
+    let context =
+        uv_test::test_context!("3.12").with_env(EnvVars::UV_DEFAULT_INDEX, server.index_url());
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["first", "second"]
+    "#})?;
+    uv_snapshot!(context.filters(), context.lock().args(["--preview-features", "lock-build-dependencies"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 13 packages in [TIME]
+    ");
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--no-cache"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + first==1
+     + second==1
+    ");
+    Ok(())
+}
+
 #[test]
 fn project_build_hashes_lock_and_sync() -> Result<()> {
     let (context, hash) = build_hash_project()?;

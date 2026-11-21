@@ -165,14 +165,7 @@ impl ServerIndex {
                 if let Some(sdist_metadata) = &meta.sdist {
                     index.register_generated(
                         package_name,
-                        generate_sdist(
-                            package_name,
-                            version,
-                            &meta.requires,
-                            &meta.extras,
-                            meta.requires_python.as_ref(),
-                            &meta.entry_points,
-                        ),
+                        generate_sdist(package_name, version, meta),
                         Some((meta, sdist_metadata)),
                     );
                 }

@@ -236,7 +236,7 @@ impl ResolverEnvironment {
     }
 
     /// For a universal resolution, return the markers of the current fork.
-    pub(crate) fn fork_markers(&self) -> Option<MarkerTree> {
+    pub fn fork_markers(&self) -> Option<MarkerTree> {
         match self.kind {
             Kind::Specific { .. } => None,
             Kind::Universal { markers, .. } => Some(markers),

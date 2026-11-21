@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::future::Future;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -760,6 +760,15 @@ impl<'a, Context: BuildContext> DistributionDatabase<'a, Context> {
             metadata: Metadata::from_metadata23(wheel.metadata()?),
             hashes: wheel.hashes,
         })
+    }
+
+    /// Materialize a source distribution for static inspection without invoking its build backend.
+    pub async fn source_tree(
+        &self,
+        source: &SourceDist,
+        hashes: ArchiveHashPolicy<'_>,
+    ) -> Result<PathBuf, Error> {
+        self.builder.materialize(source, hashes, &self.client).await
     }
 
     /// Build the wheel metadata for a source distribution, or fetch it from the cache if possible.

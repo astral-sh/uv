@@ -56,6 +56,10 @@ pub async fn sync_from_lock(
     preview: Preview,
     malware_context: MalwareCheckContext<'_>,
 ) -> Result<Changelog, EnvironmentError> {
+    if preview.is_enabled(uv_preview::PreviewFeature::LockBuildDependencies) {
+        target.lock().require_locked_builds()?;
+    }
+
     // Extract the project settings.
     let InstallerSettingsRef {
         index_locations,
@@ -216,7 +220,9 @@ pub async fn sync_from_lock(
     let resolution = apply_editable_mode(resolution, editable);
 
     // Constrain any build requirements marked as `match-runtime = true`.
-    let extra_build_requires = extra_build_requires.match_runtime(&resolution)?;
+    let extra_build_requires = extra_build_requires.match_runtime_for(&resolution, |name| {
+        target.lock().contains_build_package(name)
+    })?;
 
     // Extract the hashes from the lockfile.
     let hasher = HashStrategy::from_resolution(&resolution, HashCheckingMode::Verify)?;
@@ -326,7 +332,8 @@ pub async fn sync_from_lock(
         workspace_cache.clone(),
         concurrency.clone(),
         preview,
-    );
+    )
+    .with_build_lock(target.lock(), target.install_path());
 
     // Run a malware check against OSV before installing.
     maybe_check_malware(
