@@ -137,9 +137,11 @@ impl Launcher {
     }
 
     /// Encode a replacement path in the launcher's UTF-8 resource.
-    pub fn with_python_path(mut self, path: impl AsRef<Path>) -> Result<Self, Error> {
-        encode_python_path(&path)?.clone_into(&mut self.python_path);
-        Ok(self)
+    pub fn with_python_path(self, path: impl AsRef<Path>) -> Result<Self, Error> {
+        Ok(Self {
+            python_path: encode_python_path(&path)?.to_owned(),
+            ..self
+        })
     }
 }
 
