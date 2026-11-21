@@ -45,19 +45,19 @@ enum Key<'a> {
     Name(&'a str),
 }
 
-// Rewriting skips failed lookups but surfaces errors reading a located payload.
-// Target identification needs the underlying error at either stage.
+// Target identification reports the underlying error. Rewriting skips an entry
+// point with missing or unusable resources and reports payload read and decode errors.
 enum ReadError {
     Inconclusive,
-    Lookup(Error),
-    Payload(Error),
+    SkipRewrite(Error),
+    FailRewrite(Error),
 }
 
 impl From<io::Error> for ReadError {
     fn from(err: io::Error) -> Self {
         match err.kind() {
             io::ErrorKind::UnexpectedEof => Self::Inconclusive,
-            _ => Self::Lookup(Error::Io(err)),
+            _ => Self::SkipRewrite(Error::Io(err)),
         }
     }
 }
@@ -66,7 +66,7 @@ impl From<ReadError> for Error {
     fn from(err: ReadError) -> Self {
         match err {
             ReadError::Inconclusive => Self::UnprocessableMetadata,
-            ReadError::Lookup(err) | ReadError::Payload(err) => err,
+            ReadError::SkipRewrite(err) | ReadError::FailRewrite(err) => err,
         }
     }
 }
@@ -101,8 +101,8 @@ pub(super) fn read_stored_target(file: File) -> Result<Option<(LauncherKind, Pat
 pub(super) fn read_launcher(file: File) -> Result<Option<Launcher>, Error> {
     match read_for_rewrite(file) {
         Ok(launcher) => Ok(launcher),
-        Err(ReadError::Lookup(_) | Inconclusive) => Ok(None),
-        Err(ReadError::Payload(err)) => Err(err),
+        Err(ReadError::SkipRewrite(_) | Inconclusive) => Ok(None),
+        Err(ReadError::FailRewrite(err)) => Err(err),
     }
 }
 
@@ -122,7 +122,7 @@ fn read_for_rewrite(file: File) -> Result<Option<Launcher>, ReadError> {
     let script_data = range
         .map(|range| file.resources.read(range))
         .transpose()
-        .map_err(ReadError::Payload)?;
+        .map_err(ReadError::FailRewrite)?;
     Ok(Some(Launcher {
         kind: file.kind,
         window_mode: file.resources.window_mode,
@@ -168,7 +168,7 @@ impl LauncherFile {
         else {
             return Ok(None);
         };
-        let kind = resources.read_kind(range).map_err(ReadError::Payload)?;
+        let kind = resources.read_kind(range).map_err(ReadError::FailRewrite)?;
         let python_path = resources
             .locate(rcdata, RESOURCE_PYTHON_PATH, Languages::PreferNeutral)?
             .ok_or(Inconclusive)?;
@@ -358,10 +358,10 @@ impl Resources {
     }
 
     fn read_path(&mut self, range: Range<u64>) -> Result<String, ReadError> {
-        let bytes = self.read(range).map_err(ReadError::Payload)?;
+        let bytes = self.read(range).map_err(ReadError::FailRewrite)?;
         let path = String::from_utf8(bytes)
-            .map_err(|err| ReadError::Payload(Error::InvalidPath(err.utf8_error())))?;
-        super::validate_python_path(&path).map_err(ReadError::Lookup)?;
+            .map_err(|err| ReadError::FailRewrite(Error::InvalidPath(err.utf8_error())))?;
+        super::validate_python_path(&path).map_err(ReadError::SkipRewrite)?;
         Ok(path)
     }
 
