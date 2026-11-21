@@ -2109,6 +2109,46 @@ mod test {
         assert!(grouped.and(python.negate()).is_false());
     }
 
+    /// An implementation name determines the reported platform implementation in one direction.
+    #[test]
+    fn implementation_names_imply_platform_implementation() {
+        let cpython = m("platform_python_implementation == 'CPython'");
+        for (name, implementation) in [
+            (m("implementation_name == 'cpython'"), cpython),
+            (m("implementation_name == 'pyston'"), cpython),
+            (
+                m("implementation_name == 'pypy'"),
+                m("platform_python_implementation == 'PyPy'"),
+            ),
+            (
+                m("implementation_name == 'graalpy'"),
+                m("platform_python_implementation == 'GraalVM'"),
+            ),
+        ] {
+            assert!(name.is_disjoint(implementation.negate()));
+            assert_eq!(name.and(implementation), name);
+            assert_eq!(name.or(implementation), implementation);
+            assert!(!implementation.is_disjoint(name.negate()));
+        }
+        let unknown = m("implementation_name == 'other'");
+        assert!(!unknown.is_disjoint(cpython));
+        assert!(!unknown.is_disjoint(cpython.negate()));
+    }
+
+    /// A platform decision above the implementation keys must preserve their implications.
+    #[test]
+    fn regroup_implementation_markers() {
+        let pypy = m("implementation_name == 'pypy'");
+        let cpython = m("platform_python_implementation == 'CPython'");
+        let linux = m("sys_platform == 'linux' and platform_machine == 'x86_64'");
+        assert!(pypy.and(linux).is_disjoint(cpython));
+        let grouped = pypy.and(cpython.or(linux));
+        assert_eq!(grouped, pypy.and(cpython).or(pypy.and(linux)));
+        assert_eq!(grouped, pypy.and(linux));
+        assert_eq!(grouped.negate(), pypy.negate().or(linux.negate()));
+        assert_eq!(m(&grouped.try_to_string().unwrap()), grouped);
+    }
+
     /// Extracting the shared version boundary aligns `<` with `<=` and `>` with `>=`.
     #[test]
     fn isop_version_range_bounds_roundtrip() {

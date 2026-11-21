@@ -1291,14 +1291,14 @@ fn implied_python_markers(filename: &WheelFilename) -> MarkerTree {
                 tree = tree.and(MarkerTree::expression(MarkerExpression::String {
                     key: MarkerValueString::PlatformPythonImplementation,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("GraalPy"),
+                    value: arcstr::literal!("GraalVM"),
                 }));
             }
             LanguageTag::Pyston { .. } => {
                 tree = tree.and(MarkerTree::expression(MarkerExpression::String {
-                    key: MarkerValueString::PlatformPythonImplementation,
+                    key: MarkerValueString::ImplementationName,
                     operator: MarkerOperator::Equal,
-                    value: arcstr::literal!("Pyston"),
+                    value: arcstr::literal!("pyston"),
                 }));
             }
         }
@@ -1432,6 +1432,10 @@ mod tests {
         assert_python_markers(
             "example-1.0-pp310-pypy310_pp73-any.whl",
             "python_full_version == '3.10.*' and platform_python_implementation == 'PyPy'",
+        );
+        assert_python_markers(
+            "example-1.0-pyston38-none-any.whl",
+            "python_full_version == '3.8.*' and implementation_name == 'pyston'",
         );
         assert_python_markers(
             "example-1.0-py310-none-any.whl",
