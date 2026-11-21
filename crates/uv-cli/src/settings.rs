@@ -3584,6 +3584,8 @@ impl PipSyncSettings {
             all_extras,
             no_all_extras,
             group,
+            all_groups,
+            no_all_groups,
             installer,
             refresh,
             hash_checking:
@@ -3667,6 +3669,7 @@ impl PipSyncSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras, "all-extras")?,
                     group: Some(group),
+                    all_groups: flag(all_groups, no_all_groups, "all-groups")?,
                     torch_backend,
                     ..installer.into_pip_options(configured_indexes(filesystem.as_ref()))?
                 },
@@ -3730,6 +3733,8 @@ impl PipInstallSettings {
             no_deps,
             deps,
             group,
+            all_groups,
+            no_all_groups,
             hash_checking:
                 HashCheckingArgs {
                     require_hashes,
@@ -3868,6 +3873,7 @@ impl PipInstallSettings {
                     extra,
                     all_extras: flag(all_extras, no_all_extras, "all-extras")?,
                     group: Some(group),
+                    all_groups: flag(all_groups, no_all_groups, "all-groups")?,
                     no_deps: flag(no_deps, deps, "deps")?,
                     python_version,
                     python_platform,
@@ -4549,6 +4555,7 @@ pub struct PipSettings {
     pub system: bool,
     pub extras: ExtrasSpecification,
     pub groups: Vec<PipGroupName>,
+    pub all_groups: bool,
     pub break_system_packages: bool,
     pub target: Option<Target>,
     pub prefix: Option<Prefix>,
@@ -4677,6 +4684,7 @@ impl PipSettings {
             upgrade_package,
             reinstall,
             reinstall_package,
+            all_groups,
             exclude_newer_package,
         } = pip.unwrap_or_default();
 
@@ -4800,6 +4808,7 @@ impl PipSettings {
             ),
 
             groups: args.group.combine(group).unwrap_or_default(),
+            all_groups: args.all_groups.combine(all_groups).unwrap_or_default(),
             dependency_mode: if args.no_deps.combine(no_deps).unwrap_or_default() {
                 DependencyMode::Direct
             } else {
