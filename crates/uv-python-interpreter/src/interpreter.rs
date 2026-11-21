@@ -1001,10 +1001,6 @@ impl<'a> CacheTarget<'a> {
         Ok(Some(Self { target, canonical }))
     }
 
-    fn is_launcher(&self) -> bool {
-        self.target.trampoline_target.is_some()
-    }
-
     /// Return the cache entry for an interpreter's absolute and canonical executable paths.
     fn cache_entry(&self, cache: &Cache) -> CacheEntry {
         // We use the absolute path for the cache entry to avoid cache collisions for relative
@@ -1025,10 +1021,11 @@ impl<'a> CacheTarget<'a> {
             &python_executable,
             &pyvenv_launcher,
         );
-        // Only reuse Windows launcher entries from probes that verified the
-        // reported base executable against the target.
-        let digest = if self.is_launcher() {
-            cache_digest(&("verified-launcher", key))
+        // Python can report the launcher's junction path as its base executable.
+        // Retargeting via another junction can change that path while leaving
+        // the canonical interpreter and the launcher's timestamp unchanged.
+        let digest = if let Some(target) = &self.target.trampoline_target {
+            cache_digest(&("verified-launcher", key, target))
         } else {
             cache_digest(&key)
         };
@@ -1068,7 +1065,9 @@ impl<'a> CacheTarget<'a> {
         let Ok(Some(current)) = Self::resolve(self.target.absolute, self.target.absolute) else {
             return false;
         };
-        if !current.is_launcher() || current.canonical != self.canonical {
+        if current.target.trampoline_target != self.target.trampoline_target
+            || current.canonical != self.canonical
+        {
             return false;
         }
         let Ok(base) = std::path::absolute(dunce::simplified(base)) else {
@@ -1099,7 +1098,7 @@ impl<'a> CacheTarget<'a> {
         }
 
         #[cfg(windows)]
-        if self.is_launcher()
+        if self.target.trampoline_target.is_some()
             && !self.launcher_matches_probe(wire.metadata.sys_base_executable.as_deref(), links)
         {
             return false;
@@ -2471,6 +2470,42 @@ mod tests {
             assert!(!entry.path().exists());
         }
 
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn retargeted_launcher_does_not_reuse_a_removed_alias() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let home = dir.path().join("home");
+        let link = dir.path().join("link");
+        fs::create_dir(&home)?;
+        let base = home.join("python.exe");
+        fs::write(&base, [])?;
+        uv_fs::create_symlink(&home, &link)?;
+        let cache = Cache::temp()?.init().await?;
+
+        // Both relative targets resolve to the same file. Replacing a launcher
+        // from an archive can also give both versions the same modification time.
+        let retarget = |relative: &str| -> Result<_> {
+            fs::write(
+                &proxy,
+                windows_python_launcher(relative, WindowMode::Console)?,
+            )?;
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&proxy)?
+                .set_modified(UNIX_EPOCH)?;
+            let mut response = mocked_interpreter_response(&proxy)?;
+            response.metadata.sys_base_executable = Some(dir.path().join(relative));
+            InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+            let info = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+            Ok(info.metadata.sys_base_executable)
+        };
+        assert_eq!(retarget(r"link\python.exe")?, Some(link.join("python.exe")));
+        uv_fs::remove_symlink(&link)?;
+        assert_eq!(retarget(r"home\python.exe")?, Some(base));
         Ok(())
     }
 
