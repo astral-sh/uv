@@ -56,11 +56,11 @@ enum Languages {
 }
 
 pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    let Some((mut resources, kind_languages)) = Resources::open_launcher(path)? else {
+    let Some((mut resources, tables)) = Resources::open_launcher(path)? else {
         return Ok(None);
     };
     let (kind, target) = resources
-        .target(kind_languages)?
+        .target(tables)?
         .ok_or(Error::UnprocessableMetadata)?;
     let mut target = PathBuf::from(target);
     if target.is_relative() {
@@ -78,17 +78,17 @@ pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>
 }
 
 pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
-    let Ok(Some((mut resources, kind_languages))) = Resources::open_launcher(path) else {
+    let Ok(Some((mut resources, tables))) = Resources::open_launcher(path) else {
         return Ok(None);
     };
-    let Some((kind, python_path)) = resources.target(kind_languages)? else {
+    let Some((kind, python_path)) = resources.target(tables)? else {
         return Ok(None);
     };
     let languages = match kind {
         LauncherKind::Script => Languages::Single,
         LauncherKind::Python => Languages::PreferNeutral,
     };
-    let script_data = match resources.locate(RESOURCE_SCRIPT_DATA, languages) {
+    let script_data = match resources.locate(tables.rcdata, RESOURCE_SCRIPT_DATA, languages) {
         Some(Lookup::Missing) if kind == LauncherKind::Python => None,
         Some(Lookup::Missing) | None => return Ok(None),
         Some(Lookup::Found(range)) => Some(resources.read(range)?),
@@ -111,11 +111,16 @@ struct Resources {
     window_mode: WindowMode,
     sections: Vec<SectionHeader>,
     directory: ImageDataDirectory,
+}
+
+#[derive(Clone, Copy)]
+struct LauncherTables {
     rcdata: u32,
+    kind_languages: u32,
 }
 
 impl Resources {
-    fn open_launcher(path: &Path) -> Result<Option<(Self, u32)>, Error> {
+    fn open_launcher(path: &Path) -> Result<Option<(Self, LauncherTables)>, Error> {
         let file = match File::open(path) {
             Ok(file) => file,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -131,7 +136,7 @@ impl Resources {
 
     /// Find the kind resource's language directory. Return `None` when the
     /// file can't establish whether the loader can find the resource.
-    fn find_launcher(file: File, file_size: u64) -> Option<Lookup<(Self, u32)>> {
+    fn find_launcher(file: File, file_size: u64) -> Option<Lookup<(Self, LauncherTables)>> {
         if file_size < u64::from(PE_PTR_OFFSET) + 4 {
             return Some(Lookup::Missing);
         }
@@ -156,13 +161,18 @@ impl Resources {
         let Lookup::Found(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
             return Some(Lookup::Missing);
         };
-        resources.rcdata = rcdata;
         let Lookup::Found(kind_languages) =
             resources.subdirectory(rcdata, Key::Name(RESOURCE_TRAMPOLINE_KIND))?
         else {
             return Some(Lookup::Missing);
         };
-        Some(Lookup::Found((resources, kind_languages)))
+        Some(Lookup::Found((
+            resources,
+            LauncherTables {
+                rcdata,
+                kind_languages,
+            },
+        )))
     }
 
     /// Locate a file-backed range by its relative virtual address (RVA).
@@ -260,8 +270,8 @@ impl Resources {
         Some(Lookup::Missing)
     }
 
-    fn locate(&mut self, name: &str, policy: Languages) -> Option<Lookup<Range<u64>>> {
-        let Lookup::Found(languages) = self.subdirectory(self.rcdata, Key::Name(name))? else {
+    fn locate(&mut self, rcdata: u32, name: &str, policy: Languages) -> Option<Lookup<Range<u64>>> {
+        let Lookup::Found(languages) = self.subdirectory(rcdata, Key::Name(name))? else {
             return Some(Lookup::Missing);
         };
         self.locate_language(languages, policy).map(Lookup::Found)
@@ -308,8 +318,9 @@ impl Resources {
         Some(offset..offset + u64::from(data.size))
     }
 
-    fn target(&mut self, kind_languages: u32) -> Result<Option<(LauncherKind, String)>, Error> {
-        let Some(payload) = self.locate_language(kind_languages, Languages::PreferNeutral) else {
+    fn target(&mut self, tables: LauncherTables) -> Result<Option<(LauncherKind, String)>, Error> {
+        let Some(payload) = self.locate_language(tables.kind_languages, Languages::PreferNeutral)
+        else {
             return Ok(None);
         };
         if payload.is_empty() {
@@ -318,8 +329,11 @@ impl Resources {
         self.file.seek(SeekFrom::Start(payload.start))?;
         let value = u8::read_from_io(&mut self.file)?;
         let kind = LauncherKind::from_resource_value(value).ok_or(Error::UnprocessableMetadata)?;
-        let Some(Lookup::Found(path)) = self.locate(RESOURCE_PYTHON_PATH, Languages::PreferNeutral)
-        else {
+        let Some(Lookup::Found(path)) = self.locate(
+            tables.rcdata,
+            RESOURCE_PYTHON_PATH,
+            Languages::PreferNeutral,
+        ) else {
             return Ok(None);
         };
         let length = path.end - path.start;
@@ -414,6 +428,5 @@ fn read_headers(mut file: ImageFile, file_size: u64) -> Option<Lookup<Resources>
         window_mode,
         sections,
         directory,
-        rcdata: 0,
     }))
 }
