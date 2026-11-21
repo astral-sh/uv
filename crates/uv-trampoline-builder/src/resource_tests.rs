@@ -827,18 +827,24 @@ fn duplicate_script_names_are_rejected() -> Result<()> {
 }
 
 #[test]
-fn python_proxy_keeps_its_optional_payload() -> Result<()> {
+fn python_proxy_keeps_its_neutral_payload() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
-    let bytes = write_resources(
-        get_launcher_bin(WindowMode::Console)?,
+    fs_err::write(path.path(), get_launcher_bin(WindowMode::Console)?)?;
+    update_native_resources(
+        path.path(),
+        0,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[2]),
             (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
-            (RESOURCE_SCRIPT_DATA, b"optional payload"),
+            (RESOURCE_SCRIPT_DATA, b"neutral payload"),
         ],
     )?;
-    fs_err::write(path.path(), bytes)?;
+    update_native_resources(
+        path.path(),
+        0x0409,
+        &[(RESOURCE_SCRIPT_DATA, b"localized payload")],
+    )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
     let rewritten = temp_dir.child("rewritten.exe");
     launcher.write_to_file(&mut File::create(rewritten.path())?)?;
@@ -846,7 +852,7 @@ fn python_proxy_keeps_its_optional_payload() -> Result<()> {
     assert_eq!(launcher.kind, LauncherKind::Python);
     assert_eq!(
         launcher.script_data.as_deref(),
-        Some(b"optional payload".as_slice())
+        Some(b"neutral payload".as_slice())
     );
     Ok(())
 }
