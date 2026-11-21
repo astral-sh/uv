@@ -689,6 +689,7 @@ fn resources_match_native_windows_updates() -> Result<()> {
                 .context("editpe-generated launcher was not recognized")?;
             assert_eq!(native.kind, LauncherKind::Script);
             assert_eq!(edited.kind, native.kind);
+            assert_eq!(native.python_path(), Path::new("C:/Python312/python.exe"));
             assert_eq!(edited.python_path(), native.python_path());
             assert_eq!(native.script_data.as_deref(), Some(payload.as_slice()));
             assert_eq!(edited.script_data.as_deref(), Some(payload.as_slice()));
