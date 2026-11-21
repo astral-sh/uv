@@ -2062,7 +2062,9 @@ fn copy_entrypoint(
     use uv_trampoline_builder::Launcher;
 
     if target.exists() {
-        return Ok(());
+        return Err(CopyEntrypointError::Io(
+            std::io::ErrorKind::AlreadyExists.into(),
+        ));
     }
     let launcher = match Launcher::try_from_path(source) {
         Ok(Some(launcher)) => launcher,
