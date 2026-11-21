@@ -13,9 +13,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::PackageName;
 use uv_pep440::{Operator, Version};
-use uv_pypi_types::{
-    HashAlgorithm, HashDigest, HashDigests, HashError, Hashes, ResolverMarkerEnvironment,
-};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, ResolverMarkerEnvironment};
 use uv_redacted::SafeUrl;
 
 /// Hash collection and verification policies for a resolution.
@@ -495,14 +493,10 @@ impl HashStrategy {
     fn requirement_hashes(
         requirement: &Requirement,
     ) -> Result<Option<(VersionId, Vec<HashDigest>)>, HashStrategyError> {
-        let Some(hashes) = requirement.hashes()? else {
-            return Ok(None);
-        };
-        let mut digests = HashDigests::from(hashes).to_vec();
+        let digests = requirement.hashes()?.to_vec();
         if digests.is_empty() {
             return Ok(None);
         }
-        digests.sort_unstable();
         let Some(id) = Self::pin(requirement) else {
             return Ok(None);
         };
@@ -602,7 +596,7 @@ fn combine_constraint_hashes(
 /// Parse requirement-file hashes and combine them with any URL-fragment hashes.
 fn parse_declared_hashes(
     hashes: &[String],
-    fragment_hashes: Result<Option<Hashes>, HashError>,
+    fragment_hashes: Result<HashDigests, HashError>,
     requirement: impl Display,
     mode: HashCheckingMode,
 ) -> Result<(Vec<HashDigest>, Option<HashAlgorithm>), HashStrategyError> {
@@ -610,12 +604,9 @@ fn parse_declared_hashes(
         .iter()
         .map(|digest| HashDigest::from_str(digest))
         .collect::<Result<Vec<_>, _>>()?;
-    if let Some(fragment_hashes) = fragment_hashes? {
-        merge_digests(
-            &mut digests,
-            HashDigests::from(fragment_hashes).iter(),
-            requirement,
-        )?;
+    let fragment_hashes = fragment_hashes?;
+    if !fragment_hashes.is_empty() {
+        merge_digests(&mut digests, fragment_hashes.iter(), requirement)?;
     }
     let rejected = if mode.is_require() {
         let rejected = digests
