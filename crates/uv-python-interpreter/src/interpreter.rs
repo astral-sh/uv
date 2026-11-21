@@ -1109,6 +1109,11 @@ impl<'a> CacheTarget<'a> {
             return false;
         };
 
+        #[cfg(windows)]
+        if !wire.metadata.shares_cache_inputs(&current) {
+            return false;
+        }
+
         if wire.file_inputs.is_empty() {
             return current == *file_timestamps;
         }
@@ -1554,6 +1559,22 @@ struct InterpreterMetadata {
     debug_enabled: bool,
 }
 
+#[cfg(windows)]
+impl InterpreterMetadata {
+    /// A timestamp in uv's view cannot track changes to a different file used by Python.
+    fn shares_cache_inputs(&self, inputs: &HashMap<PathBuf, Option<Timestamp>>) -> bool {
+        use uv_fs::wow64::FileSystemView;
+
+        let view = match self.pointer_size {
+            PointerSize::_32 => FileSystemView::Bit32,
+            PointerSize::_64 => FileSystemView::Bit64,
+        };
+        inputs
+            .keys()
+            .all(|path| matches!(view.may_redirect(path), Ok(false)))
+    }
+}
+
 impl InterpreterInfo {
     /// Query the given Python executable for its interpreter information.
     fn query(
@@ -1748,6 +1769,11 @@ impl InterpreterInfo {
                 return None;
             }
         };
+
+        #[cfg(windows)]
+        if !cached.metadata.shares_cache_inputs(&cached.file_timestamps) {
+            return None;
+        }
 
         // Compare timestamps for equality. A Windows executable can be replaced by a file
         // with an older modification time. A macOS update can activate a system snapshot whose
@@ -2280,6 +2306,31 @@ mod tests {
         );
         let entry = resolved.cache_entry(&cache);
         assert!(!entry.path().exists());
+        Ok(())
+    }
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[tokio::test]
+    async fn redirected_inputs_bypass_interpreter_cache() -> Result<()> {
+        // Use a real path in System32 without needing to write a venv there.
+        let windows = std::env::var_os("SystemRoot").expect("Windows directory");
+        let executable = Path::new(&windows).join(r"System32\cmd.exe");
+        let cache = Cache::temp()?.init().await?;
+        let entry = CacheTarget::resolve(&executable, &executable)?
+            .expect("cache target")
+            .cache_entry(&cache);
+        let mut response = mocked_interpreter_response(&executable)?;
+        response.metadata.pointer_size = crate::PointerSize::_32;
+        let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((response, None)))?;
+        assert!(!entry.path().exists());
+
+        // A previous version of uv could have cached the 32-bit response.
+        fs::create_dir_all(entry.dir())?;
+        fs::write(entry.path(), rmp_serde::to_vec(&info)?)?;
+        let native = mocked_interpreter_response(&executable)?;
+        let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((native, None)))?;
+        assert!(info.metadata.pointer_size.is_64());
+        InterpreterInfo::query_cached(&executable, &cache, unexpected_probe)?;
         Ok(())
     }
 
