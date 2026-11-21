@@ -20,6 +20,8 @@ use editpe::types::{
 use fs_err::File;
 use zerocopy::FromBytes;
 
+use uv_fs::wow64::FileSystemView;
+
 use self::ReadError::Inconclusive;
 use super::{
     Error, Launcher, LauncherKind, RESOURCE_PYTHON_PATH, RESOURCE_SCRIPT_DATA,
@@ -107,7 +109,7 @@ pub(super) fn read_target(file: File) -> Result<Option<(LauncherKind, PathBuf)>,
             return Err(Error::UnprocessableMetadata);
         }
     }
-    if file.resources.cross_bitness && uv_fs::may_be_redirected_by_wow64(&target)? {
+    if file.resources.view.may_redirect(&target)? {
         return Err(Error::UnprocessableMetadata);
     }
     Ok(Some((file.kind, target)))
@@ -153,7 +155,7 @@ type ImageFile = Take<BufReader<File>>;
 struct Resources {
     file: ImageFile,
     file_size: u64,
-    cross_bitness: bool,
+    view: FileSystemView,
     window_mode: WindowMode,
     sections: Vec<SectionHeader>,
     directory: ImageDataDirectory,
@@ -423,14 +425,18 @@ fn read_headers(file: File) -> Result<Option<Resources>, ReadError> {
     }
     let mut header = (&mut file).take(optional_size);
     let standard = StandardHeader::read_from_io(&mut header)?;
-    let windows = match standard.magic {
+    let (windows, view) = match standard.magic {
         PE_32_MAGIC => {
             u32::read_from_io(&mut header)?; // BaseOfData in PE32
-            GenericWindowsHeader::WindowsHeader32(WindowsHeader::read_from_io(&mut header)?)
+            (
+                GenericWindowsHeader::WindowsHeader32(WindowsHeader::read_from_io(&mut header)?),
+                FileSystemView::Bit32,
+            )
         }
-        PE_64_MAGIC => {
-            GenericWindowsHeader::WindowsHeader64(WindowsHeader::read_from_io(&mut header)?)
-        }
+        PE_64_MAGIC => (
+            GenericWindowsHeader::WindowsHeader64(WindowsHeader::read_from_io(&mut header)?),
+            FileSystemView::Bit64,
+        ),
         _ => return Err(Inconclusive),
     };
     // The resource directory follows the export and import directories.
@@ -485,7 +491,7 @@ fn read_headers(file: File) -> Result<Option<Resources>, ReadError> {
     Ok(Some(Resources {
         file,
         file_size,
-        cross_bitness: (standard.magic == PE_32_MAGIC) != cfg!(target_pointer_width = "32"),
+        view,
         window_mode,
         sections,
         directory,

@@ -2,7 +2,7 @@ use std::path::Path;
 
 #[cfg(windows)]
 #[allow(unsafe_code)] // We need to do an FFI call through the windows-* crates.
-fn get_binary_type(path: &Path) -> windows::core::Result<u32> {
+pub(crate) fn get_binary_type(path: &Path) -> windows::core::Result<u32> {
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Storage::FileSystem::GetBinaryTypeW;
     use windows::core::PCWSTR;

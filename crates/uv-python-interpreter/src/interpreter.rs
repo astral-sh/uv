@@ -1639,7 +1639,9 @@ impl InterpreterInfo {
             // The Windows CPython trampoline reports localized errors. Only diagnose
             // an uninstalled interpreter when its `pyvenv.cfg` home is known to be
             // missing, since this diagnosis can trigger environment replacement.
-            if python_home(interpreter).is_some_and(|home| matches!(home.try_exists(), Ok(false))) {
+            if visible_python_home(interpreter)
+                .is_some_and(|home| matches!(home.try_exists(), Ok(false)))
+            {
                 return Err(Error::BrokenLink(BrokenLink::new(
                     interpreter,
                     BrokenLinkKind::Trampoline(None),
@@ -2023,11 +2025,19 @@ fn find_base_python(
     }
 }
 
-/// Parse the `home` key from `pyvenv.cfg`, if any.
-fn python_home(interpreter: &Path) -> Option<PathBuf> {
+/// Return the configured Python home when its path has the same meaning for the interpreter.
+fn visible_python_home(interpreter: &Path) -> Option<PathBuf> {
     let venv_root = interpreter.parent()?.parent()?;
     let pyvenv_cfg = PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg")).ok()?;
-    pyvenv_cfg.home
+    let home = pyvenv_cfg.home?;
+    #[cfg(windows)]
+    if uv_fs::wow64::FileSystemView::for_executable(interpreter)
+        .may_redirect(&home)
+        .ok()?
+    {
+        return None;
+    }
+    Some(home)
 }
 
 #[cfg(test)]
@@ -2055,6 +2065,37 @@ mod tests {
     };
     #[cfg(windows)]
     use crate::interpreter::{ExecutableTarget, LinkSnapshot, canonicalize_executable};
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[test]
+    fn configured_home_depends_on_the_launchers_view() -> Result<()> {
+        let windows = std::env::var_os("SystemRoot").expect("Windows directory");
+        let windows = Path::new(&windows);
+        let wow64 = windows.join(r"SysWOW64\cmd.exe");
+        if !wow64.try_exists()? {
+            // WOW64 is an optional component on Windows Server.
+            return Ok(());
+        }
+        let dir = tempdir()?;
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let interpreter = scripts.join("python.exe");
+        let home = windows.join("Sysnative");
+        fs::write(
+            dir.path().join("pyvenv.cfg"),
+            format!("home = {}\n", home.display()),
+        )?;
+
+        // Sysnative exists only in the 32-bit view.
+        fs::copy(wow64, &interpreter)?;
+        assert_eq!(super::visible_python_home(&interpreter), None);
+        fs::write(
+            &interpreter,
+            windows_python_launcher("python.exe", WindowMode::Console)?,
+        )?;
+        assert_eq!(super::visible_python_home(&interpreter), Some(home));
+        Ok(())
+    }
 
     fn mocked_interpreter_response(executable: &Path) -> Result<InterpreterInfoWire> {
         let InterpreterInfoResult::Success(mut response) = serde_json::from_str(indoc! {r##"
