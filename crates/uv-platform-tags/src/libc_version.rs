@@ -1,6 +1,27 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+use crate::Arch;
+
+/// The architecture and minimum libc version advertised by a Linux wheel tag.
+#[derive(Debug, Clone, Copy)]
+pub enum LibcTag {
+    Glibc(Arch, LibcVersion),
+    Musl(Arch, LibcVersion),
+}
+
+impl LibcTag {
+    /// Whether uv generates this libc tag for its architecture.
+    pub fn is_supported(self) -> bool {
+        match self {
+            Self::Glibc(arch, version) => arch
+                .get_minimum_manylinux_minor()
+                .is_some_and(|minor| version.minor >= minor),
+            Self::Musl(..) => true,
+        }
+    }
+}
+
 /// A libc version, expressed as a major and minor release (e.g., `2.31` or `1.2`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LibcVersion {
@@ -9,7 +30,7 @@ pub struct LibcVersion {
 }
 
 impl LibcVersion {
-    pub const fn new(major: u16, minor: u16) -> Self {
+    pub(crate) const fn new(major: u16, minor: u16) -> Self {
         Self { major, minor }
     }
 }
