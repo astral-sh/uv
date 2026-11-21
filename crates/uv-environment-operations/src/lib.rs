@@ -70,7 +70,7 @@ pub use error::EnvironmentError;
 pub mod install_target;
 pub mod malware;
 mod sync;
-pub use sync::{store_credentials_from_target, sync_from_lock};
+pub use sync::{apply_no_virtual_project, store_credentials_from_target, sync_from_lock};
 
 #[derive(Debug)]
 pub struct ConflictError {

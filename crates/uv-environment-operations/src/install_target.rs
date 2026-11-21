@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 use std::str::FromStr;
 
-use itertools::Either;
+use itertools::{Either, Itertools};
 use rustc_hash::FxHashSet;
 
 use uv_configuration::{
@@ -13,6 +13,7 @@ use uv_configuration::{
 use uv_distribution_types::{Index, RequiresPython, Resolution};
 use uv_lock::{Installable, InstallableRootKind, Lock, LockError, Package};
 use uv_normalize::{DEV_DEPENDENCIES, ExtraName, GroupName, PackageName};
+use uv_pep508::MarkerTree;
 use uv_platform_tags::Tags;
 use uv_pypi_types::{
     DependencyGroupSpecifier, DependencyGroups, LenientRequirement, ResolverMarkerEnvironment,
@@ -611,6 +612,26 @@ impl<'lock> InstallTarget<'lock> {
 
     pub(crate) fn build_constraints(&self) -> Constraints {
         self.lock().build_constraints(self.install_path())
+    }
+
+    /// Validate that the current platform is supported by the lockfile.
+    pub fn validate_platform(
+        self,
+        markers: &ResolverMarkerEnvironment,
+    ) -> Result<(), EnvironmentError> {
+        let lock = self.lock();
+        let environments = lock.supported_environments();
+        if !environments.is_empty() && !environments.iter().any(|env| env.evaluate(markers, &[])) {
+            // The simplified markers reflect what the user wrote, without the implicit Python bounds.
+            return Err(EnvironmentError::LockedPlatformIncompatibility(
+                lock.simplified_supported_environments()
+                    .into_iter()
+                    .filter_map(MarkerTree::contents)
+                    .map(|env| format!("`{env}`"))
+                    .join(", "),
+            ));
+        }
+        Ok(())
     }
 
     /// Validate the extras requested by the [`ExtrasSpecification`].

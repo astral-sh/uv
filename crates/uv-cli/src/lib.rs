@@ -4840,8 +4840,8 @@ pub struct CheckArgs {
 
     /// Run checks for the specified PEP 723 Python script, rather than the current project.
     ///
-    /// If provided, uv will use the dependencies based on the script's inline metadata table, in
-    /// adherence with PEP 723.
+    /// By default, uv uses the script's direct `ty` dependency if possible. Otherwise, uv looks for
+    /// a locked `ty` in the containing workspace. Use `--no-project` to skip that lookup.
     #[arg(
         long,
         conflicts_with = "extra",
@@ -4856,7 +4856,6 @@ pub struct CheckArgs {
         conflicts_with = "no_default_groups",
         conflicts_with = "only_group",
         conflicts_with = "all_groups",
-        conflicts_with = "no_project",
         conflicts_with = "all_packages",
         conflicts_with = "package",
         value_hint = ValueHint::FilePath,
