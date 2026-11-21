@@ -43,7 +43,8 @@ pub(super) async fn compile_bytecode(
         .map_err(|source| Error::CompileTree {
             path: site_packages,
             source,
-        })?;
+        })?
+        .unwrap_or_default();
     }
     write_bytecode_summary(files, start, printer)?;
     Ok(())

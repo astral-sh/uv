@@ -205,7 +205,7 @@ pub async fn install(
 ) -> Result<ExitStatus> {
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let compiler = async {
-        let mut total_files = 0;
+        let mut total_files = None;
         let mut total_elapsed = std::time::Duration::default();
         let mut total_skipped = 0;
         while let Some(installation) = receiver.recv().await {
@@ -219,7 +219,7 @@ pub async fn install(
                         )
                     })?
             {
-                total_files += files;
+                *total_files.get_or_insert(0) += files;
                 total_elapsed += elapsed;
             } else {
                 total_skipped += 1;
@@ -253,7 +253,7 @@ pub async fn install(
     let (installer_result, compiler_result) = join!(installer, compiler);
 
     let (total_files, total_elapsed, total_skipped) = compiler_result?;
-    if total_files > 0 {
+    if let Some(total_files) = total_files {
         let s = if total_files == 1 { "" } else { "s" };
         writeln!(
             printer.stderr(),
@@ -1265,10 +1265,7 @@ async fn compile_stdlib_bytecode(
     let files = uv_installer::compile_tree(&stdlib_path, &interpreter, concurrency, cache.root())
         .await
         .with_context(|| format!("Error compiling bytecode in: {}", stdlib_path.display()))?;
-    if files == 0 {
-        return Ok(None);
-    }
-    Ok(Some((files, start.elapsed())))
+    Ok(files.map(|files| (files, start.elapsed())))
 }
 
 pub(crate) fn format_executables(

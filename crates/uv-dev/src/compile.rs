@@ -40,7 +40,8 @@ pub(crate) async fn compile(args: CompileArgs) -> anyhow::Result<()> {
         &Concurrency::default(),
         cache.root(),
     )
-    .await?;
+    .await?
+    .unwrap_or_default();
     info!("Compiled {files} files");
     Ok(())
 }

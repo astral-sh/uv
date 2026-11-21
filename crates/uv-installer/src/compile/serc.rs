@@ -14,7 +14,6 @@ use rustc_hash::FxHashMap;
 use serc::{CompileOptions, OptimizationLevel, PythonVersion, SourceDecodeError};
 use siphasher::sip::SipHasher13;
 use tracing::debug;
-use walkdir::WalkDir;
 
 use uv_fs::{Simplified, persist_with_retry_sync, tempfile_in};
 use uv_python_interpreter::Interpreter;
@@ -120,31 +119,6 @@ impl SercCompiler {
             cache_suffix,
             invalidation_mode,
         })
-    }
-
-    /// Compile a directory in parallel and count newly compiled files.
-    pub(super) fn compile_tree(&self, dir: &Path) -> Result<usize, CompileError> {
-        let mut files = Vec::new();
-        for entry in WalkDir::new(dir)
-            .into_iter()
-            .filter_entry(|entry| entry.file_name() != "__pycache__")
-            .filter(|entry| {
-                entry.as_ref().map_or(true, |entry| {
-                    entry.file_type().is_file()
-                        && entry.path().extension().is_some_and(|ext| ext == "py")
-                })
-            })
-        {
-            match entry {
-                Ok(entry) => files.push(entry.into_path()),
-                Err(err)
-                    if err
-                        .io_error()
-                        .is_some_and(|err| err.kind() == std::io::ErrorKind::NotFound) => {}
-                Err(err) => return Err(CompileError::Walkdir(err)),
-            }
-        }
-        self.compile_files(&files)
     }
 
     /// Compile installed files in parallel and count newly compiled files.
