@@ -675,6 +675,24 @@ fn appended_archive_is_not_rewritten() -> Result<()> {
 }
 
 #[test]
+fn archive_hidden_by_trailing_data_is_not_rewritten() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let mut bytes = windows_script_launcher("pass", false, "python.exe")?;
+    let end = bytes
+        .windows(4)
+        .rposition(|bytes| bytes == b"PK\x05\x06")
+        .context("Missing ZIP end record")?
+        + 22;
+    for (trailing, visible) in [(65_535, true), (65_536, false), (70_000, false)] {
+        bytes.resize(end + trailing, 0);
+        fs_err::write(path.path(), &bytes)?;
+        assert_eq!(Launcher::try_from_path(path.path())?.is_some(), visible);
+    }
+    Ok(())
+}
+
+#[test]
 fn truncated_appended_end_record_is_not_rewritten() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");

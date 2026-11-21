@@ -25,6 +25,12 @@ use super::{
 // The high bit distinguishes a string from an integer ID and a subdirectory from a leaf.
 const DIRECTORY_FLAG: u32 = 1 << 31;
 
+// zipimport allows a 16-bit comment and a 22-byte end record. Versions
+// supporting ZIP64 look back another 76 bytes. See Lib/zipimport.py.
+const ZIP_MAX_COMMENT: u64 = 65_535;
+const ZIP_RECORDS_SIZE: u64 = 22 + 76;
+const ZIP_SEARCH_SIZE: u64 = ZIP_MAX_COMMENT + ZIP_RECORDS_SIZE;
+
 #[derive(Clone, Copy)]
 enum Key<'a> {
     Id(u32),
@@ -263,35 +269,34 @@ impl Resources {
     /// For script launchers, Python searches for the ZIP independently of language.
     /// The archive it finds in the executable must fit within the single named payload.
     fn is_script_archive(&mut self, payload: &Payload) -> io::Result<bool> {
-        Ok(payload.languages == 1
-            && self.last_archive()?.is_none_or(|archive| {
-                archive.start >= payload.range.start && archive.end <= payload.range.end
-            }))
+        if payload.languages != 1 {
+            return Ok(false);
+        }
+        if let Some(archive) = self.last_archive(0..self.file_size)? {
+            return Ok(archive.start >= payload.range.start
+                && archive.end <= payload.range.end
+                && self.file_size - archive.end <= ZIP_MAX_COMMENT);
+        }
+        // Dropping trailing data can reveal an archive that was outside Python's
+        // search window. Check the payload itself if the search didn't cover it.
+        Ok(self.file_size - payload.range.start <= ZIP_SEARCH_SIZE
+            || self.last_archive(payload.range.clone())?.is_none())
     }
 
-    fn last_archive(&mut self) -> io::Result<Option<Range<u64>>> {
-        // zipimport allows a 16-bit comment, a 22-byte end record and up to 76
-        // bytes of ZIP64 records. See CPython's Lib/zipimport.py (_read_directory).
-        const RECORDS_SIZE: usize = 22 + 76;
-        const SEARCH_SIZE: usize = 65_535 + RECORDS_SIZE;
+    fn last_archive(&mut self, range: Range<u64>) -> io::Result<Option<Range<u64>>> {
+        let start = range.start.max(range.end.saturating_sub(ZIP_SEARCH_SIZE));
         // Reading the resource table of a small launcher often buffers the ZIP
         // through EOF. Use it if it includes room for all the end records.
         let buffer = self.file.get_ref().buffer();
-        if buffer.len() as u64 == self.file.limit() && buffer.len() <= SEARCH_SIZE {
-            let start = self.file_size - self.file.limit();
-            if let Some(archive) = archive_range(buffer, start)
-                && archive.end - start >= RECORDS_SIZE as u64
+        let buffered = self.file_size - self.file.limit();
+        if buffered >= start && buffered + buffer.len() as u64 == range.end {
+            if let Some(archive) = archive_range(buffer, buffered)
+                && archive.end - buffered >= ZIP_RECORDS_SIZE
             {
                 return Ok(Some(archive));
             }
         }
-        let len = usize::try_from(self.file_size)
-            .unwrap_or(usize::MAX)
-            .min(SEARCH_SIZE);
-        let start = self.file_size - len as u64;
-        let mut tail = vec![0; len];
-        self.file.seek(SeekFrom::Start(start))?;
-        self.file.read_exact(&mut tail)?;
+        let tail = self.read(start..range.end)?;
         Ok(archive_range(&tail, start))
     }
 
