@@ -942,32 +942,30 @@ impl<'a> ExecutableTarget<'a> {
 
     fn diagnose_probe_error(&self, executable: &Path, error: Error) -> Error {
         if matches!(error, Error::StatusCode(_))
-            && let Some(link) = self.broken_launcher(executable)
+            && let Some(link) = self.broken_link(executable)
         {
             return Error::BrokenLink(link);
         }
         error
     }
 
-    fn broken_launcher(&self, executable: &Path) -> Option<BrokenLink> {
+    fn broken_link(&self, executable: &Path) -> Option<BrokenLink> {
         // A uv launcher selects Python from its resources. CPython's venv
         // launcher selects by home and reports localized errors if it's removed.
-        let missing = match &self.launcher {
-            Some((_, target)) => matches!(target.try_exists(), Ok(false)),
-            None => has_missing_python_home(executable),
+        let kind = match &self.launcher {
+            Some((_, target)) => {
+                if target.try_exists().ok()? {
+                    return None;
+                }
+                BrokenLinkKind::Trampoline(target.clone())
+            }
+            None => BrokenLinkKind::MissingHome(missing_python_home(executable)?),
         };
-        if !missing {
-            return None;
-        }
         let current = Self::identify(self.absolute)?;
         if current.launcher != self.launcher {
             return None;
         }
-        let target = current.launcher.map(|(_, target)| target);
-        Some(BrokenLink::new(
-            executable,
-            BrokenLinkKind::Trampoline(target),
-        ))
+        Some(BrokenLink::new(executable, kind))
     }
 
     fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
@@ -981,7 +979,7 @@ impl<'a> ExecutableTarget<'a> {
         // even when the failure is local to one launcher (e.g., a junction loop).
         if let Some((_, target)) = &self.launcher {
             if err.kind() == io::ErrorKind::NotFound
-                && let Some(link) = self.broken_launcher(executable)
+                && let Some(link) = self.broken_link(executable)
             {
                 return Err(Error::BrokenLink(link));
             }
@@ -1409,7 +1407,8 @@ pub struct BrokenLink {
 #[derive(Debug)]
 enum BrokenLinkKind {
     Symlink(Option<PathBuf>),
-    Trampoline(Option<PathBuf>),
+    Trampoline(PathBuf),
+    MissingHome(PathBuf),
 }
 
 impl BrokenLink {
@@ -1428,19 +1427,27 @@ impl BrokenLink {
 
     fn target(&self) -> Option<&Path> {
         match &self.kind {
-            BrokenLinkKind::Symlink(target) | BrokenLinkKind::Trampoline(target) => {
-                target.as_deref()
-            }
+            BrokenLinkKind::Symlink(target) => target.as_deref(),
+            BrokenLinkKind::Trampoline(target) => Some(target),
+            BrokenLinkKind::MissingHome(_) => None,
         }
     }
 
     /// Format a warning for a caller skipping the environment containing this link.
     pub fn ignored_environment_warning(&self) -> impl Display + '_ {
         std::fmt::from_fn(|f| {
+            let path = self.path.user_display();
+            if let BrokenLinkKind::MissingHome(home) = &self.kind {
+                return write!(
+                    f,
+                    "Ignoring existing virtual environment for `{}` because its configured Python home `{}` does not exist",
+                    path.cyan(),
+                    home.user_display().cyan()
+                );
+            }
             f.write_str(
                 "Ignoring existing virtual environment linked to non-existent Python interpreter: ",
             )?;
-            let path = self.path.user_display();
             if let Some(target) = self.target() {
                 write!(f, "`{}` -> `{}`", path.cyan(), target.user_display().cyan())
             } else {
@@ -1464,15 +1471,16 @@ impl Display for BrokenLink {
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
             ),
-            BrokenLinkKind::Trampoline(Some(target)) => write!(
+            BrokenLinkKind::Trampoline(target) => write!(
                 f,
                 "Python trampoline at `{}` points to a missing interpreter at `{}`",
                 self.path.user_display(),
                 target.user_display()
             ),
-            BrokenLinkKind::Trampoline(None) => write!(
+            BrokenLinkKind::MissingHome(home) => write!(
                 f,
-                "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
+                "Python home `{}` configured for `{}` does not exist",
+                home.user_display(),
                 self.path.user_display()
             ),
         }
@@ -2090,26 +2098,17 @@ fn find_base_python(
 /// A missing home in the environment's configuration can trigger its replacement.
 /// CPython's Windows venv launcher checks beside the executable first. A config
 /// there must also indicate a missing home before we infer one from a failed probe.
-fn has_missing_python_home(interpreter: &Path) -> bool {
-    let Some(parent) = interpreter.parent() else {
-        return false;
-    };
-    let Some(root) = parent.parent() else {
-        return false;
-    };
+fn missing_python_home(interpreter: &Path) -> Option<PathBuf> {
+    let parent = interpreter.parent()?;
+    let root = parent.parent()?;
     #[cfg(unix)]
     {
         // A copied interpreter can lose its standard library when its home is
         // removed. A symlink to an external installation identifies the base
         // directly, even when the configured home is stale.
-        let Ok(target) = fs::canonicalize(interpreter) else {
-            return false;
-        };
-        if target
-            .parent()
-            .is_none_or(|dir| !is_same_file(dir, parent).unwrap_or(false))
-        {
-            return false;
+        let target = fs::canonicalize(interpreter).ok()?;
+        if !is_same_file(target.parent()?, parent).ok()? {
+            return None;
         }
     }
     #[cfg(windows)]
@@ -2119,11 +2118,12 @@ fn has_missing_python_home(interpreter: &Path) -> bool {
         parent,
         root,
     ];
+    let mut missing = None;
     for directory in directories {
         let config = directory.join("pyvenv.cfg");
         #[cfg(windows)]
-        if !matches!(view.may_redirect(&config), Ok(false)) {
-            return false;
+        if view.may_redirect(&config).ok()? {
+            return None;
         }
         let cfg = match PyVenvConfiguration::parse(&config) {
             Ok(cfg) => cfg,
@@ -2132,20 +2132,19 @@ fn has_missing_python_home(interpreter: &Path) -> bool {
             {
                 continue;
             }
-            Err(_) => return false,
+            Err(_) => return None,
         };
-        let Some(home) = cfg.home else {
-            return false;
-        };
+        let home = cfg.home?;
         #[cfg(windows)]
-        if !matches!(view.may_redirect(&home), Ok(false)) {
-            return false;
+        if view.may_redirect(&home).ok()? {
+            return None;
         }
-        if !matches!(home.try_exists(), Ok(false)) {
-            return false;
+        if home.try_exists().ok()? {
+            return None;
         }
+        missing.get_or_insert(home);
     }
-    true
+    missing
 }
 
 #[cfg(test)]
@@ -2209,7 +2208,7 @@ mod tests {
         // Sysnative exists only in the 32-bit view.
         assert!(!home.try_exists()?);
         fs::copy(wow64, &interpreter)?;
-        assert!(!super::has_missing_python_home(&interpreter));
+        assert!(super::missing_python_home(&interpreter).is_none());
         Ok(())
     }
 
@@ -2251,16 +2250,17 @@ mod tests {
         let root = dir.path().join("pyvenv.cfg");
         let sibling = scripts.join("pyvenv.cfg");
         let present = format!("home = {}\n", dir.path().display());
-        let missing = format!("home = {}\n", dir.path().join("missing").display());
+        let missing = dir.path().join("missing");
 
-        fs::write(&root, &missing)?;
-        assert!(super::has_missing_python_home(&interpreter));
+        fs::write(&root, format!("home = {}\n", missing.display()))?;
+        assert_eq!(super::missing_python_home(&interpreter), Some(missing));
         fs::write(&sibling, &present)?;
-        assert!(!super::has_missing_python_home(&interpreter));
-        fs::write(&sibling, &missing)?;
-        assert!(super::has_missing_python_home(&interpreter));
+        assert!(super::missing_python_home(&interpreter).is_none());
+        let sibling_home = dir.path().join("sibling-home");
+        fs::write(&sibling, format!("home = {}\n", sibling_home.display()))?;
+        assert_eq!(super::missing_python_home(&interpreter), Some(sibling_home));
         fs::write(&root, &present)?;
-        assert!(!super::has_missing_python_home(&interpreter));
+        assert!(super::missing_python_home(&interpreter).is_none());
         Ok(())
     }
 

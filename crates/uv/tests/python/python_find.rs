@@ -1060,7 +1060,7 @@ fn python_find_venv_missing_home() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
-      cause: Broken Python trampoline at `.venv/[BIN]/[PYTHON]`, was the underlying Python interpreter removed?
+      cause: Python home `removed` configured for `.venv/[BIN]/[PYTHON]` does not exist
 
     hint: Consider recreating the environment (e.g., with `uv venv`)
     ");
