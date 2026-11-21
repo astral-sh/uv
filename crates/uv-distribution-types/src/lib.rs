@@ -240,6 +240,8 @@ pub enum SourceDist {
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryBuiltWheel {
+    /// Whether the resolver rejected this wheel because it was yanked.
+    pub rejected_yank: bool,
     pub filename: WheelFilename,
     pub file: Box<File>,
     pub index: IndexUrl,

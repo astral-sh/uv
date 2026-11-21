@@ -66,6 +66,7 @@ Ok(
                         ),
                     ),
                 },
+                fallback_wheel: None,
                 sdist: Some(
                     Url {
                         url: UrlString(
@@ -113,6 +114,7 @@ Ok(
                         ),
                     ),
                 },
+                fallback_wheel: None,
                 sdist: Some(
                     Url {
                         url: UrlString(
