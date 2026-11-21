@@ -666,15 +666,15 @@ if __name__ == "__main__":
             .stdout(stdout_predicate)
             .stderr(stderr_predicate);
 
+        // A signed launcher must support both resource readback and execution.
+        sign_authenticode(console_bin_path.path());
+
         let launcher = Launcher::try_from_path(console_bin_path.path())
             .expect("We should succeed at reading the launcher")
             .expect("The launcher should be valid");
 
         assert_eq!(launcher.kind, LauncherKind::Script);
         assert_eq!(launcher.python_path(), python_executable_path);
-
-        // Now code-sign the launcher and verify that it still works.
-        sign_authenticode(console_bin_path.path());
 
         let stdout_predicate = "Hello from uv-trampoline-console.exe\r\n";
         let stderr_predicate = "Hello from uv-trampoline-console.exe\r\n";
