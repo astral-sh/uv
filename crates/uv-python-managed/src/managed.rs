@@ -646,26 +646,29 @@ impl ManagedPythonInstallation {
             let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
                 return None;
             };
-            let (target, missing) = match dunce::canonicalize(&target) {
-                Ok(target) => (target, false),
-                Err(err) => (target, err.kind() == io::ErrorKind::NotFound),
-            };
-            let matches = |path: PathBuf| {
-                if missing {
-                    // The parent can still resolve through a minor version junction.
-                    uv_fs::is_same_file_allow_missing(&path, &target) == Some(true)
-                } else {
-                    path == target
-                }
-            };
-            installations.find(|installation| {
-                // Either name could have been selected when the proxy was installed.
-                let (standard, alternative) = installation.executable_candidates(false);
-                matches(standard) || alternative.is_some_and(matches)
-            })
+            let target = dunce::canonicalize(&target).unwrap_or(target);
+            installations.find(|installation| installation.owns_proxy_target(&target))
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
+    }
+
+    fn owns_proxy_target(&self, target: &Path) -> bool {
+        // The install directory can be a junction. Compare parent directories
+        // so a hard link in another installation doesn't establish ownership.
+        let matches = |path: PathBuf| {
+            path == target
+                || (path.file_name() == target.file_name()
+                    && path
+                        .parent()
+                        .zip(target.parent())
+                        .is_some_and(|(dir, parent)| {
+                            uv_fs::is_same_file_allow_missing(dir, parent) == Some(true)
+                        }))
+        };
+        // Either name could have been selected when the proxy was installed.
+        let (standard, alternative) = self.executable_candidates(false);
+        matches(standard) || alternative.is_some_and(matches)
     }
 
     /// Returns `true` if self is a suitable upgrade of other.
@@ -1117,6 +1120,10 @@ mod tests {
     #[test]
     fn proxy_ownership_through_minor_version_junction() -> anyhow::Result<()> {
         let dir = tempfile::tempdir()?;
+        let root = dir.path().join("managed");
+        let alias = dir.path().join("alias");
+        fs_err::create_dir(&root)?;
+        replace_symlink(&root, &alias)?;
         let bin = dir.path().join("bin");
         fs_err::create_dir(&bin)?;
         let proxy = bin.join("python.exe");
@@ -1124,15 +1131,17 @@ mod tests {
             ("cpython-3.13.1-windows-x86_64-none", false),
             ("cpython-3.13.1+freethreaded-windows-x86_64-none", true),
         ] {
-            let installed = dir.path().join(key);
+            let installed = root.join(key);
             fs_err::create_dir(&installed)?;
             replace_symlink(&installed, dir.path().join("current"))?;
-            let installation = ManagedPythonInstallation::from_path(&installed)?;
+            let installation = ManagedPythonInstallation::from_path(alias.join(key))?;
             for present in [false, true] {
                 if present {
                     for name in ["python.exe", "python3.13t.exe", "other.exe"] {
                         fs_err::write(installed.join(name), [])?;
                     }
+                    // An external hard link to the same file belongs to a different directory.
+                    fs_err::hard_link(installed.join("python.exe"), dir.path().join("python.exe"))?;
                 }
                 for (target, owned) in [
                     (r"..\current\python.exe", true),
@@ -1155,6 +1164,7 @@ mod tests {
                     );
                 }
             }
+            fs_err::remove_file(dir.path().join("python.exe"))?;
         }
         Ok(())
     }
