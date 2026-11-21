@@ -97,6 +97,7 @@ pub async fn run(
     frozen: Option<FrozenSource>,
     active: ActiveEnvironment,
     no_sync: bool,
+    no_sync_cli: bool,
     isolated: bool,
     all_packages: bool,
     package: Option<PackageName>,
@@ -494,7 +495,7 @@ pub async fn run(
                 "`--package` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
         }
-        if no_sync {
+        if no_sync_cli {
             warn_user!(
                 "`--no-sync` is a no-op for Python scripts with inline metadata, which always run in isolation"
             );
@@ -567,13 +568,13 @@ pub async fn run(
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if let LockCheck::Enabled(lock_check) = lock_check {
-                warn_user!("`{lock_check}` has no effect when used alongside `--no-project`");
+            if let LockCheck::Enabled(LockedSource::Cli(flag)) = lock_check {
+                warn_user!("`{flag}` has no effect when used alongside `--no-project`");
             }
-            if frozen.is_some() {
+            if matches!(frozen, Some(FrozenSource::Cli(_))) {
                 warn_user!("`--frozen` has no effect when used alongside `--no-project`");
             }
-            if no_sync {
+            if no_sync_cli {
                 warn_user!("`--no-sync` has no effect when used alongside `--no-project`");
             }
         } else if project.is_none() {
@@ -584,10 +585,10 @@ pub async fn run(
             for flag in groups.history().as_flags_pretty() {
                 warn_user!("`{flag}` has no effect when used outside of a project");
             }
-            if let LockCheck::Enabled(lock_check) = lock_check {
-                warn_user!("`{lock_check}` has no effect when used outside of a project",);
+            if let LockCheck::Enabled(LockedSource::Cli(flag)) = lock_check {
+                warn_user!("`{flag}` has no effect when used outside of a project",);
             }
-            if no_sync {
+            if no_sync_cli {
                 warn_user!("`--no-sync` has no effect when used outside of a project");
             }
         }
