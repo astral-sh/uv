@@ -83,8 +83,19 @@ fn integer_id(entry: ResourceDirectoryEntry) -> Result<u16, ReadError> {
 }
 
 pub(super) fn read_stored_target(file: File) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    Ok(LauncherFile::read(file)?
-        .map(|launcher| (launcher.kind, PathBuf::from(launcher.python_path))))
+    // Bound allocation when inspecting arbitrary executables for discovery or ownership.
+    // Each of the 32,767 UTF-16 units in an extended-length path takes at most three
+    // UTF-8 bytes. A script's stored path can be longer before canonicalization, and
+    // rewriting can replace that path without resolving it.
+    const MAX_LOOKUP_PATH_BYTES: u64 = 3 * 32_767;
+    let Some(mut file) = LauncherFile::read(file)? else {
+        return Ok(None);
+    };
+    if file.python_path.end - file.python_path.start > MAX_LOOKUP_PATH_BYTES {
+        return Err(Error::PathResourceTooLarge);
+    }
+    let path = file.resources.read_path(file.python_path)?;
+    Ok(Some((file.kind, PathBuf::from(path))))
 }
 
 pub(super) fn read_launcher(file: File) -> Result<Option<Launcher>, Error> {
@@ -106,15 +117,18 @@ fn read_for_rewrite(file: File) -> Result<Option<Launcher>, ReadError> {
     let range = file
         .resources
         .locate(file.rcdata, RESOURCE_SCRIPT_DATA, policy)?;
-    let script_data = match range {
-        Some(range) => Some(file.resources.read(range).map_err(ReadError::Payload)?),
-        None if file.kind == LauncherKind::Python => None,
-        None => return Err(Inconclusive),
-    };
+    if file.kind == LauncherKind::Script && range.is_none() {
+        return Err(Inconclusive);
+    }
+    let python_path = file.resources.read_path(file.python_path)?;
+    let script_data = range
+        .map(|range| file.resources.read(range))
+        .transpose()
+        .map_err(ReadError::Payload)?;
     Ok(Some(Launcher {
         kind: file.kind,
         window_mode: file.resources.window_mode,
-        python_path: file.python_path,
+        python_path,
         script_data,
     }))
 }
@@ -135,7 +149,7 @@ struct LauncherFile {
     resources: Resources,
     rcdata: u32,
     kind: LauncherKind,
-    python_path: String,
+    python_path: Range<u64>,
 }
 
 impl LauncherFile {
@@ -157,10 +171,9 @@ impl LauncherFile {
             return Ok(None);
         };
         let kind = resources.read_kind(range).map_err(ReadError::Payload)?;
-        let range = resources
+        let python_path = resources
             .locate(rcdata, RESOURCE_PYTHON_PATH, Languages::PreferNeutral)?
             .ok_or(Inconclusive)?;
-        let python_path = resources.read_path(range)?;
         Ok(Some(Self {
             resources,
             rcdata,
@@ -347,10 +360,6 @@ impl Resources {
     }
 
     fn read_path(&mut self, range: Range<u64>) -> Result<String, ReadError> {
-        let length = range.end - range.start;
-        if length > super::MAX_PYTHON_PATH_BYTES as u64 {
-            return Err(ReadError::Lookup(Error::PathTooLong));
-        }
         let bytes = self.read(range).map_err(ReadError::Payload)?;
         let path = String::from_utf8(bytes)
             .map_err(|err| ReadError::Payload(Error::InvalidPath(err.utf8_error())))?;

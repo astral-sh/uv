@@ -933,7 +933,7 @@ fn unpaired_surrogate_in_target_is_rejected() {
 }
 
 #[test]
-fn interpreter_path_resource_size_limit() -> Result<()> {
+fn interpreter_lookup_limits_path_allocation() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
     let mut python = "界".repeat(32_767);
@@ -941,14 +941,10 @@ fn interpreter_path_resource_size_limit() -> Result<()> {
         path.path(),
         windows_python_launcher(&python, WindowMode::Console)?,
     )?;
-    let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
-    assert_eq!(launcher.python_path(), Path::new(&python));
+    let (_, target) = super::read_launcher_target(path.path())?.context("Missing Python proxy")?;
+    assert_eq!(target, temp_dir.path().join(&python));
 
     python.push('x');
-    assert!(matches!(
-        windows_python_launcher(&python, WindowMode::Console),
-        Err(super::Error::PathTooLong)
-    ));
     // Exceed the limit by one byte that would cause a UTF-8 decoding error
     // if the reader didn't reject the declared size first.
     let mut payload = python.into_bytes();
@@ -965,9 +961,30 @@ fn interpreter_path_resource_size_limit() -> Result<()> {
     )?;
     assert!(matches!(
         super::read_launcher_target(path.path()),
-        Err(super::Error::PathTooLong)
+        Err(super::Error::PathResourceTooLarge)
     ));
-    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
+fn long_stored_paths_can_be_rewritten() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("script.exe");
+    let python = format!("{}python.exe", r".\".repeat(50_000));
+    fs_err::write(
+        path.path(),
+        windows_script_launcher("print('rewritten')", false, &python)?,
+    )?;
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing script launcher")?;
+    assert_eq!(launcher.python_path().as_os_str(), python.as_str());
+    let replacement = which::which("python")?;
+    launcher
+        .with_python_path(&replacement)?
+        .write_to_file(&mut File::create(path.path())?)?;
+    Command::new(path.path())
+        .assert()
+        .success()
+        .stdout("rewritten\r\n");
     Ok(())
 }
 

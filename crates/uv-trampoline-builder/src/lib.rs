@@ -53,11 +53,6 @@ const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH";
 #[cfg(windows)]
 const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 
-// An extended-length Windows path has at most 32,767 UTF-16 code units,
-// each contributing at most three bytes to the UTF-8 resource.
-#[cfg(windows)]
-const MAX_PYTHON_PATH_BYTES: usize = 3 * 32_767;
-
 /// Read the launcher kind and interpreter path without inspecting the script payload.
 /// Return `Ok(None)` if the file has no launcher kind resource. Return an error
 /// if the resource lookup is inconclusive or the interpreter cannot be resolved
@@ -203,8 +198,8 @@ pub enum Error {
     #[error("Cannot encode the Python path `{}` as UTF-8 in a Windows launcher", path.user_display())]
     NonUtf8Path { path: PathBuf },
     #[cfg(windows)]
-    #[error("The Python path is too long for a Windows launcher")]
-    PathTooLong,
+    #[error("The Python path resource is too large for an interpreter lookup")]
+    PathResourceTooLarge,
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
@@ -324,9 +319,6 @@ fn encode_python_path(path: &impl AsRef<Path>) -> Result<&str, Error> {
 fn validate_python_path(path: &str) -> Result<(), Error> {
     if path.is_empty() {
         return Err(Error::EmptyPath);
-    }
-    if path.len() > MAX_PYTHON_PATH_BYTES {
-        return Err(Error::PathTooLong);
     }
     // The trampoline passes the path in a NUL-terminated command line.
     if path.contains('\0') {
