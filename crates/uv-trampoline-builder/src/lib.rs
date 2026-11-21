@@ -171,8 +171,8 @@ pub enum Error {
     #[error("A Windows launcher requires a nonempty Python path")]
     EmptyPath,
     #[cfg(windows)]
-    #[error("The Python path cannot be encoded as UTF-8 in a Windows launcher")]
-    NonUtf8Path,
+    #[error("Cannot encode the Python path `{}` as UTF-8 in a Windows launcher", path.user_display())]
+    NonUtf8Path { path: PathBuf },
     #[cfg(windows)]
     #[error("The Python path is too long for a Windows launcher")]
     PathTooLong,
@@ -281,7 +281,12 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
 
 #[cfg(windows)]
 fn encode_python_path(path: &impl AsRef<Path>) -> Result<&str, Error> {
-    let path = path.simplified().to_str().ok_or(Error::NonUtf8Path)?;
+    let path = path
+        .simplified()
+        .to_str()
+        .ok_or_else(|| Error::NonUtf8Path {
+            path: path.as_ref().to_path_buf(),
+        })?;
     if path.is_empty() {
         return Err(Error::EmptyPath);
     }

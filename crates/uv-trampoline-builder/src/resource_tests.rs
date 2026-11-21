@@ -673,10 +673,12 @@ fn unpaired_surrogate_in_target_is_rejected() {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
 
-    let python = OsString::from_wide(&[0xd800]);
+    let python = Path::new("invalid")
+        .join(OsString::from_wide(&[0xd800]))
+        .join("python.exe");
     assert!(matches!(
         windows_python_launcher(&python, WindowMode::Console),
-        Err(super::Error::NonUtf8Path)
+        Err(super::Error::NonUtf8Path { path }) if path == python
     ));
 }
 
