@@ -6,10 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
-    AddBoundsKind, AnnotationStyle, BuildIsolation, ExcludeDependency, ExcludeNewerPackage,
-    ForkStrategy, IndexStrategy, KeyringProviderType, PackageNameSpecifier, PrereleaseMode,
-    PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple,
-    TrustedHost, TrustedPublishing, Upgrade, serialize_exclude_newer_package_with_spans,
+    AddBoundsKind, AnnotationStyle, BuildIsolation, CheckTool, ExcludeDependency,
+    ExcludeNewerPackage, ForkStrategy, IndexStrategy, KeyringProviderType, PackageNameSpecifier,
+    PrereleaseMode, PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode,
+    TargetTriple, TrustedHost, TrustedPublishing, Upgrade,
+    serialize_exclude_newer_package_with_spans,
 };
 use uv_distribution_types::{
     ConfigSettings, ExcludeNewerOverride, ExcludeNewerSpan, ExcludeNewerValue, ExtraBuildVariables,
@@ -96,6 +97,9 @@ pub struct Options {
 
     #[option_group]
     pub audit: Option<AuditOptions>,
+
+    #[option_group]
+    pub check: Option<CheckOptions>,
 
     #[option_group]
     pub pip: Option<PipOptions>,
@@ -2768,6 +2772,7 @@ struct OptionsWire {
     add_bounds: Option<AddBoundsKind>,
 
     audit: Option<AuditOptions>,
+    check: Option<CheckOptions>,
     pip: Option<PipOptions>,
     cache_keys: Option<Vec<CacheKey>>,
 
@@ -2860,6 +2865,7 @@ impl TryFrom<OptionsWire> for Options {
             no_binary_package,
             torch_backend,
             audit,
+            check,
             pip,
             cache_keys,
             override_dependencies,
@@ -2969,6 +2975,7 @@ impl TryFrom<OptionsWire> for Options {
             },
             add: AddOptions { add_bounds: bounds },
             audit,
+            check,
             workspace,
             sources,
             dev_dependencies,
@@ -3056,6 +3063,26 @@ pub struct AddOptions {
         possible_values = true
     )]
     pub add_bounds: Option<AddBoundsKind>,
+}
+
+/// Settings for `uv check`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+pub struct CheckOptions {
+    /// The tool to run the type check with.
+    ///
+    /// Pyrefly must be a project dependency or a dependency in the project's `dev` group, so that
+    /// `uv.lock` pins its version.
+    #[option(
+        default = "\"ty\"",
+        value_type = "str",
+        example = r#"
+            tool = "pyrefly"
+        "#,
+        possible_values = true
+    )]
+    pub tool: Option<CheckTool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, CombineOptions, OptionsMetadata)]

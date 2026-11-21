@@ -8,8 +8,8 @@ use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_configuration::{
-    ActiveEnvironment, ColorChoice, Concurrency, DependencyGroups, DependencyGroupsWithDefaults,
-    DryRun, ExtrasSpecification, InstallOptions, Modifications,
+    ActiveEnvironment, CheckTool, ColorChoice, Concurrency, DependencyGroups,
+    DependencyGroupsWithDefaults, DryRun, ExtrasSpecification, InstallOptions, Modifications,
 };
 use uv_dispatch::UniversalState;
 use uv_environment_operations::environment::CachedEnvironment;
@@ -44,6 +44,7 @@ use uv_workspace::{DiscoveryOptions, VirtualProject, WorkspaceCache, WorkspaceEr
 
 use crate::toolchain;
 
+mod pyrefly;
 mod ty;
 
 /// Run project checks.
@@ -64,6 +65,7 @@ pub async fn check(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
+    check_tool: CheckTool,
     ty_version: Option<String>,
     show_version: bool,
     show_command: bool,
@@ -89,6 +91,22 @@ pub async fn check(
             PreviewFeature::CheckCommand
         );
     }
+
+    // An explicit ty binary or version overrides the version of ty in `uv.lock`.
+    let use_locked_checker = match check_tool {
+        CheckTool::Ty => ty_path.is_none() && ty_version.is_none(),
+        CheckTool::Pyrefly => {
+            if fix {
+                anyhow::bail!("`--fix` is not supported with `--tool pyrefly`");
+            }
+            if ty_version.is_some() {
+                anyhow::bail!("`--ty-version` is not supported with `--tool pyrefly`");
+            }
+            true
+        }
+    };
+    let checker_package = PackageName::from_str(check_tool.name())?;
+    let checker_executable = format!("{}{}", check_tool.name(), std::env::consts::EXE_SUFFIX);
 
     // Discover the project.
     let project = if no_project || script.is_some() {
@@ -358,7 +376,7 @@ pub async fn check(
     };
 
     // Select an environment and, if we found a project, sync it before running checks.
-    let mut locked_ty_path = None;
+    let mut locked_checker_path = None;
     let venv = if let Some(script) = &script {
         let extras = extras.with_defaults(DefaultExtras::default());
         let venv = if let Some(venv) = isolated_venv {
@@ -425,23 +443,15 @@ pub async fn check(
         };
 
         let marker_environment = venv.interpreter().to_resolver_marker_environment();
-        if ty_path.is_none()
-            && ty_version.is_none()
+        if use_locked_checker
             && result
                 .lock()
-                .dependency_selection(
-                    None,
-                    &PackageName::from_str("ty")?,
-                    marker_environment.markers(),
-                )
+                .dependency_selection(None, &checker_package, marker_environment.markers())
                 .map_err(anyhow::Error::msg)?
                 .root()
                 .is_some()
         {
-            locked_ty_path = Some(
-                venv.scripts()
-                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX)),
-            );
+            locked_checker_path = Some(venv.scripts().join(&checker_executable));
         }
 
         let target = InstallTarget::Script {
@@ -612,25 +622,23 @@ pub async fn check(
         target.validate_extras(&extras)?;
         target.validate_groups(&groups)?;
 
-        if ty_path.is_none()
-            && ty_version.is_none()
+        if use_locked_checker
             && let Some(tool) = toolchain::find_locked_tool(
                 project,
                 result.lock(),
                 lock_interpreter,
-                &PackageName::from_str("ty")?,
+                &checker_package,
                 &DEV_DEPENDENCIES,
                 &groups,
             )?
         {
-            locked_ty_path = Some(if !tool.requires_separate_environment() && !no_sync {
+            locked_checker_path = Some(if !tool.requires_separate_environment() && !no_sync {
                 // Synchronization will install the locked tool into the selected project or
                 // isolated environment.
-                venv.scripts()
-                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
+                venv.scripts().join(&checker_executable)
             } else {
                 // Do not modify the selected environment when synchronization is disabled or the
-                // locked tool is excluded from it. Install only the locked `ty` subgraph.
+                // locked tool is excluded from it. Install only the locked tool's subgraph.
                 let base_interpreter =
                     CachedEnvironment::base_interpreter(lock_interpreter, cache)?;
                 let resolution = toolchain::resolution_from_lock(
@@ -641,7 +649,7 @@ pub async fn check(
                     &settings.resolver.build_options,
                 )?;
                 store_credentials_from_target(target, &client_builder)?;
-                let ty_state = state.fork();
+                let tool_state = state.fork();
                 let environment = match CachedEnvironment::from_locked_resolution(
                     &resolution,
                     result
@@ -651,7 +659,7 @@ pub async fn check(
                     &settings,
                     &malware_settings,
                     &client_builder,
-                    &ty_state,
+                    &tool_state,
                     Box::new(SummaryInstallLogger),
                     installer_metadata,
                     &concurrency,
@@ -667,7 +675,7 @@ pub async fn check(
                 malware_context.record_resolution(&resolution);
                 PythonEnvironment::from(environment)
                     .scripts()
-                    .join(format!("ty{}", std::env::consts::EXE_SUFFIX))
+                    .join(&checker_executable)
             });
         }
 
@@ -709,7 +717,8 @@ pub async fn check(
         isolated_venv
     };
 
-    // Forward the user's explicit Python request so ty can apply its own version selection rules.
+    // Forward the user's explicit Python request so the type checker can apply its own version
+    // selection rules.
     let python_version = if let Some(python) = python {
         let request = PythonRequest::parse(&python);
         if let Some(venv) = venv.as_ref()
@@ -741,33 +750,60 @@ pub async fn check(
         None
     };
 
-    let exclude_newer = settings
-        .resolver
-        .exclude_newer
-        .exclude_newer_package_for_index(&PackageName::from_str("ty")?, None);
+    match check_tool {
+        CheckTool::Ty => {
+            let exclude_newer = settings
+                .resolver
+                .exclude_newer
+                .exclude_newer_package_for_index(&checker_package, None);
 
-    ty::run(
-        ty_version,
-        ty_path.or(locked_ty_path),
-        fix,
-        &target_dir,
-        project
-            .as_ref()
-            .map(|project| project.workspace().install_path().as_path()),
-        lock_check,
-        frozen,
-        &check_targets,
-        &excluded_targets,
-        explicit_targets,
-        venv.as_ref().map(PythonEnvironment::root),
-        python_version.as_ref(),
-        exclude_newer,
-        show_version,
-        show_command,
-        &client_builder,
-        cache,
-        color,
-        printer,
-    )
-    .await
+            ty::run(
+                ty_version,
+                ty_path.or(locked_checker_path),
+                fix,
+                &target_dir,
+                project
+                    .as_ref()
+                    .map(|project| project.workspace().install_path().as_path()),
+                lock_check,
+                frozen,
+                &check_targets,
+                &excluded_targets,
+                explicit_targets,
+                venv.as_ref().map(PythonEnvironment::root),
+                python_version.as_ref(),
+                exclude_newer,
+                show_version,
+                show_command,
+                &client_builder,
+                cache,
+                color,
+                printer,
+            )
+            .await
+        }
+        CheckTool::Pyrefly => {
+            let Some(pyrefly_path) = locked_checker_path else {
+                anyhow::bail!(
+                    "`--tool pyrefly` requires `pyrefly` in `uv.lock`; run `uv add --dev pyrefly` to add it"
+                );
+            };
+            pyrefly::run(
+                &pyrefly_path,
+                &target_dir,
+                lock_check,
+                frozen,
+                &check_targets,
+                &excluded_targets,
+                explicit_targets,
+                venv.as_ref().map(PythonEnvironment::root),
+                python_version.as_ref(),
+                show_version,
+                show_command,
+                color,
+                printer,
+            )
+            .await
+        }
+    }
 }

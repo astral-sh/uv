@@ -15,7 +15,7 @@ use uv_auth::Service;
 use uv_cache::CacheArgs;
 use uv_configuration::RequirementsInput;
 use uv_configuration::{
-    AddBoundsKind, AnnotationStyle, AuditOutputFormat, AuthorFrom, ColorChoice,
+    AddBoundsKind, AnnotationStyle, AuditOutputFormat, AuthorFrom, CheckTool, ColorChoice,
     ExcludeNewerPackageEntry, ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType,
     ListFormat, MetadataOutputVersion, PackageNameSpecifier, PipCompileFormat, PipInstallFormat,
     PrereleaseMode, PrereleasePackageEntry, ProjectBuildBackend, PythonListFormat, ResolutionMode,
@@ -4962,6 +4962,15 @@ pub struct CheckArgs {
         value_hint = ValueHint::Other,
     )]
     pub python: Option<Maybe<String>>,
+
+    /// The tool to run the type check with.
+    ///
+    /// Pyrefly must be a project dependency or a dependency in the project's `dev` group, so that
+    /// `uv.lock` pins its version.
+    ///
+    /// Defaults to ty.
+    #[arg(long, value_enum)]
+    pub tool: Option<CheckTool>,
 
     /// The version of ty to use for type checking.
     ///
