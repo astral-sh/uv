@@ -947,6 +947,31 @@ impl<'a> ExecutableTarget<'a> {
             (_, result) => result.map(Some),
         }
     }
+
+    /// Snapshot the part of a launcher's path that differs from its resolved target.
+    /// Replacing a junction changes its containing directory even if the original
+    /// junction is subsequently moved back into place.
+    #[cfg(windows)]
+    fn link_timestamps(&self, canonical: &Path) -> io::Result<Vec<(u64, u64)>> {
+        use std::os::windows::fs::MetadataExt;
+
+        let Self::Trampoline(target) = self else {
+            return Ok(Vec::new());
+        };
+        let target = std::path::absolute(target)?;
+        if target == canonical {
+            return Ok(Vec::new());
+        }
+        let mut times = Vec::new();
+        for path in target.ancestors() {
+            let metadata = fs::symlink_metadata(path)?;
+            times.push((metadata.creation_time(), metadata.last_write_time()));
+            if canonical.starts_with(path) {
+                break;
+            }
+        }
+        Ok(times)
+    }
 }
 
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
@@ -1588,6 +1613,9 @@ impl InterpreterInfo {
             return uncached(probe()?);
         };
 
+        #[cfg(windows)]
+        let links = target.link_timestamps(&canonical);
+
         trace!(
             "Querying interpreter executable at `{}`",
             executable.display()
@@ -1602,6 +1630,17 @@ impl InterpreterInfo {
             probe_start,
             &mut file_timestamps,
         );
+
+        // Python can report a junction path as its base executable. It may have
+        // pointed at another installation while Python was starting up.
+        #[cfg(windows)]
+        let cacheable = cacheable
+            && (wire.metadata.sys_base_executable.as_deref() == Some(canonical.as_path())
+                || links.is_ok_and(|before| {
+                    target
+                        .link_timestamps(&canonical)
+                        .is_ok_and(|after| before == after)
+                }));
 
         let info = Self::from_probe(executable, wire, file_timestamps)?;
         if cacheable {
@@ -1991,6 +2030,61 @@ mod tests {
         };
         response.metadata.sys_executable = executable.to_path_buf();
         Ok(*response)
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn launcher_junction_restored_after_probe() -> Result<()> {
+        use fs_err::os::windows::fs::OpenOptionsExt;
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+        use windows::Win32::Storage::FileSystem::{
+            FILE_FLAG_BACKUP_SEMANTICS, FILE_WRITE_ATTRIBUTES,
+        };
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let first = dir.path().join("first");
+        let second = dir.path().join("second");
+        let current = dir.path().join("current");
+        for installation in [&first, &second] {
+            fs::create_dir(installation)?;
+            fs::write(installation.join("python.exe"), [])?;
+        }
+        uv_fs::replace_symlink(&first, &current)?;
+        let target = current.join("python.exe");
+        fs::write(
+            &proxy,
+            windows_python_launcher(&target, WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let canonical = canonicalize_executable(&proxy)?;
+        let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
+        // Ensure the directory update is observable even within a single clock tick.
+        fs::OpenOptions::new()
+            .access_mode(FILE_WRITE_ATTRIBUTES.0)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
+            .open(dir.path())?
+            .set_modified(UNIX_EPOCH)?;
+        let probe = || {
+            let mut response = mocked_interpreter_response(&proxy).expect("Valid mocked metadata");
+            response.metadata.sys_base_executable = Some(target.clone());
+            response.metadata.sys_base_prefix = dunce::canonicalize(&current)?;
+            Ok::<_, Error>((response, None))
+        };
+        let info = InterpreterInfo::query_cached(&proxy, &cache, || {
+            uv_fs::replace_symlink(&second, &current)?;
+            let result = probe()?;
+            uv_fs::replace_symlink(&first, &current)?;
+            Ok(result)
+        })?;
+        assert_eq!(info.metadata.sys_base_prefix, dunce::canonicalize(&second)?);
+        assert_eq!(canonicalize_executable(&proxy)?, canonical);
+        assert!(!entry.path().exists());
+
+        InterpreterInfo::query_cached(&proxy, &cache, probe)?;
+        let info = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+        assert_eq!(info.metadata.sys_base_prefix, dunce::canonicalize(&first)?);
+        Ok(())
     }
 
     #[cfg(windows)]
