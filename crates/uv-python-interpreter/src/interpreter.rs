@@ -1252,7 +1252,13 @@ impl BrokenLink {
 impl Display for BrokenLink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
-            BrokenLinkKind::Symlink(_) => write!(
+            BrokenLinkKind::Symlink(Some(target)) => write!(
+                f,
+                "Broken Python symlink from `{}` to `{}`",
+                self.path.user_display(),
+                target.simplified_display()
+            ),
+            BrokenLinkKind::Symlink(None) => write!(
                 f,
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
