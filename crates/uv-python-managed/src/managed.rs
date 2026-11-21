@@ -634,19 +634,23 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
-    /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
-    /// [`create_link_to_executable`].
-    pub fn is_bin_link(&self, path: &Path) -> bool {
+    /// Find the installation that owns an executable link during uninstall.
+    pub fn find_bin_link_for_removal<'a>(
+        path: &Path,
+        mut installations: impl Iterator<Item = &'a Self>,
+    ) -> Option<&'a Self> {
         if cfg!(unix) {
-            same_file::is_same_file(path, self.executable(false)).unwrap_or_default()
+            installations.find(|installation| {
+                same_file::is_same_file(path, installation.executable(false)).unwrap_or_default()
+            })
         } else if cfg!(windows) {
             let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
-                return false;
+                return None;
             };
-            // We canonicalize the target path of the launcher in case it includes a minor version
-            // junction directory. If canonicalization fails, we check against the launcher path
-            // directly.
-            dunce::canonicalize(&target).unwrap_or(target) == self.executable(false)
+            // Resolve minor version junctions. A dangling proxy can still
+            // identify its installation by the stored target.
+            let target = dunce::canonicalize(&target).unwrap_or(target);
+            installations.find(|installation| installation.executable(false) == target)
         } else {
             unreachable!("Only Windows and Unix are supported")
         }

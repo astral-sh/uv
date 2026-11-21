@@ -196,10 +196,10 @@ async fn do_uninstall(
         })
         .sorted()
     {
-        let Some(installation) = matching_installations
-            .iter()
-            .find(|installation| installation.is_bin_link(executable.as_path()))
-        else {
+        let Some(installation) = ManagedPythonInstallation::find_bin_link_for_removal(
+            &executable,
+            matching_installations.iter(),
+        ) else {
             continue;
         };
 
