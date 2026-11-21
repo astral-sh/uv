@@ -334,6 +334,24 @@ pub enum BinLinkOperation {
     Uninstall,
 }
 
+impl BinLinkOperation {
+    fn resolve_proxy_target(self, path: &Path) -> Option<PathBuf> {
+        let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
+            return None;
+        };
+        match dunce::canonicalize(&target) {
+            Ok(resolved) => Some(resolved),
+            Err(err) if self == Self::Uninstall && err.kind() == io::ErrorKind::NotFound => {
+                // A dangling link at the interpreter path may point outside the installation.
+                fs_err::symlink_metadata(&target)
+                    .is_err_and(|err| err.kind() == io::ErrorKind::NotFound)
+                    .then_some(target)
+            }
+            Err(_) => None,
+        }
+    }
+}
+
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
         let implementation = ImplementationName::try_from(&download.key().implementation)?;
@@ -663,13 +681,7 @@ impl ManagedPythonInstallation {
                 }),
             }
         } else if cfg!(windows) {
-            let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
-                return None;
-            };
-            let target = match operation {
-                BinLinkOperation::Install => dunce::canonicalize(target).ok()?,
-                BinLinkOperation::Uninstall => dunce::canonicalize(&target).unwrap_or(target),
-            };
+            let target = operation.resolve_proxy_target(path)?;
             installations.find(|installation| installation.owns_proxy_target(&target))
         } else {
             unreachable!("Only Windows and Unix are supported")
@@ -1214,6 +1226,38 @@ mod tests {
             fixture.check(r"..\current\python3.13t.exe", &[Uninstall])?;
             fixture.check(r"..\current\other.exe", &[])?;
             fixture.check(r"..\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn unresolved_target_does_not_establish_ownership() -> anyhow::Result<()> {
+            let fixture = Fixture::new(STANDARD)?;
+            let installed = fixture.installation.path();
+            // Resolving this junction loops back to the same path.
+            let target = installed.join("python.exe");
+            let redirect = installed.join("redirect");
+            fs_err::create_dir(&target)?;
+            replace_symlink(&target, &redirect)?;
+            fs_err::remove_dir(&target)?;
+            fs_err::rename(redirect, &target)?;
+            let err = dunce::canonicalize(&target).unwrap_err();
+            assert_ne!(err.kind(), io::ErrorKind::NotFound, "{err}");
+            fixture.check(r"..\current\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn dangling_redirect_does_not_establish_ownership() -> anyhow::Result<()> {
+            let fixture = Fixture::new(STANDARD)?;
+            let outside = fixture.dir.path().join("outside");
+            let target = fixture.installation.path().join("python.exe");
+            fs_err::create_dir(&outside)?;
+            replace_symlink(&outside, &target)?;
+            fs_err::remove_dir(outside)?;
+            let err = dunce::canonicalize(&target).unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::NotFound, "{err}");
+            fs_err::symlink_metadata(&target)?;
+            fixture.check(r"..\current\python.exe", &[])?;
             Ok(())
         }
 
