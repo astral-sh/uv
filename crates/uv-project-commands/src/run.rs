@@ -2070,6 +2070,10 @@ fn copy_entrypoint(
         Err(err) => return Err(CopyEntrypointError::Trampoline(err)),
     };
 
+    // The first environment providing this entry point wins.
+    if target.exists() {
+        return Ok(());
+    }
     let is_gui = launcher.python_path.ends_with("pythonw.exe");
 
     let python_path = if is_gui {
