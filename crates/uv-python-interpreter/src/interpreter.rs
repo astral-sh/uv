@@ -932,13 +932,13 @@ impl<'a> ExecutableTarget<'a> {
     }
 
     fn cache_input<T>(&self, input: io::Result<T>) -> io::Result<Option<T>> {
-        // A share can deny access to the normalized path, and a volume without
-        // a drive letter may have no DOS path. The launcher can still work.
+        // Unless the target is missing, let the probe decide if the launcher
+        // works. An error resolving a cache input would stop Python discovery,
+        // even when the failure is local to one launcher (e.g., a junction loop).
         match (self, input) {
             (Self::Trampoline(target), Err(err))
-                if err.kind() == io::ErrorKind::PermissionDenied
-                    || (err.kind() == io::ErrorKind::NotFound
-                        && !matches!(target.try_exists(), Ok(false))) =>
+                if err.kind() != io::ErrorKind::NotFound
+                    || !matches!(target.try_exists(), Ok(false)) =>
             {
                 trace!(
                     "Skipping interpreter cache for launcher targeting `{}`: {err}",
@@ -2269,6 +2269,7 @@ mod tests {
     #[tokio::test]
     async fn failed_canonicalization_of_existing_target_bypasses_cache() -> Result<()> {
         use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+        use windows::Win32::Foundation::ERROR_CANT_RESOLVE_FILENAME;
 
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
@@ -2285,14 +2286,19 @@ mod tests {
         InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
 
         let prefix = dir.path().join("fresh-probe");
-        for error in [io::ErrorKind::PermissionDenied, io::ErrorKind::NotFound] {
+        for error in [
+            io::Error::from(io::ErrorKind::PermissionDenied),
+            io::Error::from(io::ErrorKind::NotFound),
+            // A loop of directory junctions in the stored target.
+            io::Error::from_raw_os_error(ERROR_CANT_RESOLVE_FILENAME.0.cast_signed()),
+        ] {
             let mut response = mocked_interpreter_response(&proxy)?;
             response.metadata.sys_prefix = prefix.clone();
             response.metadata.sys_base_executable = Some(target.clone());
             let info = InterpreterInfo::query_cached_with(
                 &proxy,
                 &cache,
-                |_| Err(error.into()),
+                |_| Err(error),
                 || Ok((response, None)),
             )?;
             assert_eq!(info.metadata.sys_prefix, prefix);
