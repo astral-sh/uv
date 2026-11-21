@@ -27,7 +27,9 @@ use uv_platform::{LibcDetectionError, Platform};
 use uv_pypi_types::Digest;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{Launcher, LauncherKind, WindowMode, windows_python_launcher};
+use uv_trampoline_builder::{
+    LauncherKind, WindowMode, read_launcher_target, windows_python_launcher,
+};
 
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::macos_dylib;
@@ -325,6 +327,31 @@ pub struct ManagedPythonInstallation {
     build: Option<Cow<'static, str>>,
 }
 
+/// The operation for which a managed executable link is being identified.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinLinkOperation {
+    Install,
+    Uninstall,
+}
+
+impl BinLinkOperation {
+    fn resolve_proxy_target(self, path: &Path) -> Option<PathBuf> {
+        let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
+            return None;
+        };
+        match dunce::canonicalize(&target) {
+            Ok(resolved) => Some(resolved),
+            Err(err) if self == Self::Uninstall && err.kind() == io::ErrorKind::NotFound => {
+                // A dangling link at the interpreter path may point outside the installation.
+                fs_err::symlink_metadata(&target)
+                    .is_err_and(|err| err.kind() == io::ErrorKind::NotFound)
+                    .then_some(target)
+            }
+            Err(_) => None,
+        }
+    }
+}
+
 impl ManagedPythonInstallation {
     pub fn new(path: PathBuf, download: &ManagedPythonDownload) -> Result<Self, Error> {
         let implementation = ImplementationName::try_from(&download.key().implementation)?;
@@ -389,6 +416,14 @@ impl ManagedPythonInstallation {
     /// If windowed is true, `pythonw.exe` is selected over `python.exe` on windows, with no changes
     /// on non-windows.
     pub fn executable(&self, windowed: bool) -> PathBuf {
+        let (standard, alternative) = self.executable_candidates(windowed);
+        match alternative {
+            Some(path) if !standard.exists() => path,
+            _ => standard,
+        }
+    }
+
+    fn executable_candidates(&self, windowed: bool) -> (PathBuf, Option<PathBuf>) {
         let version = match self.implementation() {
             ImplementationName::CPython => {
                 if cfg!(unix) {
@@ -423,8 +458,9 @@ impl ManagedPythonInstallation {
             exe = std::env::consts::EXE_SUFFIX
         );
 
-        let executable = executable_path_from_base(
-            self.python_dir().as_path(),
+        let dir = self.python_dir();
+        let standard = executable_path_from_base(
+            &dir,
             &name,
             &LenientImplementationName::from(self.implementation()),
             *self.key.os(),
@@ -434,20 +470,10 @@ impl ManagedPythonInstallation {
         // `python.exe` executable in free-threaded distributions on Windows.
         //
         // See https://github.com/astral-sh/uv/issues/8298
-        if cfg!(windows)
-            && matches!(self.key.variant, PythonVariant::Freethreaded)
-            && !executable.exists()
-        {
-            // This is the alternative executable name for the freethreaded variant
-            return self.python_dir().join(format!(
-                "python{}.{}t{}",
-                self.key.major,
-                self.key.minor,
-                std::env::consts::EXE_SUFFIX
-            ));
-        }
-
-        executable
+        let alternative = (cfg!(windows)
+            && matches!(self.key.variant, PythonVariant::Freethreaded))
+        .then(|| dir.join(format!("python{}.{}t.exe", self.key.major, self.key.minor)));
+        (standard, alternative)
     }
 
     fn python_dir(&self) -> PathBuf {
@@ -632,26 +658,52 @@ impl ManagedPythonInstallation {
         Ok(())
     }
 
-    /// Returns `true` if the path is a link to this installation's binary, e.g., as created by
-    /// [`create_link_to_executable`].
-    pub fn is_bin_link(&self, path: &Path) -> bool {
+    /// Find the installation that owns an executable link. Installation checks
+    /// for a live symlink or proxy. Uninstall also cleans up Unix hard links
+    /// and Windows proxies whose interpreter has been removed.
+    pub fn find_bin_link<'a>(
+        path: &Path,
+        mut installations: impl Iterator<Item = &'a Self>,
+        operation: BinLinkOperation,
+    ) -> Option<&'a Self> {
         if cfg!(unix) {
-            same_file::is_same_file(path, self.executable(false)).unwrap_or_default()
-        } else if cfg!(windows) {
-            let Some(launcher) = Launcher::try_from_path(path).unwrap_or_default() else {
-                return false;
-            };
-            if !matches!(launcher.kind, LauncherKind::Python) {
-                return false;
+            match operation {
+                BinLinkOperation::Install => {
+                    if !path.is_symlink() {
+                        return None;
+                    }
+                    let target = fs_err::canonicalize(path).ok()?;
+                    installations.find(|installation| installation.executable(false) == target)
+                }
+                BinLinkOperation::Uninstall => installations.find(|installation| {
+                    same_file::is_same_file(path, installation.executable(false))
+                        .unwrap_or_default()
+                }),
             }
-            // We canonicalize the target path of the launcher in case it includes a minor version
-            // junction directory. If canonicalization fails, we check against the launcher path
-            // directly.
-            dunce::canonicalize(&launcher.python_path).unwrap_or(launcher.python_path)
-                == self.executable(false)
+        } else if cfg!(windows) {
+            let target = operation.resolve_proxy_target(path)?;
+            installations.find(|installation| installation.owns_proxy_target(&target))
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
+    }
+
+    fn owns_proxy_target(&self, target: &Path) -> bool {
+        // The install directory can be a junction. Compare parent directories
+        // so a hard link in another installation doesn't establish ownership.
+        let matches = |path: PathBuf| {
+            path == target
+                || (path.file_name() == target.file_name()
+                    && path
+                        .parent()
+                        .zip(target.parent())
+                        .is_some_and(|(dir, parent)| {
+                            uv_fs::is_same_file_allow_missing(dir, parent) == Some(true)
+                        }))
+        };
+        // Either name could have been selected when the proxy was installed.
+        let (standard, alternative) = self.executable_candidates(false);
+        matches(standard) || alternative.is_some_and(matches)
     }
 
     /// Returns `true` if self is a suitable upgrade of other.
@@ -1098,6 +1150,148 @@ mod tests {
     use uv_python_types::{
         ImplementationName, LenientImplementationName, PythonInstallationKey, PythonVariant,
     };
+
+    #[cfg(windows)]
+    mod proxy_ownership {
+        use super::BinLinkOperation::{Install, Uninstall};
+        use super::*;
+
+        const STANDARD: &str = "cpython-3.13.1-windows-x86_64-none";
+        const FREE_THREADED: &str = "cpython-3.13.1+freethreaded-windows-x86_64-none";
+
+        struct Fixture {
+            dir: tempfile::TempDir,
+            installation: ManagedPythonInstallation,
+        }
+
+        impl Fixture {
+            fn new(key: &str) -> anyhow::Result<Self> {
+                let dir = tempfile::tempdir()?;
+                let root = dir.path().join("managed");
+                let installed = root.join(key);
+                fs_err::create_dir_all(&installed)?;
+                let alias = dir.path().join("alias");
+                replace_symlink(&root, &alias)?;
+                replace_symlink(&installed, dir.path().join("current"))?;
+                fs_err::create_dir(dir.path().join("bin"))?;
+                let installation = ManagedPythonInstallation::from_path(alias.join(key))?;
+                Ok(Self { dir, installation })
+            }
+
+            fn check(&self, target: &str, expected: &[BinLinkOperation]) -> anyhow::Result<()> {
+                let proxy = self.dir.path().join(r"bin\python.exe");
+                fs_err::write(
+                    &proxy,
+                    windows_python_launcher(target, WindowMode::Console)?,
+                )?;
+                for operation in [Install, Uninstall] {
+                    assert_eq!(
+                        self.owns(&proxy, operation),
+                        expected.contains(&operation),
+                        "{operation:?}: {target}"
+                    );
+                }
+                Ok(())
+            }
+
+            fn owns(&self, path: &Path, operation: BinLinkOperation) -> bool {
+                ManagedPythonInstallation::find_bin_link(
+                    path,
+                    std::iter::once(&self.installation),
+                    operation,
+                )
+                .is_some()
+            }
+        }
+
+        #[test]
+        fn script_targeting_managed_python_is_not_a_bin_link() -> anyhow::Result<()> {
+            use uv_trampoline_builder::windows_script_launcher;
+
+            let fixture = Fixture::new(STANDARD)?;
+            let target = fixture.installation.path().join("python.exe");
+            fs_err::write(&target, [])?;
+            let script = fixture.dir.path().join(r"bin\python.exe");
+            fs_err::write(&script, windows_script_launcher("pass", false, &target)?)?;
+            assert!(!fixture.owns(&script, Install));
+            assert!(!fixture.owns(&script, Uninstall));
+            Ok(())
+        }
+
+        #[test]
+        fn live_targets_through_junctions() -> anyhow::Result<()> {
+            let fixture = Fixture::new(FREE_THREADED)?;
+            let installed = fixture.installation.path();
+            for name in ["python.exe", "python3.13t.exe", "other.exe"] {
+                fs_err::write(installed.join(name), [])?;
+            }
+            fs_err::hard_link(
+                installed.join("python.exe"),
+                fixture.dir.path().join("python.exe"),
+            )?;
+
+            fixture.check(r"..\current\python.exe", &[Install, Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[Install, Uninstall])?;
+            fixture.check(r"..\current\other.exe", &[])?;
+            fixture.check(r"..\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn dangling_targets_through_junctions() -> anyhow::Result<()> {
+            let fixture = Fixture::new(FREE_THREADED)?;
+            fixture.check(r"..\current\python.exe", &[Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[Uninstall])?;
+            fixture.check(r"..\current\other.exe", &[])?;
+            fixture.check(r"..\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn unresolved_target_does_not_establish_ownership() -> anyhow::Result<()> {
+            let fixture = Fixture::new(STANDARD)?;
+            let installed = fixture.installation.path();
+            // Resolving this junction loops back to the same path.
+            let target = installed.join("python.exe");
+            let redirect = installed.join("redirect");
+            fs_err::create_dir(&target)?;
+            replace_symlink(&target, &redirect)?;
+            fs_err::remove_dir(&target)?;
+            fs_err::rename(redirect, &target)?;
+            let err = dunce::canonicalize(&target).unwrap_err();
+            assert_ne!(err.kind(), io::ErrorKind::NotFound, "{err}");
+            fixture.check(r"..\current\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn dangling_redirect_does_not_establish_ownership() -> anyhow::Result<()> {
+            let fixture = Fixture::new(STANDARD)?;
+            let outside = fixture.dir.path().join("outside");
+            let target = fixture.installation.path().join("python.exe");
+            fs_err::create_dir(&outside)?;
+            replace_symlink(&outside, &target)?;
+            fs_err::remove_dir(outside)?;
+            let err = dunce::canonicalize(&target).unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::NotFound, "{err}");
+            fs_err::symlink_metadata(&target)?;
+            fixture.check(r"..\current\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn standard_installation_owns_only_standard_name() -> anyhow::Result<()> {
+            let fixture = Fixture::new(STANDARD)?;
+            fixture.check(r"..\current\python.exe", &[Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[])?;
+            for name in ["python.exe", "python3.13t.exe"] {
+                fs_err::write(fixture.installation.path().join(name), [])?;
+            }
+            fixture.check(r"..\current\python.exe", &[Install, Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[])?;
+            Ok(())
+        }
+    }
 
     fn create_test_installation(
         implementation: ImplementationName,

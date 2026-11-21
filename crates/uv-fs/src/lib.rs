@@ -43,6 +43,8 @@ mod path;
 mod read;
 mod space;
 pub mod which;
+#[cfg(windows)]
+pub mod wow64;
 
 /// Return the number of hardlinks to a file.
 #[cfg(unix)]

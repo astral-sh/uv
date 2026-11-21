@@ -1043,8 +1043,9 @@ pub async fn run(
                     if !entry.file_type()?.is_file() {
                         continue;
                     }
+                    let source = entry.path();
                     match copy_entrypoint(
-                        &entry.path(),
+                        &source,
                         &ephemeral_env.scripts().join(entry.file_name()),
                         interpreter.sys_executable(),
                         ephemeral_env.interpreter().sys_executable(),
@@ -1056,7 +1057,7 @@ pub async fn run(
                         {
                             trace!(
                                 "Skipping copy of entrypoint `{}`: already exists",
-                                &entry.path().display()
+                                source.display()
                             );
                         }
                         Err(CopyEntrypointError::Io(err))
@@ -1064,10 +1065,14 @@ pub async fn run(
                         {
                             trace!(
                                 "Skipping copy of entrypoint `{}`: permission denied",
-                                &entry.path().display()
+                                source.display()
                             );
                         }
-                        Err(err) => return Err(err.into()),
+                        Err(err) => {
+                            return Err(err).with_context(|| {
+                                format!("Failed to copy entrypoint `{}`", source.user_display())
+                            });
+                        }
                     }
                 }
 
@@ -2061,24 +2066,28 @@ fn copy_entrypoint(
 ) -> Result<(), CopyEntrypointError> {
     use uv_trampoline_builder::Launcher;
 
-    let Some(launcher) = Launcher::try_from_path(source)? else {
-        return Ok(());
+    if target.exists() {
+        return Err(CopyEntrypointError::Io(
+            std::io::ErrorKind::AlreadyExists.into(),
+        ));
+    }
+    let launcher = match Launcher::try_from_path(source) {
+        Ok(Some(launcher)) => launcher,
+        Ok(None) => return Ok(()),
+        Err(uv_trampoline_builder::Error::Io(err)) => return Err(CopyEntrypointError::Io(err)),
+        Err(err) => return Err(CopyEntrypointError::Trampoline(err)),
     };
 
-    let is_gui = launcher.python_path.ends_with("pythonw.exe");
-
-    let python_path = if is_gui {
-        python_executable.with_file_name("pythonw.exe")
+    let launcher = if launcher.python_path().ends_with("pythonw.exe") {
+        launcher.with_python_path(python_executable.with_file_name("pythonw.exe"))?
     } else {
-        python_executable.to_path_buf()
+        launcher.with_python_path(python_executable)?
     };
-
-    let launcher = launcher.with_python_path(python_path);
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(&mut file, is_gui)?;
+    launcher.write_to_file(&mut file)?;
 
     trace!("Updated entrypoint at `{}`", target.user_display());
 

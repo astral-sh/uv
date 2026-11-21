@@ -6,11 +6,14 @@ use std::str::Utf8Error;
 use editpe::{
     Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
 };
+#[cfg(windows)]
 use fs_err::File;
 use thiserror::Error;
 
 use uv_fs::Simplified;
 
+#[cfg(windows)]
+mod resource_reader;
 #[cfg(all(test, windows))]
 mod resource_tests;
 
@@ -50,131 +53,81 @@ const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH";
 #[cfg(windows)]
 const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 
-#[derive(Debug)]
-pub struct Launcher {
-    pub kind: LauncherKind,
-    pub python_path: PathBuf,
-    pub script_data: Option<Vec<u8>>,
+/// Read the launcher kind and interpreter path without inspecting the script payload.
+/// Return `Ok(None)` if the file has no launcher kind resource. Return an error
+/// if the resource lookup is inconclusive or the interpreter cannot be resolved
+/// to a single absolute path. Windows may select a target based on the user's
+/// language, working directory or process architecture.
+#[cfg(windows)]
+pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+    resource_reader::read_target(file)
 }
 
+/// Returns `Ok(None)` on platforms without Windows trampolines.
+#[cfg(not(windows))]
+pub fn read_launcher_target(_path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+    Ok(None)
+}
+
+#[cfg(windows)]
+#[derive(Debug)]
+pub struct Launcher {
+    kind: LauncherKind,
+    window_mode: WindowMode,
+    python_path: String,
+    script_data: Option<Vec<u8>>,
+}
+
+#[cfg(windows)]
 impl Launcher {
-    /// Attempt to read [`Launcher`] metadata from a trampoline executable file.
+    /// Read a trampoline executable for rewriting.
+    /// Use [`read_launcher_target`] to identify its interpreter independently of rewrite eligibility.
     ///
-    /// On Unix, this always returns [`None`]. Trampolines are a Windows-specific feature and cannot
-    /// be read on other platforms.
-    #[cfg(not(windows))]
-    pub fn try_from_path(_path: &Path) -> Result<Option<Self>, Error> {
-        Ok(None)
-    }
-
-    /// Read [`Launcher`] metadata from a trampoline executable file.
-    ///
-    /// Returns `Ok(None)` if the file is not a trampoline executable.
-    /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
-    #[cfg(windows)]
+    /// Returns `Ok(None)` if the file cannot be identified as a rewritable trampoline.
+    /// Returns `Err` if reading or decoding a located launcher payload fails.
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW};
-
-        let path_wide = path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
-
-        // SAFETY: `path_wide` is a null-terminated UTF-16 string.
-        #[allow(unsafe_code)]
-        let Some(module) = (unsafe {
-            LoadLibraryExW(
-                windows::core::PCWSTR(path_wide.as_ptr()),
-                None,
-                LOAD_LIBRARY_AS_DATAFILE,
-            )
-            .ok()
-        }) else {
+        let Ok(file) = File::open(path) else {
             return Ok(None);
         };
-
-        let result = (|| {
-            let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
-                return Ok(None);
-            };
-            let Some(&kind_value) = kind_data.first() else {
-                return Err(Error::UnprocessableMetadata);
-            };
-            let Some(kind) = LauncherKind::from_resource_value(kind_value) else {
-                return Err(Error::UnprocessableMetadata);
-            };
-
-            let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
-                return Ok(None);
-            };
-            let python_path = PathBuf::from(
-                String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-            );
-
-            let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
-
-            Ok(Some(Self {
-                kind,
-                python_path,
-                script_data,
-            }))
-        })();
-
-        // SAFETY: `module` was returned by a successful `LoadLibraryExW` call.
-        #[allow(unsafe_code)]
-        unsafe {
-            windows::Win32::Foundation::FreeLibrary(module)
-                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
-        }
-
-        result
+        resource_reader::read_launcher(file)
     }
 
     /// Write this trampoline launcher to a file.
-    ///
-    /// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific
-    /// feature and cannot be written on other platforms.
-    #[cfg(not(windows))]
-    pub fn write_to_file(self, _file: &mut File, _is_gui: bool) -> Result<(), Error> {
-        Err(Error::NotWindows)
-    }
-
-    /// Write this trampoline launcher to a file.
-    #[cfg(windows)]
-    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
+    pub fn write_to_file(&self, file: &mut File) -> Result<(), Error> {
         use std::io::Write;
-        use uv_fs::Simplified;
 
-        let python_path = self.python_path.simplified_display().to_string();
-
-        let launcher_bin = get_launcher_bin(is_gui)?;
+        let launcher_bin = get_launcher_bin(self.window_mode)?;
 
         let kind_value = [self.kind.to_resource_value()];
         let mut resources: Vec<(&str, &[u8])> = vec![
             (RESOURCE_TRAMPOLINE_KIND, &kind_value),
-            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+            (RESOURCE_PYTHON_PATH, self.python_path.as_bytes()),
         ];
-        let script_data;
-        if let Some(data) = self.script_data {
-            script_data = data;
-            resources.push((RESOURCE_SCRIPT_DATA, &script_data));
+        if let Some(payload) = &self.script_data {
+            resources.push((RESOURCE_SCRIPT_DATA, payload));
         }
 
         let output = write_resources(launcher_bin, &resources)?;
         file.write_all(&output)?;
-
         Ok(())
     }
 
-    #[must_use]
-    pub fn with_python_path(self, path: PathBuf) -> Self {
-        Self {
-            kind: self.kind,
-            python_path: path,
-            script_data: self.script_data,
-        }
+    /// The interpreter path stored in the launcher.
+    pub fn python_path(&self) -> &Path {
+        Path::new(&self.python_path)
+    }
+
+    /// Encode a replacement path in the launcher's UTF-8 resource.
+    pub fn with_python_path(self, path: impl AsRef<Path>) -> Result<Self, Error> {
+        Ok(Self {
+            python_path: encode_python_path(&path)?.to_owned(),
+            ..self
+        })
     }
 }
 
@@ -223,6 +176,24 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("Failed to parse executable path")]
     InvalidPath(#[source] Utf8Error),
+    #[cfg(windows)]
+    #[error("A Windows launcher requires a nonempty Python path")]
+    EmptyPath,
+    #[cfg(windows)]
+    #[error("The Python path in a Windows launcher cannot contain a NUL character")]
+    NulInPath,
+    #[cfg(windows)]
+    #[error("Cannot encode the Python path `{}` as UTF-8 in a Windows launcher", path.user_display())]
+    NonUtf8Path { path: PathBuf },
+    #[cfg(windows)]
+    #[error("The Python path resource is too large for an interpreter lookup")]
+    PathResourceTooLarge,
+    #[cfg(windows)]
+    #[error("The launcher target `{}` depends on the working directory for its drive", path.user_display())]
+    DriveRelativeTarget { path: PathBuf },
+    #[cfg(windows)]
+    #[error("WOW64 may redirect the launcher target `{}`", path.user_display())]
+    PotentiallyRedirectedTarget { path: PathBuf },
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
@@ -250,38 +221,19 @@ pub enum Error {
     PeWrite(#[from] editpe::ImageWriteError),
 }
 
-#[allow(clippy::unnecessary_wraps, unused_variables)]
 #[cfg(windows)]
-fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
-    Ok(match std::env::consts::ARCH {
-        #[cfg(all(windows, target_arch = "x86"))]
-        "x86" => {
-            if gui {
-                LAUNCHER_I686_GUI
-            } else {
-                LAUNCHER_I686_CONSOLE
-            }
-        }
-        #[cfg(all(windows, target_arch = "x86_64"))]
-        "x86_64" => {
-            if gui {
-                LAUNCHER_X86_64_GUI
-            } else {
-                LAUNCHER_X86_64_CONSOLE
-            }
-        }
-        #[cfg(all(windows, target_arch = "aarch64"))]
-        "aarch64" => {
-            if gui {
-                LAUNCHER_AARCH64_GUI
-            } else {
-                LAUNCHER_AARCH64_CONSOLE
-            }
-        }
-        #[cfg(windows)]
-        arch => {
-            return Err(Error::UnsupportedWindowsArch(arch));
-        }
+fn get_launcher_bin(mode: WindowMode) -> Result<&'static [u8], Error> {
+    const TEMPLATES: Option<(&[u8], &[u8])> = cfg_select! {
+        target_arch = "x86" => Some((LAUNCHER_I686_CONSOLE, LAUNCHER_I686_GUI)),
+        target_arch = "x86_64" => Some((LAUNCHER_X86_64_CONSOLE, LAUNCHER_X86_64_GUI)),
+        target_arch = "aarch64" => Some((LAUNCHER_AARCH64_CONSOLE, LAUNCHER_AARCH64_GUI)),
+        _ => None,
+    };
+    let (console, windowed) =
+        TEMPLATES.ok_or(Error::UnsupportedWindowsArch(std::env::consts::ARCH))?;
+    Ok(match mode {
+        WindowMode::Console => console,
+        WindowMode::Windowed => windowed,
     })
 }
 
@@ -326,47 +278,28 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     Ok(image.data().to_vec())
 }
 
-/// Safely read a named resource from a loaded PE image.
 #[cfg(windows)]
-fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Option<Vec<u8>> {
-    use windows::Win32::System::LibraryLoader::{
-        FindResourceW, LoadResource, LockResource, SizeofResource,
-    };
+fn encode_python_path(path: &impl AsRef<Path>) -> Result<&str, Error> {
+    let path = path
+        .simplified()
+        .to_str()
+        .ok_or_else(|| Error::NonUtf8Path {
+            path: path.as_ref().to_path_buf(),
+        })?;
+    validate_python_path(path)?;
+    Ok(path)
+}
 
-    let name_wide = name
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-
-    // SAFETY: `name_wide` is null-terminated, `handle` is valid, and the resource pointer is
-    // checked before reading the number of bytes reported by `SizeofResource`.
-    #[allow(unsafe_code)]
-    unsafe {
-        // Find the resource
-        let resource = FindResourceW(
-            Some(handle),
-            windows::core::PCWSTR(name_wide.as_ptr()),
-            windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
-        );
-        if resource.is_invalid() {
-            return None;
-        }
-
-        // Get resource size and data
-        let size = SizeofResource(Some(handle), resource);
-        if size == 0 {
-            return Some(Vec::new());
-        }
-
-        let data = LoadResource(Some(handle), resource).ok()?;
-        let pointer = LockResource(data).cast::<u8>();
-        if pointer.is_null() {
-            return None;
-        }
-
-        // Copy the resource data into a Vec
-        Some(std::slice::from_raw_parts(pointer, size as usize).to_vec())
+#[cfg(windows)]
+fn validate_python_path(path: &str) -> Result<(), Error> {
+    if path.is_empty() {
+        return Err(Error::EmptyPath);
     }
+    // The trampoline passes the path in a NUL-terminated command line.
+    if path.contains('\0') {
+        return Err(Error::NulInPath);
+    }
+    Ok(())
 }
 
 /// Construct a Windows script launcher.
@@ -399,9 +332,13 @@ pub fn windows_script_launcher(
     use futures_lite::future::block_on;
     use futures_lite::io::Cursor;
 
-    use uv_fs::Simplified;
-
-    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+    let window_mode = if is_gui {
+        WindowMode::Windowed
+    } else {
+        WindowMode::Console
+    };
+    let launcher_bin = get_launcher_bin(window_mode)?;
+    let python_path = encode_python_path(&python_executable)?;
 
     // Store the launcher script without compression.
     // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
@@ -410,9 +347,6 @@ pub fn windows_script_launcher(
     let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
     block_on(archive.write_entry_whole(entry, launcher_python_script.as_bytes()))?;
     let payload = block_on(archive.close())?.into_inner();
-
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
 
     let resources: &[(&str, &[u8])] = &[
         (
@@ -448,12 +382,9 @@ pub fn windows_python_launcher(
     python_executable: impl AsRef<Path>,
     window_mode: WindowMode,
 ) -> Result<Vec<u8>, Error> {
-    use uv_fs::Simplified;
+    let launcher_bin = get_launcher_bin(window_mode)?;
 
-    let launcher_bin: &[u8] = get_launcher_bin(matches!(window_mode, WindowMode::Windowed))?;
-
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
+    let python_path = encode_python_path(&python_executable)?;
 
     let resources: &[(&str, &[u8])] = &[
         (
@@ -633,7 +564,10 @@ if __name__ == "__main__":
                     $ErrorActionPreference = 'Stop'
                     Import-Module Microsoft.PowerShell.Security
                     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile('{}', '{}')
-                    Set-AuthenticodeSignature -FilePath '{}' -Certificate $cert;
+                    $signature = Set-AuthenticodeSignature -LiteralPath '{}' -Certificate $cert
+                    if ($signature.SignerCertificate.Thumbprint -ne $cert.Thumbprint) {{
+                        throw $signature.StatusMessage
+                    }}
                     ",
                     public_cert.display().to_string().replace('\'', "''"),
                     private_key.display().to_string().replace('\'', "''"),
@@ -664,7 +598,7 @@ if __name__ == "__main__":
         let launcher_path = temp_dir.child("launcher.console.exe");
 
         let launcher = super::write_resources(
-            super::get_launcher_bin(false)?,
+            super::get_launcher_bin(WindowMode::Console)?,
             &[
                 (super::RESOURCE_TRAMPOLINE_KIND, &[]),
                 (super::RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
@@ -684,7 +618,7 @@ if __name__ == "__main__":
     fn console_script_launcher() -> Result<()> {
         // Create Temp Dirs
         let temp_dir = assert_fs::TempDir::new()?;
-        let console_bin_path = temp_dir.child("launcher.console.exe");
+        let console_bin_path = temp_dir.child("launcher[console].exe");
 
         // Locate an arbitrary python installation from PATH
         let python_executable_path = which("python")?;
@@ -727,15 +661,15 @@ if __name__ == "__main__":
             .stdout(stdout_predicate)
             .stderr(stderr_predicate);
 
+        // A signed launcher must support both resource readback and execution.
+        sign_authenticode(console_bin_path.path());
+
         let launcher = Launcher::try_from_path(console_bin_path.path())
             .expect("We should succeed at reading the launcher")
             .expect("The launcher should be valid");
 
         assert_eq!(launcher.kind, LauncherKind::Script);
-        assert_eq!(launcher.python_path, python_executable_path);
-
-        // Now code-sign the launcher and verify that it still works.
-        sign_authenticode(console_bin_path.path());
+        assert_eq!(launcher.python_path(), python_executable_path);
 
         let stdout_predicate = "Hello from uv-trampoline-console.exe\r\n";
         let stderr_predicate = "Hello from uv-trampoline-console.exe\r\n";
@@ -784,7 +718,7 @@ if __name__ == "__main__":
             .expect("The launcher should be valid");
 
         assert_eq!(launcher.kind, LauncherKind::Python);
-        assert_eq!(launcher.python_path, python_executable_path);
+        assert_eq!(launcher.python_path(), python_executable_path);
 
         // Now code-sign the launcher and verify that it still works.
         sign_authenticode(console_bin_path.path());

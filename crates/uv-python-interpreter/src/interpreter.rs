@@ -30,6 +30,7 @@ use uv_platform_tags::{CpuInfo, Platform, Tags, TagsError, TagsOptions};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_static::EnvVars;
+use uv_trampoline_builder::LauncherKind;
 use uv_warnings::warn_user_once_with_chain;
 
 use crate::PointerSize;
@@ -117,9 +118,15 @@ impl Interpreter {
 
     /// Remove any cached metadata for the given Python executable.
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
-        let absolute = std::path::absolute(executable.as_ref())?;
-        let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache);
+        let executable = executable.as_ref();
+        let absolute = std::path::absolute(executable)?;
+        let Some(target) = ExecutableTarget::identify(&absolute) else {
+            return Ok(());
+        };
+        let Some(resolved) = target.for_cache(executable)? else {
+            return Ok(());
+        };
+        let cache_entry = resolved.cache_entry(cache);
 
         match fs::remove_file(cache_entry.path()) {
             Ok(()) => Ok(()),
@@ -895,23 +902,370 @@ impl Interpreter {
 /// but will resolve junctions if they are part of a trampoline target.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
-    debug_assert!(
-        path.is_absolute(),
-        "path must be absolute: {}",
-        path.display()
-    );
+    match ExecutableTarget::identify(path) {
+        Some(target) => target.canonicalize(),
+        None => Ok(path.to_path_buf()),
+    }
+}
 
-    #[cfg(windows)]
-    {
-        if let Ok(Some(launcher)) = uv_trampoline_builder::Launcher::try_from_path(path) {
-            Ok(dunce::canonicalize(launcher.python_path)?)
-        } else {
-            Ok(path.to_path_buf())
+struct ExecutableTarget<'a> {
+    absolute: &'a Path,
+    launcher: Option<(LauncherKind, PathBuf)>,
+}
+
+impl<'a> ExecutableTarget<'a> {
+    fn identify(path: &'a Path) -> Option<Self> {
+        debug_assert!(
+            path.is_absolute(),
+            "path must be absolute: {}",
+            path.display()
+        );
+        match uv_trampoline_builder::read_launcher_target(path) {
+            Ok(launcher) => Some(Self {
+                absolute: path,
+                launcher,
+            }),
+            Err(err) => {
+                trace!("Unresolved launcher target for `{}`: {err}", path.display());
+                None
+            }
         }
     }
 
-    #[cfg(unix)]
-    fs_err::canonicalize(path)
+    fn canonicalize(&self) -> io::Result<PathBuf> {
+        match &self.launcher {
+            Some((_, target)) => dunce::canonicalize(target),
+            None if cfg!(windows) => Ok(self.absolute.to_path_buf()),
+            None => fs_err::canonicalize(self.absolute),
+        }
+    }
+
+    fn diagnose_probe_error(&self, executable: &Path, error: Error) -> Error {
+        if matches!(error, Error::StatusCode(_))
+            && let Some(link) = self.broken_link(executable)
+        {
+            return Error::BrokenLink(link);
+        }
+        error
+    }
+
+    fn broken_link(&self, executable: &Path) -> Option<BrokenLink> {
+        // A uv launcher selects Python from its resources. CPython's venv
+        // launcher selects by home and reports localized errors if it's removed.
+        let kind = if let Some((_, target)) = &self.launcher {
+            if target.try_exists().ok()? {
+                return None;
+            }
+            BrokenLinkKind::Trampoline(target.clone())
+        } else {
+            // Windows venv launchers locate the config from their own module path.
+            let path = if cfg!(windows) {
+                self.absolute
+            } else {
+                executable
+            };
+            BrokenLinkKind::MissingHome(missing_python_home(path)?)
+        };
+        let current = Self::identify(self.absolute)?;
+        if current.launcher != self.launcher {
+            return None;
+        }
+        Some(self.link_error(executable, kind))
+    }
+
+    fn link_error(&self, executable: &Path, kind: BrokenLinkKind) -> BrokenLink {
+        BrokenLink {
+            path: executable.to_path_buf(),
+            kind,
+            venv: uv_fs::is_virtualenv_executable(self.absolute),
+        }
+    }
+
+    fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
+        let err = match input {
+            Ok(value) => return Ok(Some(value)),
+            Err(err) => err,
+        };
+
+        // Unless the target is missing, let the probe decide if the launcher
+        // works. An error resolving a cache input would stop Python discovery,
+        // even when the failure is local to one launcher (e.g., a junction loop).
+        if let Some((_, target)) = &self.launcher {
+            if err.kind() == io::ErrorKind::NotFound
+                && let Some(link) = self.broken_link(executable)
+            {
+                return Err(Error::BrokenLink(link));
+            }
+            trace!(
+                "Skipping interpreter cache for launcher targeting `{}`: {err}",
+                target.display()
+            );
+            return Ok(None);
+        }
+
+        if err.kind() != io::ErrorKind::NotFound {
+            return Err(err.into());
+        }
+        if self
+            .absolute
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_symlink())
+        {
+            return Err(Error::BrokenLink(self.link_error(
+                executable,
+                BrokenLinkKind::Symlink(fs::read_link(self.absolute).ok()),
+            )));
+        }
+        Err(Error::NotFound(executable.to_path_buf()))
+    }
+
+    /// Resolve the target and canonical path used to key an interpreter cache entry.
+    fn for_cache(&self, executable: &Path) -> Result<Option<CacheTarget<'_>>, Error> {
+        // A script runs its embedded payload. Even if it forwards a probe to
+        // Python, its stored interpreter path cannot identify the result.
+        match self.launcher {
+            Some((LauncherKind::Script, _)) => return Ok(None),
+            Some((LauncherKind::Python, _)) | None => {}
+        }
+        let Some(canonical) = self.cache_input(executable, self.canonicalize())? else {
+            return Ok(None);
+        };
+        Ok(Some(CacheTarget {
+            target: self,
+            canonical,
+        }))
+    }
+}
+
+/// The executable and its resolved path when querying the interpreter cache.
+struct CacheTarget<'a> {
+    target: &'a ExecutableTarget<'a>,
+    canonical: PathBuf,
+}
+
+impl CacheTarget<'_> {
+    /// Return the cache entry for an interpreter's absolute and canonical executable paths.
+    fn cache_entry(&self, cache: &Cache) -> CacheEntry {
+        // We use the absolute path for the cache entry to avoid cache collisions for relative
+        // paths. But we don't want to query the executable with symbolic links resolved because
+        // that can change reported values, e.g., `sys.executable`. We include the canonical
+        // path in the cache entry as well, otherwise we can have cache collisions if an
+        // absolute path refers to different interpreters with matching ctimes, e.g., if you
+        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+        // modified at the same time.
+        //
+        // Launcher overrides can also change the reported executable and virtual environment
+        // without changing either executable path.
+        let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
+        let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
+        let key = (
+            self.target.absolute,
+            self.canonical.as_path(),
+            &python_executable,
+            &pyvenv_launcher,
+        );
+        // Python can report the launcher's junction path as its base executable.
+        // Retargeting via another junction can change that path while leaving
+        // the canonical interpreter and the launcher's timestamp unchanged.
+        let digest = if let Some((_, target)) = &self.target.launcher {
+            cache_digest(&("verified-launcher", key, target))
+        } else {
+            cache_digest(&key)
+        };
+
+        cache.entry(
+            CacheBucket::Interpreter,
+            // Shard interpreter metadata by host architecture, operating system, and version, to
+            // invalidate the cache (e.g.) on OS upgrades.
+            cache_digest(&(
+                ARCH,
+                uv_platform::OsType::from_env()
+                    .map(|os_type| os_type.to_string())
+                    .unwrap_or_default(),
+                uv_platform::OsRelease::from_env()
+                    .map(|os_release| os_release.to_string())
+                    .unwrap_or_default(),
+            )),
+            format!("{digest}.msgpack"),
+        )
+    }
+
+    #[cfg(windows)]
+    fn snapshot_links(&self) -> Option<LinkSnapshot> {
+        let (_, path) = self.target.launcher.as_ref()?;
+        LinkSnapshot::capture(path, &self.canonical)
+    }
+
+    /// Check that the launcher still resolves to the interpreter that answered the probe.
+    #[cfg(windows)]
+    fn launcher_matches_probe(&self, base: Option<&Path>, links: Option<&LinkSnapshot>) -> bool {
+        let Some(base) = base else {
+            return false;
+        };
+        if !base.is_absolute() || !is_same_file(base, &self.canonical).unwrap_or(false) {
+            return false;
+        }
+        // A managed junction can redirect the launcher during the probe.
+        let Some(target) = ExecutableTarget::identify(self.target.absolute) else {
+            return false;
+        };
+        let Ok(Some(current)) = target.for_cache(self.target.absolute) else {
+            return false;
+        };
+        if current.target.launcher != self.target.launcher || current.canonical != self.canonical {
+            return false;
+        }
+        let Ok(base) = std::path::absolute(dunce::simplified(base)) else {
+            return false;
+        };
+        if base == self.canonical {
+            return true;
+        }
+        // A shim may have run Python through a separate junction that now
+        // points back to the shim. Only trust the alias tracked from the launcher.
+        links.is_some_and(|links| {
+            links.target == base && current.snapshot_links().as_ref() == Some(links)
+        })
+    }
+
+    /// Determine whether the probe result can be cached and record any discovered file inputs.
+    fn determine_cacheability(
+        &self,
+        executable: &Path,
+        #[cfg(windows)] links: Option<&LinkSnapshot>,
+        wire: &InterpreterInfoWire,
+        probe_start: Option<Timestamp>,
+        file_timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
+    ) -> bool {
+        // Shims such as pyenv can redirect to a different interpreter without changing the shim.
+        if !is_same_file(executable, &wire.metadata.sys_executable).unwrap_or(false) {
+            return false;
+        }
+
+        #[cfg(windows)]
+        if self.target.launcher.is_some()
+            && !self.launcher_matches_probe(wire.metadata.sys_base_executable.as_deref(), links)
+        {
+            return false;
+        }
+
+        let Ok(current) = self.file_timestamps(&wire.file_inputs) else {
+            return false;
+        };
+
+        #[cfg(windows)]
+        if !wire.metadata.shares_cache_inputs(executable, &current) {
+            return false;
+        }
+
+        if wire.file_inputs.is_empty() {
+            return current == *file_timestamps;
+        }
+        let Some(probe_start) = probe_start else {
+            return false;
+        };
+
+        // A discovered file could have been replaced between the probe and this snapshot.
+        // Require the known inputs to match and all timestamps to predate the probe.
+        let known_inputs_unchanged = file_timestamps
+            .iter()
+            .all(|(path, timestamp)| current.get(path) == Some(timestamp));
+        if !known_inputs_unchanged
+            || current
+                .values()
+                .flatten()
+                .any(|timestamp| *timestamp >= probe_start)
+        {
+            return false;
+        }
+
+        *file_timestamps = current;
+        true
+    }
+
+    /// The paths that went into the interpreter discovery and when they last changed.
+    fn file_timestamps(
+        &self,
+        file_inputs: &BTreeSet<PathBuf>,
+    ) -> Result<HashMap<PathBuf, Option<Timestamp>>, io::Error> {
+        let mut file_timestamps = HashMap::new();
+        record_file_timestamps(self.target.absolute, &mut file_timestamps)?;
+        if !file_timestamps.contains_key(&self.canonical) {
+            // On Windows the canonical path can come from a trampoline executable.
+            record_file_timestamps(&self.canonical, &mut file_timestamps)?;
+        }
+        for path in file_inputs {
+            record_file_timestamps(path, &mut file_timestamps)?;
+        }
+        // Python's `platform.mac_ver()` reads the product version from this plist. The cache
+        // key tracks the Darwin kernel release, which can stay the same when the plist changes.
+        #[cfg(target_os = "macos")]
+        record_file_timestamps(Path::new(SYSTEM_VERSION_PLIST), &mut file_timestamps)?;
+        record_pyvenv_cfg_timestamps(self.target.absolute, &mut file_timestamps)?;
+        Ok(file_timestamps)
+    }
+}
+
+/// The launcher's target and the timestamps of the links used to resolve it.
+#[cfg(windows)]
+#[derive(PartialEq, Eq)]
+struct LinkSnapshot {
+    target: PathBuf,
+    ancestor_timestamps: Vec<(u64, u64)>,
+}
+
+#[cfg(windows)]
+impl LinkSnapshot {
+    /// Snapshot the part of a launcher's path that differs from its resolved target.
+    /// Replacing a junction changes its containing directory even if the original
+    /// junction is subsequently moved back into place.
+    fn capture(stored: &Path, canonical: &Path) -> Option<Self> {
+        use std::os::windows::fs::MetadataExt;
+
+        let mut snapshot = Self {
+            target: std::path::absolute(dunce::simplified(stored)).ok()?,
+            ancestor_timestamps: Vec::new(),
+        };
+        let mut target = snapshot.target.as_path();
+        let mut resolved;
+        for _ in 0..=40 {
+            if target == canonical {
+                return Some(snapshot);
+            }
+            let mut redirect = None;
+            for path in target.ancestors() {
+                let metadata = fs::symlink_metadata(path).ok()?;
+                snapshot
+                    .ancestor_timestamps
+                    .push((metadata.creation_time(), metadata.last_write_time()));
+                if canonical.starts_with(path) {
+                    break;
+                }
+                if metadata.is_symlink() {
+                    redirect = Some(path);
+                }
+            }
+            // Follow the outermost junction first. Its destination may contain
+            // another junction with a different containing directory.
+            let Some(link) = redirect else {
+                // A substituted drive can change its mapping without updating
+                // any of these timestamps. Only allow a spelling difference.
+                return target
+                    .as_os_str()
+                    .eq_ignore_ascii_case(canonical.as_os_str())
+                    .then_some(snapshot);
+            };
+            let destination = fs::read_link(link).ok()?;
+            let mut next = link.with_file_name(dunce::simplified(&destination));
+            let suffix = target.strip_prefix(link).expect("link is an ancestor");
+            if !suffix.as_os_str().is_empty() {
+                next.push(suffix);
+            }
+            resolved = std::path::absolute(next).ok()?;
+            target = &resolved;
+        }
+        None
+    }
 }
 
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
@@ -1056,37 +1410,92 @@ impl uv_errors::Hinted for Error {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub struct BrokenLink {
-    pub path: PathBuf,
-    /// Whether we have a broken symlink (Unix) or whether the shim returned that the underlying
-    /// Python went away (Windows).
-    pub unix: bool,
+    path: PathBuf,
+    kind: BrokenLinkKind,
     /// Whether the interpreter path looks like a virtual environment.
-    pub venv: bool,
+    venv: bool,
+}
+
+#[derive(Clone, Debug)]
+enum BrokenLinkKind {
+    Symlink(Option<PathBuf>),
+    Trampoline(PathBuf),
+    MissingHome(PathBuf),
+}
+
+impl BrokenLink {
+    /// Whether the interpreter belonged to a virtual environment when the broken link was detected.
+    pub fn is_virtualenv(&self) -> bool {
+        self.venv
+    }
+
+    fn target(&self) -> Option<&Path> {
+        match &self.kind {
+            BrokenLinkKind::Symlink(target) => target.as_deref(),
+            BrokenLinkKind::Trampoline(target) => Some(target),
+            BrokenLinkKind::MissingHome(_) => None,
+        }
+    }
+
+    /// Format a warning for a caller skipping the environment containing this link.
+    pub fn ignored_environment_warning(&self) -> impl Display + '_ {
+        std::fmt::from_fn(|f| {
+            let path = self.path.user_display();
+            if let BrokenLinkKind::MissingHome(home) = &self.kind {
+                return write!(
+                    f,
+                    "Ignoring existing virtual environment for `{}` because its configured Python home `{}` does not exist",
+                    path.cyan(),
+                    home.user_display().cyan()
+                );
+            }
+            f.write_str(
+                "Ignoring existing virtual environment linked to non-existent Python interpreter: ",
+            )?;
+            if let Some(target) = self.target() {
+                write!(f, "`{}` -> `{}`", path.cyan(), target.user_display().cyan())
+            } else {
+                write!(f, "{}", path.cyan())
+            }
+        })
+    }
 }
 
 impl Display for BrokenLink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.unix {
-            write!(
+        match &self.kind {
+            BrokenLinkKind::Symlink(Some(target)) => write!(
+                f,
+                "Broken Python symlink from `{}` to `{}`",
+                self.path.user_display(),
+                target.simplified_display()
+            ),
+            BrokenLinkKind::Symlink(None) => write!(
                 f,
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )
-        } else {
-            write!(
+            ),
+            BrokenLinkKind::Trampoline(target) => write!(
                 f,
-                "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
+                "Python trampoline at `{}` points to a missing interpreter at `{}`",
+                self.path.user_display(),
+                target.user_display()
+            ),
+            BrokenLinkKind::MissingHome(home) => write!(
+                f,
+                "Python home `{}` configured for `{}` does not exist",
+                home.user_display(),
                 self.path.user_display()
-            )
+            ),
         }
     }
 }
 
 impl uv_errors::Hinted for BrokenLink {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        if self.venv {
+        if self.is_virtualenv() {
             uv_errors::Hints::from(format!(
                 "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
@@ -1196,6 +1605,29 @@ struct InterpreterMetadata {
     debug_enabled: bool,
 }
 
+#[cfg(windows)]
+impl InterpreterMetadata {
+    /// The launcher and Python can each consult `pyvenv.cfg` in their own view.
+    fn shares_cache_inputs(
+        &self,
+        executable: &Path,
+        inputs: &HashMap<PathBuf, Option<Timestamp>>,
+    ) -> bool {
+        use uv_fs::wow64::{FileSystemView, any_path_may_redirect};
+
+        // Inspect the executable's architecture only if a path may have multiple views.
+        if matches!(any_path_may_redirect(inputs.keys()), Ok(false)) {
+            return true;
+        }
+        let python = match self.pointer_size {
+            PointerSize::_32 => FileSystemView::Bit32,
+            PointerSize::_64 => FileSystemView::Bit64,
+        };
+        python.matches_current_process()
+            && FileSystemView::for_executable(executable).matches_current_process()
+    }
+}
+
 impl InterpreterInfo {
     /// Query the given Python executable for its interpreter information.
     fn query(
@@ -1241,6 +1673,10 @@ impl InterpreterInfo {
         } else {
             None
         };
+        trace!(
+            "Querying interpreter executable at `{}`",
+            interpreter.display()
+        );
         let output = command.output().map_err(|err| {
             match err.kind() {
                 io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
@@ -1273,19 +1709,6 @@ impl InterpreterInfo {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-
-            // Handle uninstalled CPython interpreters on Windows.
-            //
-            // The IO error from the CPython trampoline is unstructured and localized, so we check
-            // whether the `home` from `pyvenv.cfg` still exists, it's missing if the Python
-            // interpreter was uninstalled.
-            if python_home(interpreter).is_some_and(|home| !home.exists()) {
-                return Err(Error::BrokenLink(BrokenLink {
-                    path: interpreter.to_path_buf(),
-                    unix: false,
-                    venv: uv_fs::is_virtualenv_executable(interpreter),
-                }));
-            }
 
             // If the Python version is too old, we may not even be able to invoke the query script
             if stderr.contains("Unknown option: -I") {
@@ -1366,41 +1789,6 @@ impl InterpreterInfo {
         Ok(())
     }
 
-    /// Return the cache entry for an interpreter's absolute and canonical executable paths.
-    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
-        let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
-        let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
-
-        cache.entry(
-            CacheBucket::Interpreter,
-            // Shard interpreter metadata by host architecture, operating system, and version, to
-            // invalidate the cache (e.g.) on OS upgrades.
-            cache_digest(&(
-                ARCH,
-                uv_platform::OsType::from_env()
-                    .map(|os_type| os_type.to_string())
-                    .unwrap_or_default(),
-                uv_platform::OsRelease::from_env()
-                    .map(|os_release| os_release.to_string())
-                    .unwrap_or_default(),
-            )),
-            // We use the absolute path for the cache entry to avoid cache collisions for relative
-            // paths. But we don't want to query the executable with symbolic links resolved because
-            // that can change reported values, e.g., `sys.executable`. We include the canonical
-            // path in the cache entry as well, otherwise we can have cache collisions if an
-            // absolute path refers to different interpreters with matching ctimes, e.g., if you
-            // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
-            // modified at the same time.
-            //
-            // Launcher overrides can also change the reported executable and virtual environment
-            // without changing either executable path.
-            format!(
-                "{}.msgpack",
-                cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher))
-            ),
-        )
-    }
-
     /// Read a cached probe result if its file inputs are still fresh.
     fn read_cached(cache: &Cache, entry: &CacheEntry, executable: &Path) -> Option<Self> {
         if !cache
@@ -1422,6 +1810,14 @@ impl InterpreterInfo {
                 return None;
             }
         };
+
+        #[cfg(windows)]
+        if !cached
+            .metadata
+            .shares_cache_inputs(executable, &cached.file_timestamps)
+        {
+            return None;
+        }
 
         // Compare timestamps for equality. A Windows executable can be replaced by a file
         // with an older modification time. A macOS update can activate a system snapshot whose
@@ -1458,55 +1854,53 @@ impl InterpreterInfo {
     ) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
-        // Provide a better error message if the link is broken or the file does not exist. Since
-        // `canonicalize_executable` does not resolve the file on Windows, we must re-use this logic
-        // for the subsequent metadata read as we may not have actually resolved the path.
-        let handle_io_error = |err: io::Error| -> Error {
-            if err.kind() == io::ErrorKind::NotFound {
-                // Check if it looks like a venv interpreter where the underlying Python
-                // installation was removed.
-                if absolute
-                    .symlink_metadata()
-                    .is_ok_and(|metadata| metadata.is_symlink())
-                {
-                    Error::BrokenLink(BrokenLink {
-                        path: executable.to_path_buf(),
-                        unix: true,
-                        venv: uv_fs::is_virtualenv_executable(executable),
-                    })
-                } else {
-                    Error::NotFound(executable.to_path_buf())
-                }
-            } else {
-                err.into()
-            }
+        let uncached = |(wire, _)| Self::from_probe(executable, wire, HashMap::new());
+        let Some(target) = ExecutableTarget::identify(&absolute) else {
+            // A venv launcher reports itself as `sys.executable`. Its timestamp
+            // cannot invalidate metadata when the selected interpreter changes.
+            return uncached(probe()?);
         };
-
-        let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
+        let probe = || probe().map_err(|err| target.diagnose_probe_error(executable, err));
+        let Some(resolved) = target.for_cache(executable)? else {
+            return uncached(probe()?);
+        };
+        let cache_entry = resolved.cache_entry(cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
         }
 
-        let mut file_timestamps =
-            Self::cache_file_timestamps(&absolute, &canonical, &BTreeSet::new())
-                .map_err(handle_io_error)?;
+        let inputs = resolved.file_timestamps(&BTreeSet::new());
+        let Some(mut file_timestamps) = resolved.target.cache_input(executable, inputs)? else {
+            return uncached(probe()?);
+        };
 
-        trace!(
-            "Querying interpreter executable at `{}`",
-            executable.display()
-        );
+        #[cfg(windows)]
+        let links = resolved.snapshot_links();
+
         let (wire, probe_start) = probe()?;
 
-        let cacheable = Self::determine_cacheability(
+        let cacheable = resolved.determine_cacheability(
             executable,
-            &absolute,
-            &canonical,
+            #[cfg(windows)]
+            links.as_ref(),
             &wire,
             probe_start,
             &mut file_timestamps,
         );
 
+        let info = Self::from_probe(executable, wire, file_timestamps)?;
+        if cacheable {
+            fs::create_dir_all(cache_entry.dir())?;
+            write_atomic_sync(cache_entry.path(), rmp_serde::to_vec(&info)?)?;
+        }
+        Ok(info)
+    }
+
+    fn from_probe(
+        executable: &Path,
+        wire: InterpreterInfoWire,
+        file_timestamps: HashMap<PathBuf, Option<Timestamp>>,
+    ) -> Result<Self, Error> {
         let cpu_info = match wire.cpu_info {
             CpuProbe::Detected(info) => Some(info),
             CpuProbe::UnsupportedArchitecture(architecture) => {
@@ -1539,85 +1933,11 @@ impl InterpreterInfo {
                 None
             }
         };
-        let info = Self {
+        Ok(Self {
             platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),
             metadata: wire.metadata,
             file_timestamps,
-        };
-
-        if cacheable {
-            fs::create_dir_all(cache_entry.dir())?;
-            write_atomic_sync(cache_entry.path(), rmp_serde::to_vec(&info)?)?;
-        }
-
-        Ok(info)
-    }
-
-    /// Determine whether the probe result can be cached and record any discovered file inputs.
-    fn determine_cacheability(
-        executable: &Path,
-        absolute: &Path,
-        canonical: &Path,
-        wire: &InterpreterInfoWire,
-        probe_start: Option<Timestamp>,
-        file_timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
-    ) -> bool {
-        // Shims such as pyenv can redirect to a different interpreter without changing the shim.
-        if !is_same_file(executable, &wire.metadata.sys_executable).unwrap_or(false) {
-            return false;
-        }
-
-        let Ok(current) = Self::cache_file_timestamps(absolute, canonical, &wire.file_inputs)
-        else {
-            return false;
-        };
-
-        if wire.file_inputs.is_empty() {
-            return current == *file_timestamps;
-        }
-        let Some(probe_start) = probe_start else {
-            return false;
-        };
-
-        // A discovered file could have been replaced between the probe and this snapshot.
-        // Require the known inputs to match and all timestamps to predate the probe.
-        let known_inputs_unchanged = file_timestamps
-            .iter()
-            .all(|(path, timestamp)| current.get(path) == Some(timestamp));
-        if !known_inputs_unchanged
-            || current
-                .values()
-                .flatten()
-                .any(|timestamp| *timestamp >= probe_start)
-        {
-            return false;
-        }
-
-        *file_timestamps = current;
-        true
-    }
-
-    /// The paths that went into the interpreter discovery and when they last changed.
-    fn cache_file_timestamps(
-        absolute: &Path,
-        canonical: &Path,
-        file_inputs: &BTreeSet<PathBuf>,
-    ) -> Result<HashMap<PathBuf, Option<Timestamp>>, io::Error> {
-        let mut file_timestamps = HashMap::new();
-        record_file_timestamps(absolute, &mut file_timestamps)?;
-        if !file_timestamps.contains_key(canonical) {
-            // On Windows the canonical path can come from a trampoline executable.
-            record_file_timestamps(canonical, &mut file_timestamps)?;
-        }
-        for path in file_inputs {
-            record_file_timestamps(path, &mut file_timestamps)?;
-        }
-        // Python's `platform.mac_ver()` reads the product version from this plist. The cache
-        // key tracks the Darwin kernel release, which can stay the same when the plist changes.
-        #[cfg(target_os = "macos")]
-        record_file_timestamps(Path::new(SYSTEM_VERSION_PLIST), &mut file_timestamps)?;
-        record_pyvenv_cfg_timestamps(absolute, &mut file_timestamps)?;
-        Ok(file_timestamps)
+        })
     }
 }
 
@@ -1781,14 +2101,58 @@ fn find_base_python(
     }
 }
 
-/// Parse the `home` key from `pyvenv.cfg`, if any.
-fn python_home(interpreter: &Path) -> Option<PathBuf> {
-    let venv_root = interpreter.parent()?.parent()?;
-    let pyvenv_cfg = PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg")).ok()?;
-    pyvenv_cfg.home
+/// A missing home in the environment's configuration can trigger its replacement.
+/// CPython's Windows venv launcher checks beside the executable first. A config
+/// there must also indicate a missing home before we infer one from a failed probe.
+fn missing_python_home(interpreter: &Path) -> Option<PathBuf> {
+    let parent = interpreter.parent()?;
+    let root = parent.parent()?;
+    #[cfg(unix)]
+    {
+        // A copied interpreter can lose its standard library when its home is
+        // removed. A symlink to an external installation identifies the base
+        // directly, even when the configured home is stale.
+        let target = fs::canonicalize(interpreter).ok()?;
+        if !is_same_file(target.parent()?, parent).ok()? {
+            return None;
+        }
+    }
+    #[cfg(windows)]
+    let view = uv_fs::wow64::FileSystemView::for_executable(interpreter);
+    let directories = [
+        #[cfg(windows)]
+        parent,
+        root,
+    ];
+    let mut missing = None;
+    for directory in directories {
+        let config = directory.join("pyvenv.cfg");
+        #[cfg(windows)]
+        if view.may_redirect(&config).ok()? {
+            return None;
+        }
+        let cfg = match PyVenvConfiguration::parse(&config) {
+            Ok(cfg) => cfg,
+            Err(crate::virtualenv::Error::ParsePyVenvCfg(_, err))
+                if directory != root && err.kind() == io::ErrorKind::NotFound =>
+            {
+                continue;
+            }
+            Err(_) => return None,
+        };
+        let home = cfg.home?;
+        #[cfg(windows)]
+        if view.may_redirect(&home).ok()? {
+            return None;
+        }
+        if home.try_exists().ok()? {
+            return None;
+        }
+        missing.get_or_insert(home);
+    }
+    missing
 }
 
-#[cfg(unix)]
 #[cfg(test)]
 mod tests {
     use std::io;
@@ -1805,11 +2169,106 @@ mod tests {
     use uv_cache_info::Timestamp;
     use uv_pep440::Version;
     use uv_platform_tags::CpuInfo;
+    #[cfg(windows)]
+    use uv_trampoline_builder::{WindowMode, windows_python_launcher, windows_script_launcher};
 
     use crate::Interpreter;
+    #[cfg(windows)]
+    use crate::interpreter::{CacheTarget, LinkSnapshot, canonicalize_executable};
     use crate::interpreter::{
-        Error, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire, canonicalize_executable,
+        Error, ExecutableTarget, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire,
     };
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    fn wow64_executable(windows: &Path) -> io::Result<Option<std::path::PathBuf>> {
+        use uv_fs::wow64::FileSystemView;
+
+        let exe = windows.join(r"SysWOW64\cmd.exe");
+        if !exe.try_exists()? {
+            // WOW64 is an optional component on Windows Server.
+            return Ok(None);
+        }
+        let view = FileSystemView::for_executable(&exe);
+        assert!(matches!(view, FileSystemView::Bit32), "{view:?}");
+        Ok(Some(exe))
+    }
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[test]
+    fn redirected_home_is_not_known_to_be_missing() -> Result<()> {
+        let windows = std::env::var_os("SystemRoot").expect("Windows directory");
+        let windows = Path::new(&windows);
+        let Some(wow64) = wow64_executable(windows)? else {
+            return Ok(());
+        };
+        let dir = tempdir()?;
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let interpreter = scripts.join("python.exe");
+        let home = windows.join("Sysnative");
+        fs::write(
+            dir.path().join("pyvenv.cfg"),
+            format!("home = {}\n", home.display()),
+        )?;
+
+        // Sysnative exists only in the 32-bit view.
+        assert!(!home.try_exists()?);
+        fs::copy(wow64, &interpreter)?;
+        assert!(super::missing_python_home(&interpreter).is_none());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stale_home_does_not_hide_symlink_probe_failure() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempdir()?;
+        let venv = dir.path().join(".venv");
+        let bin = venv.join("bin");
+        fs::create_dir_all(&bin)?;
+        fs::write(
+            venv.join("pyvenv.cfg"),
+            format!("home = {}\n", dir.path().join("missing").display()),
+        )?;
+        let base = dir.path().join("python");
+        fs::write(&base, "#!/bin/sh\nexit 42\n")?;
+        fs::set_permissions(&base, std::fs::Permissions::from_mode(0o755))?;
+        let link = bin.join("python");
+        fs::os::unix::fs::symlink(&base, &link)?;
+
+        let cache = Cache::temp()?.init().await?;
+        let err = Interpreter::query(&link, &cache).unwrap_err();
+        assert!(
+            matches!(err, Error::StatusCode(ref e) if e.code.code() == Some(42)),
+            "{err}"
+        );
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn conflicting_configs_do_not_imply_a_missing_python_home() -> Result<()> {
+        let dir = tempdir()?;
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let interpreter = scripts.join("python.exe");
+        let root = dir.path().join("pyvenv.cfg");
+        let sibling = scripts.join("pyvenv.cfg");
+        let present = format!("home = {}\n", dir.path().display());
+        let missing = dir.path().join("missing");
+
+        fs::write(&root, format!("home = {}\n", missing.display()))?;
+        assert_eq!(super::missing_python_home(&interpreter), Some(missing));
+        fs::write(&sibling, &present)?;
+        assert!(super::missing_python_home(&interpreter).is_none());
+        let sibling_home = dir.path().join("sibling-home");
+        fs::write(&sibling, format!("home = {}\n", sibling_home.display()))?;
+        assert_eq!(super::missing_python_home(&interpreter), Some(sibling_home));
+        fs::write(&root, &present)?;
+        assert!(super::missing_python_home(&interpreter).is_none());
+        Ok(())
+    }
 
     fn mocked_interpreter_response(executable: &Path) -> Result<InterpreterInfoWire> {
         let InterpreterInfoResult::Success(mut response) = serde_json::from_str(indoc! {r##"
@@ -1877,8 +2336,607 @@ mod tests {
         Ok(*response)
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn link_snapshot_requires_reaching_the_canonical_path() -> Result<()> {
+        let dir = tempdir()?;
+        let base = dir.path().join("python.exe");
+        fs::write(&base, [])?;
+        let canonical = dunce::canonicalize(&base)?;
+        // An alternate name can identify the same file without exposing any
+        // link whose timestamps would track the mapping (e.g., a subst drive).
+        let alias = dir.path().join("alias.exe");
+        fs::hard_link(&base, &alias)?;
+        assert!(LinkSnapshot::capture(&alias, &canonical).is_none());
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn launcher_junction_restored_after_probe() -> Result<()> {
+        use fs_err::os::windows::fs::OpenOptionsExt;
+        use windows::Win32::Storage::FileSystem::{
+            FILE_FLAG_BACKUP_SEMANTICS, FILE_WRITE_ATTRIBUTES,
+        };
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let first = dir.path().join("first");
+        let second = dir.path().join("second");
+        let current = dir.path().join("current");
+        let managed = dir.path().join("managed");
+        fs::create_dir(&managed)?;
+        let minor = managed.join("minor");
+        for installation in [&first, &second] {
+            fs::create_dir(installation)?;
+            fs::write(installation.join("python.exe"), [])?;
+        }
+        uv_fs::replace_symlink(&first, &minor)?;
+        uv_fs::replace_symlink(&minor, &current)?;
+        let target = current.join("python.exe");
+        fs::write(
+            &proxy,
+            windows_python_launcher(&target, WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
+        let entry = resolved.cache_entry(&cache);
+        // Ensure the directory update is observable even within a single clock tick.
+        fs::OpenOptions::new()
+            .access_mode(FILE_WRITE_ATTRIBUTES.0)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
+            .open(&managed)?
+            .set_modified(UNIX_EPOCH)?;
+        let probe = || {
+            let mut response = mocked_interpreter_response(&proxy).expect("Valid mocked metadata");
+            response.metadata.sys_base_executable = Some(target.clone());
+            response.metadata.sys_base_prefix = dunce::canonicalize(&current)?;
+            Ok::<_, Error>((response, None))
+        };
+        let info = InterpreterInfo::query_cached(&proxy, &cache, || {
+            // Move the original junction back with its own timestamps intact.
+            let saved = managed.join("saved");
+            fs::rename(&minor, &saved)?;
+            uv_fs::create_symlink(&second, &minor)?;
+            let result = probe()?;
+            uv_fs::remove_symlink(&minor)?;
+            fs::rename(&saved, &minor)?;
+            Ok(result)
+        })?;
+        assert_eq!(info.metadata.sys_base_prefix, dunce::canonicalize(&second)?);
+        assert_eq!(canonicalize_executable(&proxy)?, resolved.canonical);
+        assert!(!entry.path().exists());
+
+        InterpreterInfo::query_cached(&proxy, &cache, probe)?;
+        let info = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+        assert_eq!(info.metadata.sys_base_prefix, dunce::canonicalize(&first)?);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn launcher_junction_moves_during_probe() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let first = dir.path().join("first");
+        let second = dir.path().join("second");
+        let link = dir.path().join("current");
+        fs::create_dir(&first)?;
+        fs::create_dir(&second)?;
+        fs::write(first.join("python.exe"), [])?;
+        fs::write(second.join("python.exe"), [])?;
+        uv_fs::replace_symlink(&first, &link)?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(link.join("python.exe"), WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
+        assert_eq!(
+            resolved.canonical,
+            dunce::canonicalize(first.join("python.exe"))?
+        );
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(resolved.canonical.clone());
+        InterpreterInfo::query_cached(&proxy, &cache, || {
+            // A minor-version update can move the junction while both the
+            // proxy and the interpreter that answered the probe stay intact.
+            uv_fs::replace_symlink(&second, &link)?;
+            Ok((response, None))
+        })?;
+
+        assert_eq!(
+            canonicalize_executable(&proxy)?,
+            dunce::canonicalize(second.join("python.exe"))?
+        );
+        let entry = resolved.cache_entry(&cache);
+        assert!(!entry.path().exists());
+        Ok(())
+    }
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[test]
+    fn redirected_config_with_native_python_and_wow64_launcher() -> Result<()> {
+        let windows = std::env::var_os("SystemRoot").expect("Windows directory");
+        let windows = Path::new(&windows);
+        let Some(launcher) = wow64_executable(windows)? else {
+            return Ok(());
+        };
+        let metadata = mocked_interpreter_response(&launcher)?.metadata;
+        assert!(metadata.pointer_size.is_64());
+        // Model a proxy checking for a config under System32 before it sets
+        // __PYVENV_LAUNCHER__ for the native Python process.
+        let inputs =
+            std::collections::HashMap::from([(windows.join(r"System32\pyvenv.cfg"), None)]);
+        assert!(!metadata.shares_cache_inputs(&launcher, &inputs));
+        Ok(())
+    }
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[tokio::test]
+    async fn redirected_inputs_bypass_interpreter_cache() -> Result<()> {
+        use crate::PointerSize::_32 as Bits32;
+
+        // A native launcher can start a 32-bit process. Use an existing
+        // executable as its target so the test needs no writes to System32.
+        let windows = std::env::var_os("SystemRoot").expect("Windows directory");
+        let target = Path::new(&windows).join(r"System32\cmd.exe");
+        let dir = tempdir()?;
+        let executable = dir.path().join("proxy.exe");
+        fs::write(
+            &executable,
+            windows_python_launcher(&target, WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let entry = ExecutableTarget::identify(&executable)
+            .expect("executable target")
+            .for_cache(&executable)?
+            .expect("cache target")
+            .cache_entry(&cache);
+        let mut response = mocked_interpreter_response(&executable)?;
+        response.metadata.sys_base_executable = Some(target.clone());
+        response.metadata.pointer_size = Bits32;
+        let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((response, None)))?;
+        assert!(!entry.path().exists());
+
+        // Seed the incompatible response directly to check that cache reads reject it.
+        fs::create_dir_all(entry.dir())?;
+        fs::write(entry.path(), rmp_serde::to_vec(&info)?)?;
+        let mut native = mocked_interpreter_response(&executable)?;
+        native.metadata.sys_base_executable = Some(target);
+        let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((native, None)))?;
+        assert!(info.metadata.pointer_size.is_64());
+        InterpreterInfo::query_cached(&executable, &cache, unexpected_probe)?;
+        Ok(())
+    }
+
     fn unexpected_probe() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error> {
         Err(io::Error::other("expected an interpreter cache hit").into())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn launcher_probe_reports_a_separate_junction() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let shim = dir.path().join("shim");
+        let installation = dir.path().join("installation");
+        for home in [&shim, &installation] {
+            fs::create_dir(home)?;
+            fs::write(home.join("python.exe"), [])?;
+        }
+        fs::write(
+            &proxy,
+            windows_python_launcher(r"shim\python.exe", WindowMode::Console)?,
+        )?;
+        let alias = dir.path().join("alias");
+        uv_fs::create_symlink(&installation, &alias)?;
+        let reported = alias.join("python.exe");
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
+        assert_ne!(dunce::canonicalize(&reported)?, resolved.canonical);
+        let cache = Cache::temp()?.init().await?;
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(reported.clone());
+        InterpreterInfo::query_cached(&proxy, &cache, || {
+            // The shim runs Python through its own junction. By the time the
+            // probe returns, that path can identify the shim itself.
+            uv_fs::replace_symlink(&shim, &alias)?;
+            Ok((response, None))
+        })?;
+        assert_eq!(dunce::canonicalize(&reported)?, resolved.canonical);
+        assert!(!resolved.cache_entry(&cache).path().exists());
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn nested_launcher_bypasses_cache() -> Result<()> {
+        use std::env;
+        use std::path::PathBuf;
+
+        use uv_cache_key::cache_digest;
+        use uv_static::EnvVars;
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let target = dir.path().join("inner.exe");
+        let base = dir.path().join("base.exe");
+        fs::write(&base, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(&target, WindowMode::Console)?,
+        )?;
+        fs::write(
+            &target,
+            windows_python_launcher("base.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let identified = ExecutableTarget::identify(&proxy).expect("executable target");
+        let resolved = identified.for_cache(&proxy)?.expect("cache target");
+        let entry = resolved.cache_entry(&cache);
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(base.clone());
+        let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        assert!(!entry.path().exists());
+
+        // Older entries for an absolute target track both proxies. Their timestamps
+        // can remain fresh after the final interpreter changes.
+        let digest = cache_digest(&(
+            proxy.as_path(),
+            resolved.canonical.as_path(),
+            env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from),
+            env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from),
+        ));
+        let legacy = entry.with_file(format!("{digest}.msgpack"));
+        assert_bypasses_fresh_entry(&cache, &legacy, &proxy, &info)?;
+
+        // A third-party shim can redirect Python without any uv resources.
+        fs::write(&target, [])?;
+        for reported_base in [None, Some(base)] {
+            let mut response = mocked_interpreter_response(&proxy)?;
+            response.metadata.sys_base_executable = reported_base;
+            InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+            assert!(!entry.path().exists());
+        }
+
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn retargeted_launcher_does_not_reuse_a_removed_alias() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let home = dir.path().join("home");
+        let link = dir.path().join("link");
+        fs::create_dir(&home)?;
+        let base = home.join("python.exe");
+        fs::write(&base, [])?;
+        uv_fs::create_symlink(&home, &link)?;
+        let cache = Cache::temp()?.init().await?;
+
+        // Both relative targets resolve to the same file. Replacing a launcher
+        // from an archive can also give both versions the same modification time.
+        let retarget = |relative: &str| -> Result<_> {
+            fs::write(
+                &proxy,
+                windows_python_launcher(relative, WindowMode::Console)?,
+            )?;
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&proxy)?
+                .set_modified(UNIX_EPOCH)?;
+            let mut response = mocked_interpreter_response(&proxy)?;
+            response.metadata.sys_base_executable = Some(dir.path().join(relative));
+            InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+            let info = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+            Ok(info.metadata.sys_base_executable)
+        };
+        assert_eq!(retarget(r"link\python.exe")?, Some(link.join("python.exe")));
+        uv_fs::remove_symlink(&link)?;
+        assert_eq!(retarget(r"home\python.exe")?, Some(base));
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn script_replacing_proxy_bypasses_cache() -> Result<()> {
+        let dir = tempdir()?;
+        let executable = dir.path().join("python.exe");
+        let target = dir.path().join("base.exe");
+        fs::write(&target, [])?;
+        let replace = |bytes| -> io::Result<()> {
+            fs::write(&executable, bytes)?;
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&executable)?
+                .set_modified(UNIX_EPOCH)
+        };
+        let cache = Cache::temp()?.init().await?;
+        let mut probes = 0;
+        let mut probe = || {
+            probes += 1;
+            let mut response =
+                mocked_interpreter_response(&executable).expect("Valid mocked metadata");
+            response.metadata.sys_base_executable = Some(target.clone());
+            Ok((response, None))
+        };
+
+        replace(windows_python_launcher("base.exe", WindowMode::Console)?)?;
+        InterpreterInfo::query_cached(&executable, &cache, &mut probe)?;
+        InterpreterInfo::query_cached(&executable, &cache, unexpected_probe)?;
+
+        // The script runs its own entry point even with the same interpreter
+        // path and modification time as the cached proxy.
+        replace(windows_script_launcher(
+            "print('script')",
+            false,
+            "base.exe",
+        )?)?;
+        InterpreterInfo::query_cached(&executable, &cache, &mut probe)?;
+        InterpreterInfo::query_cached(&executable, &cache, probe)?;
+        assert_eq!(probes, 3);
+
+        // Eviction has no entry to remove even after the interpreter disappears.
+        fs::remove_file(&target)?;
+        Interpreter::clear_cache(&executable, &cache)?;
+        let Err(Error::BrokenLink(link)) = Interpreter::query(&executable, &cache) else {
+            anyhow::bail!("expected a broken script launcher");
+        };
+        assert_eq!(link.target(), Some(target.as_path()));
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn direct_launcher_cache_tracks_target() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let target = dir.path().join("base.exe");
+        fs::write(&target, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(&target, WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let mut probes = 0;
+        let mut probe = || {
+            probes += 1;
+            let mut response = mocked_interpreter_response(&proxy).expect("Valid mocked metadata");
+            response.metadata.sys_base_executable = Some(target.clone());
+            Ok((response, None))
+        };
+        InterpreterInfo::query_cached(&proxy, &cache, &mut probe)?;
+        InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&target)?
+            .set_modified(UNIX_EPOCH)?;
+        InterpreterInfo::query_cached(&proxy, &cache, &mut probe)?;
+        InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+
+        Interpreter::clear_cache(&proxy, &cache)?;
+        InterpreterInfo::query_cached(&proxy, &cache, probe)?;
+        assert_eq!(probes, 3);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn existing_target_can_be_probed_when_normalized_path_is_unavailable() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        fs::write(dir.path().join("base.exe"), [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher("base.exe", WindowMode::Console)?,
+        )?;
+        let target = ExecutableTarget::identify(&proxy).expect("valid proxy");
+        for error in [io::ErrorKind::PermissionDenied, io::ErrorKind::NotFound] {
+            let input = target.cache_input::<()>(&proxy, Err(error.into()))?;
+            assert!(input.is_none());
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn missing_target_diagnostic_checks_current_launcher() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let first = dir.path().join("first.exe");
+        let second = dir.path().join("second.exe");
+        fs::write(&first, [])?;
+        fs::write(&second, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(&first, WindowMode::Console)?,
+        )?;
+        let target = ExecutableTarget::identify(&proxy).expect("valid proxy");
+        let resolve = || target.cache_input(&proxy, target.canonicalize());
+
+        fs::remove_file(&first)?;
+        let Err(Error::BrokenLink(link)) = resolve() else {
+            anyhow::bail!("expected a broken trampoline");
+        };
+        assert_eq!(link.path, proxy);
+        assert_eq!(link.target(), Some(first.as_path()));
+
+        // The target read before the lookup can belong to a replaced launcher.
+        fs::write(
+            &proxy,
+            windows_python_launcher(&second, WindowMode::Console)?,
+        )?;
+        assert!(resolve()?.is_none());
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn proxy_target_removed_during_probe() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let target = dir.path().join("base.exe");
+        fs::write(&target, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher("base.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let err = InterpreterInfo::query_cached(&proxy, &cache, || {
+            // The cache inputs exist when checked, but the proxy can no longer start Python.
+            fs::remove_file(&target)?;
+            InterpreterInfo::query(&proxy, &cache)
+        })
+        .unwrap_err();
+        let Error::BrokenLink(link) = err else {
+            anyhow::bail!("expected a broken proxy, got {err}");
+        };
+        assert_eq!(link.path, proxy);
+        assert_eq!(link.target(), Some(target.as_path()));
+        assert!(!target.try_exists()?);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn failed_proxy_probe_with_stale_home() -> Result<()> {
+        let dir = tempdir()?;
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let proxy = scripts.join("python.exe");
+        fs::write(
+            &proxy,
+            windows_python_launcher("target.exe", WindowMode::Console)?,
+        )?;
+        // The target exists but cannot answer a Python probe.
+        fs::write(scripts.join("target.exe"), [])?;
+        fs::write(
+            dir.path().join("pyvenv.cfg"),
+            format!("home = {}\n", dir.path().join("missing").display()),
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let err = Interpreter::query(&proxy, &cache).unwrap_err();
+        assert!(matches!(err, Error::StatusCode(_)), "{err}");
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn junction_loop_bypasses_cache() -> Result<()> {
+        let dir = tempdir()?;
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let proxy = scripts.join("python.exe");
+        let home = dir.path().join("home");
+        let target = home.join("python.exe");
+        fs::create_dir(&home)?;
+        fs::write(&target, [])?;
+        fs::write(
+            dir.path().join("pyvenv.cfg"),
+            format!("home = {}\n", home.display()),
+        )?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(r"..\home\python.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(target.clone());
+        let cached = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+
+        // Move a junction onto its own destination, leaving the proxy intact.
+        let redirect = dir.path().join("redirect");
+        let saved = dir.path().join("saved");
+        uv_fs::create_symlink(&home, &redirect)?;
+        fs::rename(&home, &saved)?;
+        fs::rename(&redirect, &home)?;
+        let err = canonicalize_executable(&proxy).unwrap_err();
+        assert_ne!(err.kind(), io::ErrorKind::NotFound, "{err}");
+
+        // Project discovery would replace the environment on a broken-link error.
+        assert!(home.try_exists().is_err());
+        let err = Interpreter::query(&proxy, &cache).unwrap_err();
+        assert!(matches!(err, Error::StatusCode(_)), "{err}");
+
+        let prefix = dir.path().join("fresh-probe");
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_prefix = prefix.clone();
+        response.metadata.sys_base_executable = Some(target);
+        let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        assert_eq!(info.metadata.sys_prefix, prefix);
+        let proxy_entry = proxy_only_entry(&proxy, &cache);
+        assert!(!proxy_entry.path().exists());
+        Interpreter::clear_cache(&proxy, &cache)?;
+
+        uv_fs::remove_symlink(&home)?;
+        fs::rename(&saved, &home)?;
+        let after = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+        assert_eq!(after.metadata.sys_prefix, cached.metadata.sys_prefix);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn unresolved_launcher_bypasses_cache() -> Result<()> {
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        // The target depends on the current directory for the drive. A venv probe reports
+        // the proxy as `sys.executable` regardless of which interpreter actually ran.
+        fs::write(
+            &proxy,
+            windows_python_launcher("C:python.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let entry = proxy_only_entry(&proxy, &cache);
+        let response = mocked_interpreter_response(&proxy)?;
+        let mut info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        assert!(!entry.path().exists());
+
+        // Seed an entry keyed on the proxy alone, with a fresh timestamp.
+        info.file_timestamps
+            .insert(proxy.clone(), Some(Timestamp::from_path(&proxy)?));
+        assert_bypasses_fresh_entry(&cache, &entry, &proxy, &info)?;
+        Interpreter::clear_cache(&proxy, &cache)?;
+        assert!(entry.path().exists());
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn proxy_only_entry(proxy: &Path, cache: &Cache) -> uv_cache::CacheEntry {
+        CacheTarget {
+            target: &ExecutableTarget {
+                absolute: proxy,
+                launcher: None,
+            },
+            canonical: proxy.to_path_buf(),
+        }
+        .cache_entry(cache)
+    }
+
+    #[cfg(windows)]
+    fn assert_bypasses_fresh_entry(
+        cache: &Cache,
+        entry: &uv_cache::CacheEntry,
+        proxy: &Path,
+        info: &InterpreterInfo,
+    ) -> Result<()> {
+        fs::create_dir_all(entry.dir())?;
+        fs::write(entry.path(), rmp_serde::to_vec(info)?)?;
+        assert!(InterpreterInfo::read_cached(cache, entry, proxy).is_some());
+        let mut probed = false;
+        let response = mocked_interpreter_response(proxy)?;
+        InterpreterInfo::query_cached(proxy, cache, || {
+            probed = true;
+            Ok((response, None))
+        })?;
+        assert!(probed);
+        Ok(())
     }
 
     #[tokio::test]
@@ -1912,12 +2970,13 @@ mod tests {
         );
 
         let absolute = std::path::absolute(&mocked_interpreter)?;
-        let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, &cache);
+        let identified = ExecutableTarget::identify(&absolute).expect("executable target");
+        let resolved = identified.for_cache(&absolute)?.expect("cache target");
+        let cache_entry = resolved.cache_entry(&cache);
         let mut cached: InterpreterInfo = rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(
-            cached.file_timestamps.get(&canonical),
-            Some(&Some(Timestamp::from_path(&canonical)?))
+            cached.file_timestamps.get(&resolved.canonical),
+            Some(&Some(Timestamp::from_path(&resolved.canonical)?))
         );
 
         fs::write(&mocked_interpreter, b"updated")?;
@@ -1932,7 +2991,7 @@ mod tests {
 
         // Back-to-back writes can share a Unix `ctime`. Store a well-formed entry with a
         // different timestamp to exercise stale-cache rejection deterministically.
-        let modified = Timestamp::from_path(&canonical)?;
+        let modified = Timestamp::from_path(&resolved.canonical)?;
         let stale = if modified == Timestamp::from(UNIX_EPOCH) {
             Timestamp::from(UNIX_EPOCH + Duration::from_secs(1))
         } else {
@@ -1940,7 +2999,7 @@ mod tests {
         };
         cached
             .file_timestamps
-            .insert(canonical.clone(), Some(stale));
+            .insert(resolved.canonical.clone(), Some(stale));
         fs::write(cache_entry.path(), rmp_serde::to_vec(&cached)?)?;
 
         let interpreter =
@@ -1950,8 +3009,8 @@ mod tests {
             updated_version
         );
         assert_eq!(
-            interpreter.file_timestamps.get(&canonical),
-            Some(&Some(Timestamp::from_path(&canonical)?))
+            interpreter.file_timestamps.get(&resolved.canonical),
+            Some(&Some(Timestamp::from_path(&resolved.canonical)?))
         );
 
         let interpreter =

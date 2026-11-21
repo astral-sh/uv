@@ -7491,7 +7491,6 @@ dependencies = [
  "uv-scripts",
  "uv-settings",
  "uv-shell",
- "uv-trampoline-builder",
  "uv-warnings",
  "uv-workspace",
 ]
@@ -8030,7 +8029,6 @@ name = "uv-tool"
 version = "0.0.101"
 dependencies = [
  "fs-err",
- "owo-colors",
  "pathdiff",
  "serde",
  "thiserror",
@@ -8157,6 +8155,7 @@ dependencies = [
  "uv-fs",
  "which",
  "windows",
+ "zerocopy",
 ]
 
 [[package]]

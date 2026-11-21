@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use fs_err::File;
-use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 
@@ -15,7 +14,7 @@ use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
 use uv_pep440::Version;
-use uv_python_interpreter::{BrokenLink, Interpreter, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
 use uv_virtualenv::UpgradePolicy;
@@ -295,25 +294,9 @@ impl InstalledTools {
                 Ok(None)
             }
             Err(uv_python_interpreter::PythonEnvironmentError::Query(
-                uv_python_interpreter::InterpreterError::BrokenLink(BrokenLink {
-                    path,
-                    unix,
-                    venv: _,
-                }),
+                uv_python_interpreter::InterpreterError::BrokenLink(link),
             )) => {
-                if unix {
-                    let target_path = fs_err::read_link(&path)?;
-                    warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: `{}` -> `{}`",
-                        path.user_display().cyan(),
-                        target_path.user_display().cyan(),
-                    );
-                } else {
-                    warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                        path.user_display().cyan(),
-                    );
-                }
+                warn!("{}", link.ignored_environment_warning());
 
                 Ok(None)
             }

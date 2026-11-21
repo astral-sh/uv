@@ -1038,6 +1038,47 @@ fn python_find_unsupported_version() {
 }
 
 #[test]
+#[cfg(windows)]
+fn python_find_venv_missing_home() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    context
+        .python_command()
+        .args(["-m", "venv", "--without-pip"])
+        .arg(context.venv.as_os_str())
+        .assert()
+        .success();
+    let home = context.temp_dir.join("removed");
+    context
+        .venv
+        .child("pyvenv.cfg")
+        .write_str(&format!("home = {}\n", home.display()))?;
+
+    // CPython's venv launcher exits unsuccessfully when its configured home is gone.
+    uv_snapshot!(context.filters(), context.python_find().env(EnvVars::VIRTUAL_ENV, context.venv.as_os_str()), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/[PYTHON]`
+      cause: Python home `removed` configured for `.venv/[BIN]/[PYTHON]` does not exist
+
+    hint: Consider recreating the environment (e.g., with `uv venv`)
+    ");
+
+    // Locate the same config when the caller is already in `Scripts`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .current_dir(venv_bin_path(&context.venv))
+        .arg(r".\python.exe"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Python home `[TEMP_DIR]/removed` configured for `./[PYTHON]` does not exist
+
+    hint: Consider recreating the environment (e.g., with `uv venv`)
+    ");
+    Ok(())
+}
+
+#[test]
 fn python_find_venv_invalid() {
     let context = uv_test::test_context!("3.12")
         .with_filtered_python_names()

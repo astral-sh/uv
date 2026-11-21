@@ -59,8 +59,10 @@ type FindPythonResult = Result<PythonInstallation, PythonNotFound>;
 #[derive(Clone, Debug, Error)]
 pub struct PythonNotFound {
     pub(super) request: PythonRequest,
-    pub(super) python_preference: PythonPreference,
+    python_preference: PythonPreference,
     pub(super) environment_preference: EnvironmentPreference,
+    /// The failed link when an executable or environment was requested by path.
+    pub(super) broken_link: Option<Box<BrokenLink>>,
 }
 
 /// A non-empty group of equally preferred Python executables.
@@ -860,18 +862,22 @@ impl Error {
                     );
                     false
                 }
+                // A missing interpreter breaks an active virtual environment.
                 InterpreterError::NotFound(path)
-                | InterpreterError::BrokenLink(BrokenLink { path, .. }) => {
-                    // If the interpreter is from an active, valid virtual environment, we should
-                    // fail because it's broken
                     if matches!(source, PythonSource::ActiveEnvironment)
-                        && uv_fs::is_virtualenv_executable(path)
-                    {
-                        true
-                    } else {
-                        trace!("Skipping missing interpreter at `{}`", path.display());
-                        false
-                    }
+                        && uv_fs::is_virtualenv_executable(path) =>
+                {
+                    true
+                }
+                InterpreterError::BrokenLink(link)
+                    if matches!(source, PythonSource::ActiveEnvironment)
+                        && link.is_virtualenv() =>
+                {
+                    true
+                }
+                InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_) => {
+                    trace!("Skipping missing interpreter from {source}: {err}");
+                    false
                 }
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
@@ -881,18 +887,6 @@ impl Error {
             _ => true,
         }
     }
-}
-
-/// Create a [`PythonInstallation`] from a Python installation root directory.
-fn python_installation_from_directory(
-    path: &PathBuf,
-    cache: &Cache,
-) -> Result<PythonInstallation, uv_python_interpreter::InterpreterError> {
-    let executable = virtualenv_python_executable(path);
-    Ok(PythonInstallation {
-        source: PythonSource::ProvidedPath,
-        interpreter: Interpreter::query(&executable, cache)?,
-    })
 }
 
 /// Lazily iterate over all Python executable paths on the path with the given executable name.
@@ -959,47 +953,29 @@ fn find_python_installations_with_strategy<'a>(
     .sources(request);
 
     match request {
-        PythonRequest::File(path) => Box::new(iter::once({
+        PythonRequest::File(path) | PythonRequest::Directory(path) => Box::new(iter::once({
             if preference.allows_source(PythonSource::ProvidedPath) {
                 debug!("Checking for Python interpreter at {request}");
-                match Interpreter::query(path, cache) {
+                let interpreter = if matches!(request, PythonRequest::Directory(_)) {
+                    Interpreter::query(virtualenv_python_executable(path), cache)
+                } else {
+                    Interpreter::query(path, cache)
+                };
+                let missing = |broken_link| {
+                    Ok(Err(PythonNotFound {
+                        request: request.clone(),
+                        python_preference: preference,
+                        environment_preference: environments,
+                        broken_link,
+                    }))
+                };
+                match interpreter {
                     Ok(interpreter) => Ok(Ok(PythonInstallation {
                         source: PythonSource::ProvidedPath,
                         interpreter,
                     })),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => {
-                        Ok(Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
-                    Err(err) => Err(Error::Query(
-                        Box::new(err),
-                        path.clone(),
-                        PythonSource::ProvidedPath,
-                    )),
-                }
-            } else {
-                Err(Error::SourceNotAllowed(
-                    request.clone(),
-                    PythonSource::ProvidedPath,
-                    preference,
-                ))
-            }
-        })),
-        PythonRequest::Directory(path) => Box::new(iter::once({
-            if preference.allows_source(PythonSource::ProvidedPath) {
-                debug!("Checking for Python interpreter in {request}");
-                match python_installation_from_directory(path, cache) {
-                    Ok(installation) => Ok(Ok(installation)),
-                    Err(InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_)) => {
-                        Ok(Err(PythonNotFound {
-                            request: request.clone(),
-                            python_preference: preference,
-                            environment_preference: environments,
-                        }))
-                    }
+                    Err(InterpreterError::NotFound(_)) => missing(None),
+                    Err(InterpreterError::BrokenLink(link)) => missing(Some(Box::new(link))),
                     Err(err) => Err(Error::Query(
                         Box::new(err),
                         path.clone(),
@@ -1323,6 +1299,7 @@ pub(crate) fn find_python_installation(
             .into_owned(),
         environment_preference: environments,
         python_preference: preference,
+        broken_link: None,
     }))
 }
 
@@ -1482,8 +1459,7 @@ pub(crate) async fn find_best_python_installation(
                     request: original_request
                         .with_default_arch(arch.map(PythonArchitecture::into_inner))
                         .into_owned(),
-                    python_preference: err.python_preference,
-                    environment_preference: err.environment_preference,
+                    ..err
                 }
                 .into(),
                 other => other,
@@ -1690,6 +1666,10 @@ impl DiscoveryPreferences {
 
 impl fmt::Display for PythonNotFound {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        if let Some(link) = &self.broken_link {
+            return fmt::Display::fmt(link, f);
+        }
+
         let sources = DiscoveryPreferences {
             python_preference: self.python_preference,
             environment_preference: self.environment_preference,
@@ -1745,6 +1725,34 @@ mod tests {
         PythonExecutableGroup, PythonPreference, PythonSource, QueryStrategy,
         python_installations_from_executables, sort_installations_by_key,
     };
+
+    #[cfg(unix)]
+    #[test]
+    fn broken_active_link_uses_environment_at_detection() -> anyhow::Result<()> {
+        let cache = Cache::temp()?;
+        let dir = tempfile::tempdir()?;
+        let bin = dir.path().join("bin");
+        fs_err::create_dir(&bin)?;
+        let python = bin.join("python");
+        fs_err::os::unix::fs::symlink("missing", &python)?;
+        let query = || {
+            super::python_installation_from_executable(
+                PythonSource::ActiveEnvironment,
+                python.clone(),
+                &cache,
+            )
+            .unwrap_err()
+        };
+
+        let config = dir.path().join("pyvenv.cfg");
+        let outside = query();
+        fs_err::write(&config, "")?;
+        assert!(!outside.is_critical());
+        let inside = query();
+        fs_err::remove_file(config)?;
+        assert!(inside.is_critical());
+        Ok(())
+    }
 
     // Testing this at a higher level would necessitate relying on filesystem ordering.
     #[test]

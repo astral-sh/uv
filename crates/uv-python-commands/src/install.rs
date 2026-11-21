@@ -29,7 +29,7 @@ use uv_python_managed::downloads::{
     self, DownloadResult, ManagedPythonDownload, ManagedPythonDownloadList,
 };
 use uv_python_managed::{
-    ManagedPythonInstallation, ManagedPythonInstallations, PythonExecutable,
+    BinLinkOperation, ManagedPythonInstallation, ManagedPythonInstallations, PythonExecutable,
     PythonMinorVersionLink, compare_build_versions, create_link_to_executable,
     python_executable_dir,
 };
@@ -39,7 +39,6 @@ use uv_python_types::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_shell::Shell;
-use uv_trampoline_builder::{Launcher, LauncherKind};
 use uv_warnings::warn_user;
 
 use crate::{ChangeEvent, ChangeEventKind};
@@ -1036,12 +1035,13 @@ fn create_bin_links(
                 );
 
                 //  Figure out what installation it references, if any
-                let existing = find_matching_bin_link(
+                let existing = ManagedPythonInstallation::find_bin_link(
+                    &target,
                     installations
                         .iter()
                         .copied()
                         .chain(existing_installations.iter()),
-                    &target,
+                    BinLinkOperation::Install,
                 );
 
                 match existing {
@@ -1329,34 +1329,6 @@ fn warn_if_not_on_path(bin: &Path) {
                 bin.simplified_display().cyan(),
             );
         }
-    }
-}
-
-/// Find the [`ManagedPythonInstallation`] corresponding to an executable link installed at the
-/// given path, if any.
-///
-/// Will resolve symlinks on Unix. On Windows, will resolve the target link for a trampoline.
-fn find_matching_bin_link<'a>(
-    mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
-    path: &Path,
-) -> Option<&'a ManagedPythonInstallation> {
-    if cfg!(unix) {
-        if !path.is_symlink() {
-            return None;
-        }
-        let target = fs_err::canonicalize(path).ok()?;
-
-        installations.find(|installation| installation.executable(false) == target)
-    } else if cfg!(windows) {
-        let launcher = Launcher::try_from_path(path).ok()??;
-        if !matches!(launcher.kind, LauncherKind::Python) {
-            return None;
-        }
-        let target = dunce::canonicalize(launcher.python_path).ok()?;
-
-        installations.find(|installation| installation.executable(false) == target)
-    } else {
-        unreachable!("Only Unix and Windows are supported")
     }
 }
 

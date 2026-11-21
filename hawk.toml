@@ -145,24 +145,6 @@ reason = "used by the Windows installer path"
 
 [[override]]
 lint = "hawk::dead_public"
-crate = "uv_trampoline_builder"
-item = "Launcher::write_to_file"
-kind = "inherent_method"
-level = "expect"
-target = "cfg(not(windows))"
-reason = "used to create Windows launchers"
-
-[[override]]
-lint = "hawk::dead_public"
-crate = "uv_trampoline_builder"
-item = "Launcher::with_python_path"
-kind = "inherent_method"
-level = "expect"
-target = "cfg(not(windows))"
-reason = "used to create Windows launchers"
-
-[[override]]
-lint = "hawk::dead_public"
 crate = "uv_static"
 item = "env_vars::EnvVars::UV_INTERNAL__TEST_DIR"
 kind = "inherent_associated_constant"

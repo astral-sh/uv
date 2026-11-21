@@ -35,7 +35,7 @@ thiserror = { workspace = true }
 async_zip = { workspace = true }
 editpe = { workspace = true }
 futures-lite = { workspace = true }
-windows = { workspace = true }
+zerocopy = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
@@ -45,6 +45,9 @@ fs-err = { workspace = true }
 rcgen = { workspace = true }
 tempfile = { workspace = true }
 which = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+windows = { workspace = true }
 
 [lib]
 doctest = false

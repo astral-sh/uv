@@ -31,7 +31,7 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::PythonInstallation;
-use uv_python_interpreter::{BrokenLink, Interpreter, InvalidEnvironmentKind, PythonEnvironment};
+use uv_python_interpreter::{Interpreter, InvalidEnvironmentKind, PythonEnvironment};
 use uv_python_managed::{PythonMinorVersionLink, UpgradePolicy};
 use uv_python_types::{
     EnvironmentPreference, LenientImplementationName, PythonArchitecture, PythonDownloads,
@@ -241,25 +241,9 @@ fn existing_project_environment(
             return Ok(None);
         }
         Err(uv_python_interpreter::PythonEnvironmentError::Query(
-            uv_python_interpreter::InterpreterError::BrokenLink(BrokenLink {
-                path,
-                unix,
-                venv: _,
-            }),
+            uv_python_interpreter::InterpreterError::BrokenLink(link),
         )) => {
-            if unix {
-                let target_path = fs_err::read_link(&path)?;
-                warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: `{}` -> `{}`",
-                    path.user_display().cyan(),
-                    target_path.user_display().cyan(),
-                );
-            } else {
-                warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                    path.user_display().cyan(),
-                );
-            }
+            warn_user!("{}", link.ignored_environment_warning());
             return Ok(None);
         }
         Err(err) => return Err(err.into()),

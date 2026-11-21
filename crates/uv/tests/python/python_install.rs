@@ -2184,11 +2184,15 @@ fn python_install_default_preview() {
 }
 
 #[cfg(windows)]
-fn launcher_path(path: &Path) -> PathBuf {
-    let launcher = uv_trampoline_builder::Launcher::try_from_path(path)
-        .unwrap_or_else(|_| panic!("{} should be readable", path.display()))
-        .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
-    launcher.python_path
+fn resolved_launcher_target(path: &Path) -> PathBuf {
+    use uv_trampoline_builder::{LauncherKind, read_launcher_target};
+
+    let Some((LauncherKind::Python, target)) = read_launcher_target(path)
+        .unwrap_or_else(|err| panic!("{} should be readable: {err}", path.display()))
+    else {
+        panic!("{} should be a Python launcher", path.display());
+    };
+    target
 }
 
 fn canonicalize_link_path(path: &Path) -> String {
@@ -2196,7 +2200,7 @@ fn canonicalize_link_path(path: &Path) -> String {
     let canonical_path = fs_err::canonicalize(path);
 
     #[cfg(windows)]
-    let canonical_path = dunce::canonicalize(launcher_path(path));
+    let canonical_path = dunce::canonicalize(resolved_launcher_target(path));
 
     canonical_path
         .unwrap_or_else(|_| panic!("{} should be readable", path.display()))
@@ -2210,7 +2214,11 @@ fn read_link(path: &Path) -> String {
         fs_err::read_link(path).unwrap_or_else(|_| panic!("{} should be readable", path.display()));
 
     #[cfg(windows)]
-    let linked_path = launcher_path(path);
+    let launcher = uv_trampoline_builder::Launcher::try_from_path(path)
+        .unwrap_or_else(|err| panic!("{} should be readable: {err}", path.display()))
+        .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
+    #[cfg(windows)]
+    let linked_path = launcher.python_path();
 
     linked_path.simplified_display().to_string()
 }
@@ -3392,14 +3400,12 @@ fn uninstall_last_patch() {
     "
     );
 
-    let context = context.with_filter(("python3", "python"));
-
     #[cfg(unix)]
     uv_snapshot!(context.filters(), context.run().arg("python").arg("--version"), @"
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      cause: Broken symlink at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
+      cause: Broken Python symlink from `.venv/[BIN]/python` to `[TEMP_DIR]/managed/cpython-3.10-[PLATFORM]/[BIN]/python3.10`
 
     hint: Consider recreating the environment (e.g., with `uv venv`)
     "
@@ -3410,7 +3416,9 @@ fn uninstall_last_patch() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      cause: Python interpreter not found at `[VENV]/[BIN]/python`
+      cause: Python trampoline at `.venv/[BIN]/python` points to a missing interpreter at `managed/cpython-3.10-[PLATFORM]/python`
+
+    hint: Consider recreating the environment (e.g., with `uv venv`)
     "
     );
 }
@@ -4043,7 +4051,7 @@ fn python_install_compile_bytecode() -> anyhow::Result<()> {
         .join("lib")
         .join("python3.14");
     #[cfg(windows)]
-    let stdlib = launcher_path(&bin_path)
+    let stdlib = resolved_launcher_target(&bin_path)
         .parent()
         .context("Python binary should be a child of the installation path")?
         .join("Lib");
