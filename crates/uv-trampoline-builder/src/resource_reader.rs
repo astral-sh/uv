@@ -236,7 +236,13 @@ impl Resources {
                 return Ok(order);
             }
         }
-        Ok(usize::from(length).cmp(&name.encode_utf16().count()))
+        let order = usize::from(length).cmp(&name.encode_utf16().count());
+        // Wine compares the NUL-terminated key against the counted name. A NUL
+        // after the key can send its search to the other half of the table.
+        if order == Ordering::Greater && u16::read_from_io(&mut self.file)? == 0 {
+            return Err(Inconclusive);
+        }
+        Ok(order)
     }
 
     /// Search the sorted names or IDs.

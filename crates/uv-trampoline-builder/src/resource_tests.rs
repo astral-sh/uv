@@ -529,6 +529,35 @@ fn mui_configuration_precludes_launcher_identification() -> Result<()> {
 }
 
 #[test]
+fn nul_after_resource_name_precludes_launcher_identification() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    // The middle name in the sorted table shares the complete lookup key.
+    let image = |other: &str| {
+        write_resources(
+            get_launcher_bin(false)?,
+            &[
+                (RESOURCE_PYTHON_PATH, b"python.exe"),
+                (other, b"other.exe"),
+                (RESOURCE_TRAMPOLINE_KIND, &[2]),
+            ],
+        )
+    };
+    fs_err::write(path.path(), image("UV_PYTHON_PATH_")?)?;
+    assert_eq!(
+        super::read_launcher_target(path.path())?,
+        Some((LauncherKind::Python, temp_dir.path().join("python.exe")))
+    );
+    fs_err::write(path.path(), image("UV_PYTHON_PATH\0")?)?;
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn ambiguous_rcdata_id_precludes_launcher_identification() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
