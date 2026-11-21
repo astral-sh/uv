@@ -1640,7 +1640,7 @@ impl InterpreterInfo {
         };
 
         #[cfg(windows)]
-        let links = target.link_timestamps(&canonical);
+        let link_timestamps = target.link_timestamps(&canonical);
 
         trace!(
             "Querying interpreter executable at `{}`",
@@ -1652,21 +1652,12 @@ impl InterpreterInfo {
             executable,
             &absolute,
             &canonical,
+            #[cfg(windows)]
+            link_timestamps.as_deref(),
             &wire,
             probe_start,
             &mut file_timestamps,
         );
-
-        // Python can report a junction path as its base executable. It may have
-        // pointed at another installation while Python was starting up.
-        #[cfg(windows)]
-        let cacheable = cacheable
-            && (wire.metadata.sys_base_executable.as_deref() == Some(canonical.as_path())
-                || links.is_some_and(|before| {
-                    target
-                        .link_timestamps(&canonical)
-                        .is_some_and(|after| before == after)
-                }));
 
         let info = Self::from_probe(executable, wire, file_timestamps)?;
         if cacheable {
@@ -1725,6 +1716,7 @@ impl InterpreterInfo {
         executable: &Path,
         absolute: &Path,
         canonical: &Path,
+        #[cfg(windows)] link_timestamps: Option<&[(u64, u64)]>,
         wire: &InterpreterInfoWire,
         probe_start: Option<Timestamp>,
         file_timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
@@ -1741,9 +1733,23 @@ impl InterpreterInfo {
             let Some(base) = wire.metadata.sys_base_executable.as_deref() else {
                 return false;
             };
-            if !base.is_absolute()
-                || !is_same_file(base, canonical).unwrap_or(false)
-                || !canonicalize_executable(absolute).is_ok_and(|current| current == canonical)
+            if !base.is_absolute() || !is_same_file(base, canonical).unwrap_or(false) {
+                return false;
+            }
+            let Some(target) = ExecutableTarget::identify(absolute) else {
+                return false;
+            };
+            if !target
+                .canonicalize()
+                .is_ok_and(|current| current == canonical)
+            {
+                return false;
+            }
+            // Python can report a junction path as its base executable. It may
+            // have pointed at another installation while Python was starting up.
+            if base != canonical
+                && (link_timestamps.is_none()
+                    || link_timestamps != target.link_timestamps(canonical).as_deref())
             {
                 return false;
             }
