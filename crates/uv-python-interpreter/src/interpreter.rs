@@ -119,10 +119,10 @@ impl Interpreter {
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
         let executable = executable.as_ref();
         let absolute = std::path::absolute(executable)?;
-        let Some((_, canonical)) = ExecutableTarget::for_cache(&absolute, executable)? else {
+        let Some((target, canonical)) = ExecutableTarget::for_cache(&absolute, executable)? else {
             return Ok(());
         };
-        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, cache);
+        let cache_entry = target.cache_entry(&canonical, cache);
 
         match fs::remove_file(cache_entry.path()) {
             Ok(()) => Ok(()),
@@ -957,6 +957,55 @@ impl<'a> ExecutableTarget<'a> {
         Ok(Some((target, canonical)))
     }
 
+    fn is_launcher(&self) -> bool {
+        self.trampoline_target.is_some()
+    }
+
+    /// Return the cache entry for an interpreter's absolute and canonical executable paths.
+    fn cache_entry(&self, canonical: &Path, cache: &Cache) -> CacheEntry {
+        // We use the absolute path for the cache entry to avoid cache collisions for relative
+        // paths. But we don't want to query the executable with symbolic links resolved because
+        // that can change reported values, e.g., `sys.executable`. We include the canonical
+        // path in the cache entry as well, otherwise we can have cache collisions if an
+        // absolute path refers to different interpreters with matching ctimes, e.g., if you
+        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+        // modified at the same time.
+        //
+        // Launcher overrides can also change the reported executable and virtual environment
+        // without changing either executable path.
+        let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
+        let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
+        let key = (
+            self.absolute,
+            canonical,
+            &python_executable,
+            &pyvenv_launcher,
+        );
+        // Only reuse Windows launcher entries from probes that verified the
+        // reported base executable against the target.
+        let digest = if self.is_launcher() {
+            cache_digest(&("verified-launcher", key))
+        } else {
+            cache_digest(&key)
+        };
+
+        cache.entry(
+            CacheBucket::Interpreter,
+            // Shard interpreter metadata by host architecture, operating system, and version, to
+            // invalidate the cache (e.g.) on OS upgrades.
+            cache_digest(&(
+                ARCH,
+                uv_platform::OsType::from_env()
+                    .map(|os_type| os_type.to_string())
+                    .unwrap_or_default(),
+                uv_platform::OsRelease::from_env()
+                    .map(|os_release| os_release.to_string())
+                    .unwrap_or_default(),
+            )),
+            format!("{digest}.msgpack"),
+        )
+    }
+
     fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
         let err = match input {
             Ok(value) => return Ok(Some(value)),
@@ -1561,46 +1610,6 @@ impl InterpreterInfo {
         Ok(())
     }
 
-    /// Return the cache entry for an interpreter's absolute and canonical executable paths.
-    fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
-        // We use the absolute path for the cache entry to avoid cache collisions for relative
-        // paths. But we don't want to query the executable with symbolic links resolved because
-        // that can change reported values, e.g., `sys.executable`. We include the canonical
-        // path in the cache entry as well, otherwise we can have cache collisions if an
-        // absolute path refers to different interpreters with matching ctimes, e.g., if you
-        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
-        // modified at the same time.
-        //
-        // Launcher overrides can also change the reported executable and virtual environment
-        // without changing either executable path.
-        let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
-        let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
-        let key = (absolute, canonical, &python_executable, &pyvenv_launcher);
-        // Only reuse Windows launcher entries from probes that verified the
-        // reported base executable against the target.
-        let digest = if cfg!(windows) && absolute != canonical {
-            cache_digest(&("verified-launcher", key))
-        } else {
-            cache_digest(&key)
-        };
-
-        cache.entry(
-            CacheBucket::Interpreter,
-            // Shard interpreter metadata by host architecture, operating system, and version, to
-            // invalidate the cache (e.g.) on OS upgrades.
-            cache_digest(&(
-                ARCH,
-                uv_platform::OsType::from_env()
-                    .map(|os_type| os_type.to_string())
-                    .unwrap_or_default(),
-                uv_platform::OsRelease::from_env()
-                    .map(|os_release| os_release.to_string())
-                    .unwrap_or_default(),
-            )),
-            format!("{digest}.msgpack"),
-        )
-    }
-
     /// Read a cached probe result if its file inputs are still fresh.
     fn read_cached(cache: &Cache, entry: &CacheEntry, executable: &Path) -> Option<Self> {
         if !cache
@@ -1662,7 +1671,7 @@ impl InterpreterInfo {
         let Some((target, canonical)) = ExecutableTarget::for_cache(&absolute, executable)? else {
             return uncached(probe()?);
         };
-        let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
+        let cache_entry = target.cache_entry(&canonical, cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
         }
@@ -1679,7 +1688,7 @@ impl InterpreterInfo {
 
         let cacheable = Self::determine_cacheability(
             executable,
-            &absolute,
+            &target,
             &canonical,
             #[cfg(windows)]
             links.as_ref(),
@@ -1743,7 +1752,7 @@ impl InterpreterInfo {
     /// Determine whether the probe result can be cached and record any discovered file inputs.
     fn determine_cacheability(
         executable: &Path,
-        absolute: &Path,
+        target: &ExecutableTarget<'_>,
         canonical: &Path,
         #[cfg(windows)] links: Option<&LinkSnapshot>,
         wire: &InterpreterInfoWire,
@@ -1758,17 +1767,17 @@ impl InterpreterInfo {
         // A managed junction can redirect the launcher during the probe.
         // A shim at the target path can start an entirely different interpreter.
         #[cfg(windows)]
-        if absolute != canonical {
+        if target.is_launcher() {
             let Some(base) = wire.metadata.sys_base_executable.as_deref() else {
                 return false;
             };
             if !base.is_absolute() || !is_same_file(base, canonical).unwrap_or(false) {
                 return false;
             }
-            let Some(target) = ExecutableTarget::identify(absolute) else {
+            let Some(current_target) = ExecutableTarget::identify(target.absolute) else {
                 return false;
             };
-            if !target
+            if !current_target
                 .canonicalize()
                 .is_ok_and(|current| current == canonical)
             {
@@ -1783,14 +1792,16 @@ impl InterpreterInfo {
                 let Some(links) = links else {
                     return false;
                 };
-                if links.target != base || target.snapshot_links(canonical).as_ref() != Some(links)
+                if links.target != base
+                    || current_target.snapshot_links(canonical).as_ref() != Some(links)
                 {
                     return false;
                 }
             }
         }
 
-        let Ok(current) = Self::cache_file_timestamps(absolute, canonical, &wire.file_inputs)
+        let Ok(current) =
+            Self::cache_file_timestamps(target.absolute, canonical, &wire.file_inputs)
         else {
             return false;
         };
@@ -2031,8 +2042,10 @@ mod tests {
     use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
     use crate::Interpreter;
+    #[cfg(windows)]
+    use crate::interpreter::canonicalize_executable;
     use crate::interpreter::{
-        Error, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire, canonicalize_executable,
+        Error, ExecutableTarget, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire,
     };
 
     fn mocked_interpreter_response(executable: &Path) -> Result<InterpreterInfoWire> {
@@ -2117,7 +2130,7 @@ mod tests {
             &proxy,
             windows_python_launcher(&alias, WindowMode::Console)?,
         )?;
-        let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
+        let target = ExecutableTarget::identify(&proxy).expect("valid proxy");
         assert!(target.snapshot_links(&canonical).is_none());
         Ok(())
     }
@@ -2150,8 +2163,9 @@ mod tests {
             windows_python_launcher(&target, WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let canonical = canonicalize_executable(&proxy)?;
-        let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
+        let (identified, canonical) =
+            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
+        let entry = identified.cache_entry(&canonical, &cache);
         // Ensure the directory update is observable even within a single clock tick.
         fs::OpenOptions::new()
             .access_mode(FILE_WRITE_ATTRIBUTES.0)
@@ -2202,7 +2216,8 @@ mod tests {
             windows_python_launcher(link.join("python.exe"), WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let canonical = canonicalize_executable(&proxy)?;
+        let (identified, canonical) =
+            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
         assert_eq!(canonical, dunce::canonicalize(first.join("python.exe"))?);
         let mut response = mocked_interpreter_response(&proxy)?;
         response.metadata.sys_base_executable = Some(canonical.clone());
@@ -2217,7 +2232,7 @@ mod tests {
             canonicalize_executable(&proxy)?,
             dunce::canonicalize(second.join("python.exe"))?
         );
-        let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
+        let entry = identified.cache_entry(&canonical, &cache);
         assert!(!entry.path().exists());
         Ok(())
     }
@@ -2244,7 +2259,8 @@ mod tests {
         let alias = dir.path().join("alias");
         uv_fs::create_symlink(&installation, &alias)?;
         let reported = alias.join("python.exe");
-        let canonical = canonicalize_executable(&proxy)?;
+        let (identified, canonical) =
+            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
         assert_ne!(dunce::canonicalize(&reported)?, canonical);
         let cache = Cache::temp()?.init().await?;
         let mut response = mocked_interpreter_response(&proxy)?;
@@ -2256,11 +2272,7 @@ mod tests {
             Ok((response, None))
         })?;
         assert_eq!(dunce::canonicalize(&reported)?, canonical);
-        assert!(
-            !InterpreterInfo::cache_entry(&proxy, &canonical, &cache)
-                .path()
-                .exists()
-        );
+        assert!(!identified.cache_entry(&canonical, &cache).path().exists());
         Ok(())
     }
 
@@ -2287,8 +2299,9 @@ mod tests {
             windows_python_launcher("base.exe", WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let canonical = canonicalize_executable(&proxy)?;
-        let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
+        let (identified, canonical) =
+            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
+        let entry = identified.cache_entry(&canonical, &cache);
         let mut response = mocked_interpreter_response(&proxy)?;
         response.metadata.sys_base_executable = Some(base.clone());
         let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
@@ -2362,7 +2375,7 @@ mod tests {
             &proxy,
             windows_python_launcher("base.exe", WindowMode::Console)?,
         )?;
-        let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
+        let target = ExecutableTarget::identify(&proxy).expect("valid proxy");
         for error in [io::ErrorKind::PermissionDenied, io::ErrorKind::NotFound] {
             let input = target.cache_input::<()>(&proxy, Err(error.into()))?;
             assert!(input.is_none());
@@ -2383,7 +2396,7 @@ mod tests {
             &proxy,
             windows_python_launcher(&first, WindowMode::Console)?,
         )?;
-        let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
+        let target = ExecutableTarget::identify(&proxy).expect("valid proxy");
         let resolve = || target.cache_input(&proxy, target.canonicalize());
 
         fs::remove_file(&first)?;
@@ -2447,7 +2460,7 @@ mod tests {
         response.metadata.sys_base_executable = Some(target);
         let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
         assert_eq!(info.metadata.sys_prefix, prefix);
-        let proxy_entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
+        let proxy_entry = proxy_only_entry(&proxy, &cache);
         assert!(!proxy_entry.path().exists());
         Interpreter::clear_cache(&proxy, &cache)?;
 
@@ -2470,7 +2483,7 @@ mod tests {
             windows_python_launcher("C:python.exe", WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
+        let entry = proxy_only_entry(&proxy, &cache);
         let response = mocked_interpreter_response(&proxy)?;
         let mut info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
         assert!(!entry.path().exists());
@@ -2482,6 +2495,15 @@ mod tests {
         Interpreter::clear_cache(&proxy, &cache)?;
         assert!(entry.path().exists());
         Ok(())
+    }
+
+    #[cfg(windows)]
+    fn proxy_only_entry(proxy: &Path, cache: &Cache) -> uv_cache::CacheEntry {
+        ExecutableTarget {
+            absolute: proxy,
+            trampoline_target: None,
+        }
+        .cache_entry(proxy, cache)
     }
 
     #[cfg(windows)]
@@ -2535,8 +2557,9 @@ mod tests {
         );
 
         let absolute = std::path::absolute(&mocked_interpreter)?;
-        let canonical = canonicalize_executable(&absolute)?;
-        let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, &cache);
+        let (identified, canonical) =
+            ExecutableTarget::for_cache(&absolute, &absolute)?.expect("cache target");
+        let cache_entry = identified.cache_entry(&canonical, &cache);
         let mut cached: InterpreterInfo = rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(
             cached.file_timestamps.get(&canonical),
