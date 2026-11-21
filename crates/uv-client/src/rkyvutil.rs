@@ -65,6 +65,72 @@ pub struct OwnedArchive<A> {
     archive: std::marker::PhantomData<A>,
 }
 
+/// A catalog can outlive the few queries that materialize a registry distribution from it.
+/// Keep large archives compressed. If an archive is queried repeatedly, retain its unpacked
+/// form so that backtracking can query every remaining version without decoding it again.
+#[derive(Debug)]
+pub struct RetainedArchive<A>(std::sync::Mutex<RetainedBacking<A>>);
+
+#[derive(Debug)]
+enum RetainedBacking<A> {
+    Unpacked(OwnedArchive<A>),
+    Packed {
+        bytes: Box<[u8]>,
+        size: usize,
+        read_once: bool,
+    },
+}
+
+impl<A> RetainedArchive<A> {
+    /// Pack large archives when the compressed bytes are smaller.
+    pub fn new(archive: OwnedArchive<A>, minimum_size: usize) -> Self {
+        let size = archive.raw.len();
+        if size >= minimum_size
+            && let Ok(bytes) = zstd::bulk::compress(&archive.raw, -5)
+            && bytes.len() < size
+        {
+            return Self(std::sync::Mutex::new(RetainedBacking::Packed {
+                bytes: bytes.into_boxed_slice(),
+                size,
+                read_once: false,
+            }));
+        }
+        Self(std::sync::Mutex::new(RetainedBacking::Unpacked(archive)))
+    }
+
+    /// Read an archive, retaining the decoded buffer from its second access onwards.
+    pub fn with<R>(&self, f: impl FnOnce(&OwnedArchive<A>) -> R) -> R {
+        let mut backing = self.0.lock().expect("catalog lock is not poisoned");
+        match &mut *backing {
+            RetainedBacking::Unpacked(archive) => f(archive),
+            RetainedBacking::Packed {
+                bytes,
+                size,
+                read_once,
+            } => {
+                let mut raw = AlignedVec::with_capacity(*size);
+                raw.resize(*size, 0);
+                let written = zstd::bulk::decompress_to_buffer(bytes, &mut raw)
+                    .expect("compressed bytes produced from a valid archive must decode");
+                assert_eq!(written, *size);
+                // The input comes exclusively from lossless compression of an OwnedArchive.
+                // This restores the exact validated bytes to a buffer with the same alignment.
+                let archive = OwnedArchive {
+                    raw,
+                    archive: std::marker::PhantomData,
+                };
+                let value = f(&archive);
+                if *read_once {
+                    *backing = RetainedBacking::Unpacked(archive);
+                } else {
+                    *read_once = true;
+                }
+                value
+            }
+        }
+    }
+}
+
 impl<A> OwnedArchive<A>
 where
     A: Archive + for<'a> Serialize<Serializer<'a>>,
@@ -143,5 +209,28 @@ where
         unsafe {
             rkyv::access_unchecked::<A::Archived>(&self.raw)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{OwnedArchive, RetainedArchive, RetainedBacking};
+
+    #[test]
+    fn retained_archive_preserves_bytes_across_promotion() {
+        let data: Vec<u8> = (0..=u8::MAX).cycle().take(100_000).collect();
+        let archive = OwnedArchive::from_unarchived(&data).unwrap();
+        let archive = RetainedArchive::new(archive, 0);
+        assert!(matches!(
+            *archive.0.lock().unwrap(),
+            RetainedBacking::Packed { .. }
+        ));
+        for _ in 0..3 {
+            archive.with(|restored| assert_eq!(restored.as_slice(), data.as_slice()));
+        }
+        assert!(matches!(
+            *archive.0.lock().unwrap(),
+            RetainedBacking::Unpacked(_)
+        ));
     }
 }
