@@ -1098,6 +1098,15 @@ fn empty_script_resource_is_preserved() -> Result<()> {
 fn rewriting_preserves_the_window_mode() -> Result<()> {
     use editpe::constants::{IMAGE_SUBSYSTEM_WINDOWS_CUI, IMAGE_SUBSYSTEM_WINDOWS_GUI};
 
+    fn subsystem(path: &Path) -> Result<u16> {
+        let bytes = fs_err::read(path)?;
+        let header = PE::parse(&bytes)?
+            .header
+            .optional_header
+            .context("Missing PE optional header")?;
+        Ok(header.windows_fields.subsystem)
+    }
+
     let dir = assert_fs::TempDir::new()?;
     let source = dir.child("source.exe");
     let destination = dir.child("destination.exe");
@@ -1109,17 +1118,13 @@ fn rewriting_preserves_the_window_mode() -> Result<()> {
             source.path(),
             windows_script_launcher("pass", is_gui, name)?,
         )?;
+        assert_eq!(subsystem(source.path())?, expected);
         let launcher =
             Launcher::try_from_path(source.path())?.context("Missing script launcher")?;
         launcher
             .with_python_path(dir.path().join(name))?
             .write_to_file(&mut File::create(destination.path())?)?;
-        let bytes = fs_err::read(destination.path())?;
-        let header = PE::parse(&bytes)?
-            .header
-            .optional_header
-            .context("Missing PE optional header")?;
-        assert_eq!(header.windows_fields.subsystem, expected);
+        assert_eq!(subsystem(destination.path())?, expected);
     }
     Ok(())
 }
