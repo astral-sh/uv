@@ -932,11 +932,13 @@ impl<'a> ExecutableTarget<'a> {
     }
 
     fn cache_input<T>(&self, input: io::Result<T>) -> io::Result<Option<T>> {
-        // An SMB share may permit execution while denying access to the
-        // normalized target path or its metadata. Probe the launcher directly.
+        // A share can deny access to the normalized path, and a volume without
+        // a drive letter may have no DOS path. The launcher can still work.
         match (self, input) {
             (Self::Trampoline(target), Err(err))
-                if err.kind() == io::ErrorKind::PermissionDenied =>
+                if err.kind() == io::ErrorKind::PermissionDenied
+                    || (err.kind() == io::ErrorKind::NotFound
+                        && !matches!(target.try_exists(), Ok(false))) =>
             {
                 trace!(
                     "Skipping interpreter cache for launcher targeting `{}`: {err}",
@@ -2244,7 +2246,7 @@ mod tests {
 
     #[cfg(windows)]
     #[tokio::test]
-    async fn denied_target_lookup_bypasses_cache() -> Result<()> {
+    async fn failed_canonicalization_of_existing_target_bypasses_cache() -> Result<()> {
         use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
         let dir = tempdir()?;
@@ -2262,20 +2264,22 @@ mod tests {
         InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
 
         let prefix = dir.path().join("fresh-probe");
-        let mut response = mocked_interpreter_response(&proxy)?;
-        response.metadata.sys_prefix = prefix.clone();
-        response.metadata.sys_base_executable = Some(target);
-        let info = InterpreterInfo::query_cached_with(
-            &proxy,
-            &cache,
-            |_| Err(io::ErrorKind::PermissionDenied.into()),
-            || Ok((response, None)),
-        )?;
-        assert_eq!(info.metadata.sys_prefix, prefix);
-        let proxy_entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
-        assert!(!proxy_entry.path().exists());
-        let after = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
-        assert_eq!(after.metadata.sys_prefix, cached.metadata.sys_prefix);
+        for error in [io::ErrorKind::PermissionDenied, io::ErrorKind::NotFound] {
+            let mut response = mocked_interpreter_response(&proxy)?;
+            response.metadata.sys_prefix = prefix.clone();
+            response.metadata.sys_base_executable = Some(target.clone());
+            let info = InterpreterInfo::query_cached_with(
+                &proxy,
+                &cache,
+                |_| Err(error.into()),
+                || Ok((response, None)),
+            )?;
+            assert_eq!(info.metadata.sys_prefix, prefix);
+            let proxy_entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
+            assert!(!proxy_entry.path().exists());
+            let after = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+            assert_eq!(after.metadata.sys_prefix, cached.metadata.sys_prefix);
+        }
         Ok(())
     }
 
