@@ -2312,22 +2312,31 @@ mod tests {
     #[cfg(all(windows, target_pointer_width = "64"))]
     #[tokio::test]
     async fn redirected_inputs_bypass_interpreter_cache() -> Result<()> {
-        // Use a real path in System32 without needing to write a venv there.
+        // A native launcher can start a 32-bit process. Use an existing
+        // executable as its target so the test needs no writes to System32.
         let windows = std::env::var_os("SystemRoot").expect("Windows directory");
-        let executable = Path::new(&windows).join(r"System32\cmd.exe");
+        let target = Path::new(&windows).join(r"System32\cmd.exe");
+        let dir = tempdir()?;
+        let executable = dir.path().join("proxy.exe");
+        fs::write(
+            &executable,
+            windows_python_launcher(&target, WindowMode::Console)?,
+        )?;
         let cache = Cache::temp()?.init().await?;
         let entry = CacheTarget::resolve(&executable, &executable)?
             .expect("cache target")
             .cache_entry(&cache);
         let mut response = mocked_interpreter_response(&executable)?;
-        response.metadata.pointer_size = crate::PointerSize::_32;
+        response.metadata.sys_base_executable = Some(target.clone());
+        response.metadata.pointer_size = serde_json::from_value("32".into())?;
         let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((response, None)))?;
         assert!(!entry.path().exists());
 
         // A previous version of uv could have cached the 32-bit response.
         fs::create_dir_all(entry.dir())?;
         fs::write(entry.path(), rmp_serde::to_vec(&info)?)?;
-        let native = mocked_interpreter_response(&executable)?;
+        let mut native = mocked_interpreter_response(&executable)?;
+        native.metadata.sys_base_executable = Some(target);
         let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((native, None)))?;
         assert!(info.metadata.pointer_size.is_64());
         InterpreterInfo::query_cached(&executable, &cache, unexpected_probe)?;
