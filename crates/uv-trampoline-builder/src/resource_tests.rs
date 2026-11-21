@@ -886,6 +886,15 @@ fn wow64_proxy_target_depends_on_the_launchers_view() -> Result<()> {
         Err(super::Error::UnprocessableMetadata)
     ));
 
+    fs_err::write(
+        proxy.path(),
+        windows_python_launcher(&redirected, WindowMode::Console)?,
+    )?;
+    assert_eq!(
+        super::read_launcher_target(proxy.path())?,
+        Some((LauncherKind::Python, redirected))
+    );
+
     let ordinary = dir.path().join(r"Sysnative\python.exe");
     write_proxy(&ordinary)?;
     assert_eq!(
