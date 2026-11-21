@@ -558,7 +558,7 @@ if __name__ == "__main__":
                     $ErrorActionPreference = 'Stop'
                     Import-Module Microsoft.PowerShell.Security
                     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile('{}', '{}')
-                    $signature = Set-AuthenticodeSignature -FilePath '{}' -Certificate $cert
+                    $signature = Set-AuthenticodeSignature -LiteralPath '{}' -Certificate $cert
                     if ($signature.SignerCertificate.Thumbprint -ne $cert.Thumbprint) {{
                         throw $signature.StatusMessage
                     }}
@@ -612,7 +612,7 @@ if __name__ == "__main__":
     fn console_script_launcher() -> Result<()> {
         // Create Temp Dirs
         let temp_dir = assert_fs::TempDir::new()?;
-        let console_bin_path = temp_dir.child("launcher.console.exe");
+        let console_bin_path = temp_dir.child("launcher[console].exe");
 
         // Locate an arbitrary python installation from PATH
         let python_executable_path = which("python")?;
