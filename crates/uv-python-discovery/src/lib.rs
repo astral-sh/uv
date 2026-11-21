@@ -164,6 +164,10 @@ impl uv_errors::Hinted for Error {
     fn hints(&self) -> uv_errors::Hints<'_> {
         match self {
             Self::MissingPython(_, Some(hint)) => uv_errors::Hints::from(hint.to_string()),
+            Self::MissingPython(err, None) => err
+                .broken_link
+                .as_ref()
+                .map_or_else(uv_errors::Hints::none, |link| link.hints()),
             Self::Discovery(err) => err.hints(),
             _ => uv_errors::Hints::none(),
         }

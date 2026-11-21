@@ -1397,7 +1397,7 @@ impl uv_errors::Hinted for Error {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub struct BrokenLink {
     path: PathBuf,
     kind: BrokenLinkKind,
@@ -1405,7 +1405,7 @@ pub struct BrokenLink {
     venv: bool,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum BrokenLinkKind {
     Symlink(Option<PathBuf>),
     Trampoline(PathBuf),

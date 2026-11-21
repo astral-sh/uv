@@ -681,6 +681,8 @@ pub fn find_environment(
         match find_python_installation(request, preference, python_preference, python_arch, cache)?
         {
             Ok(installation) => installation,
+            // An explicit path exists but its underlying Python is missing.
+            Err(err) if err.broken_link.is_some() => return Err(err.into()),
             Err(err) => {
                 return Err(
                     EnvironmentNotFound::new(err.request, err.environment_preference).into(),
