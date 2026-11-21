@@ -11,12 +11,12 @@ pub(crate) fn get_binary_type(path: &Path) -> windows::core::Result<u32> {
     // https://github.com/denoland/deno/blob/01a6379505712be34ebf2cdc874fa7f54a6e9408/runtime/permissions/which.rs#L131-L154
     // https://github.com/conradkleinespel/rooster/blob/afa78dc9918535752c4af59d2f812197ad754e5a/src/quale.rs#L51-L77
     let mut binary_type = 0u32;
-    let name = path
+    let name = std::path::absolute(path)?
         .as_os_str()
         .encode_wide()
         .chain(Some(0))
         .collect::<Vec<u16>>();
-    // SAFETY: winapi call
+    // SAFETY: `name` is a NUL-terminated wide string and `binary_type` is writable.
     unsafe { GetBinaryTypeW(PCWSTR(name.as_ptr()), &raw mut binary_type)? };
     Ok(binary_type)
 }
