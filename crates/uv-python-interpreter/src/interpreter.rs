@@ -2106,9 +2106,16 @@ mod tests {
 
     #[cfg(all(windows, target_pointer_width = "64"))]
     fn wow64_executable(windows: &Path) -> io::Result<Option<std::path::PathBuf>> {
-        // WOW64 is an optional component on Windows Server.
+        use uv_fs::wow64::FileSystemView;
+
         let exe = windows.join(r"SysWOW64\cmd.exe");
-        Ok(exe.try_exists()?.then_some(exe))
+        if !exe.try_exists()? {
+            // WOW64 is an optional component on Windows Server.
+            return Ok(None);
+        }
+        let view = FileSystemView::for_executable(&exe);
+        assert!(matches!(view, FileSystemView::Bit32), "{view:?}");
+        Ok(Some(exe))
     }
 
     #[cfg(all(windows, target_pointer_width = "64"))]
