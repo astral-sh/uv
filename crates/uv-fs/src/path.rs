@@ -474,10 +474,42 @@ pub fn may_be_redirected_by_wow64(path: &Path) -> std::io::Result<bool> {
             && let Some(parent) = ancestor.parent()
             && same_file::is_same_file(parent, &windows)?
         {
+            let suffix = path.strip_prefix(ancestor).expect("ancestor of path");
+            if name.eq_ignore_ascii_case("LastGood") {
+                return Ok(suffix
+                    .iter()
+                    .next()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("System32")));
+            }
+            if name.eq_ignore_ascii_case("System32") {
+                return Ok(!wow64_shared_subdirectory(suffix));
+            }
             return Ok(true);
         }
     }
     Ok(false)
+}
+
+/// Subdirectories of `System32` shared by both architectures on supported Windows versions.
+#[cfg(windows)]
+fn wow64_shared_subdirectory(path: &Path) -> bool {
+    let mut parts = path.iter();
+    let Some(name) = parts.next() else {
+        return false;
+    };
+    if name.eq_ignore_ascii_case("drivers") {
+        return parts
+            .next()
+            .is_some_and(|next| next.eq_ignore_ascii_case("etc"));
+    }
+    if name.eq_ignore_ascii_case("DriverStore") {
+        // Wine 11 lists `driversstore` among its exceptions, so it redirects `DriverStore`.
+        // https://github.com/wine-mirror/wine/blob/wine-11.0/dlls/wow64/file.c#L124
+        return !uv_windows::is_wine();
+    }
+    ["catroot", "catroot2", "logfiles", "spool"]
+        .iter()
+        .any(|shared| name.eq_ignore_ascii_case(shared))
 }
 
 /// Convert a [`Path`] to a Windows `verbatim` path (prefixed with `\\?\`) when possible to bypass

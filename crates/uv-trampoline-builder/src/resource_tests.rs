@@ -901,6 +901,13 @@ fn wow64_proxy_target_depends_on_the_launchers_view() -> Result<()> {
         super::read_launcher_target(proxy.path())?,
         Some((LauncherKind::Python, ordinary))
     );
+
+    let shared = Path::new(&windows).join(r"System32\drivers\etc\python.exe");
+    write_proxy(&shared)?;
+    assert_eq!(
+        super::read_launcher_target(proxy.path())?,
+        Some((LauncherKind::Python, shared))
+    );
     Ok(())
 }
 
