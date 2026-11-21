@@ -85,7 +85,7 @@ impl Launcher {
 
     /// Serialize the launcher, declining a layout that changes the visible ZIP.
     pub fn into_bytes(self, is_gui: bool) -> Result<Option<Vec<u8>>, Error> {
-        let python_path = self.python_path.simplified_display().to_string();
+        let python_path = encode_python_path(&self.python_path)?;
 
         let launcher_bin = get_launcher_bin(is_gui)?;
 
@@ -165,6 +165,9 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("Failed to parse executable path")]
     InvalidPath(#[source] Utf8Error),
+    #[cfg(windows)]
+    #[error("A Windows launcher requires a nonempty Python path")]
+    EmptyPath,
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
@@ -268,6 +271,15 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     Ok(image.data().to_vec())
 }
 
+#[cfg(windows)]
+fn encode_python_path(path: &Path) -> Result<String, Error> {
+    let path = path.simplified_display().to_string();
+    if path.is_empty() {
+        return Err(Error::EmptyPath);
+    }
+    Ok(path)
+}
+
 /// Construct a Windows script launcher.
 ///
 /// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific feature
@@ -295,8 +307,7 @@ pub fn windows_script_launcher(
 ) -> Result<Vec<u8>, Error> {
     let launcher_bin = get_launcher_bin(is_gui)?;
     let payload = script_archive(launcher_python_script)?;
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
+    let python_path = encode_python_path(python_executable.as_ref())?;
 
     let resources: &[(&str, &[u8])] = &[
         (
@@ -348,12 +359,9 @@ pub fn windows_python_launcher(
     python_executable: impl AsRef<Path>,
     window_mode: WindowMode,
 ) -> Result<Vec<u8>, Error> {
-    use uv_fs::Simplified;
-
     let launcher_bin: &[u8] = get_launcher_bin(matches!(window_mode, WindowMode::Windowed))?;
 
-    let python = python_executable.as_ref();
-    let python_path = python.simplified_display().to_string();
+    let python_path = encode_python_path(python_executable.as_ref())?;
 
     let resources: &[(&str, &[u8])] = &[
         (

@@ -640,6 +640,24 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
     )?;
     assert!(super::read_launcher_target(path.path())?.is_none());
     assert!(Launcher::try_from_path(path.path())?.is_none());
+
+    assert!(matches!(
+        windows_python_launcher("", WindowMode::Console),
+        Err(super::Error::EmptyPath)
+    ));
+    assert!(matches!(
+        windows_script_launcher("pass", false, ""),
+        Err(super::Error::EmptyPath)
+    ));
+    fs_err::write(
+        path.path(),
+        windows_python_launcher("python.exe", WindowMode::Console)?,
+    )?;
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
+    assert!(matches!(
+        launcher.with_python_path("".into()).into_bytes(false),
+        Err(super::Error::EmptyPath)
+    ));
     Ok(())
 }
 
