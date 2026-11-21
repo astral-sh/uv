@@ -1451,12 +1451,10 @@ impl InterpreterInfo {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-            // Handle uninstalled CPython interpreters on Windows.
-            //
-            // The IO error from the CPython trampoline is unstructured and localized, so we check
-            // whether the `home` from `pyvenv.cfg` still exists, it's missing if the Python
-            // interpreter was uninstalled.
-            if python_home(interpreter).is_some_and(|home| !home.exists()) {
+            // The Windows CPython trampoline reports localized errors. Only diagnose
+            // an uninstalled interpreter when its `pyvenv.cfg` home is known to be
+            // missing, since this diagnosis can trigger environment replacement.
+            if python_home(interpreter).is_some_and(|home| matches!(home.try_exists(), Ok(false))) {
                 return Err(Error::BrokenLink(BrokenLink::new(
                     interpreter,
                     BrokenLinkKind::Trampoline(None),
@@ -2400,14 +2398,20 @@ mod tests {
         use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
         let dir = tempdir()?;
-        let proxy = dir.path().join("python.exe");
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let proxy = scripts.join("python.exe");
         let home = dir.path().join("home");
         let target = home.join("python.exe");
         fs::create_dir(&home)?;
         fs::write(&target, [])?;
         fs::write(
+            dir.path().join("pyvenv.cfg"),
+            format!("home = {}\n", home.display()),
+        )?;
+        fs::write(
             &proxy,
-            windows_python_launcher(r"home\python.exe", WindowMode::Console)?,
+            windows_python_launcher(r"..\home\python.exe", WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
         let mut response = mocked_interpreter_response(&proxy)?;
@@ -2423,6 +2427,12 @@ mod tests {
         fs::rename(&redirect, &home)?;
         let err = canonicalize_executable(&proxy).unwrap_err();
         assert_ne!(err.kind(), io::ErrorKind::NotFound, "{err}");
+
+        // Project discovery would replace the environment on a broken-link error.
+        assert!(home.try_exists().is_err());
+        let err = Interpreter::query(&proxy, &cache).unwrap_err();
+        assert!(matches!(err, Error::StatusCode(_)), "{err}");
+
         let prefix = dir.path().join("fresh-probe");
         let mut response = mocked_interpreter_response(&proxy)?;
         response.metadata.sys_prefix = prefix.clone();
