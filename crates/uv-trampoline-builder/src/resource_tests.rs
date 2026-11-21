@@ -810,6 +810,10 @@ fn python_proxy_keeps_its_optional_payload() -> Result<()> {
     )?;
     fs_err::write(path.path(), bytes)?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
+    let rewritten = temp_dir.child("rewritten.exe");
+    launcher.write_to_file(&mut File::create(rewritten.path())?)?;
+    let launcher = Launcher::try_from_path(rewritten.path())?.context("Missing rewritten proxy")?;
+    assert_eq!(launcher.kind, LauncherKind::Python);
     assert_eq!(
         launcher.script_data.as_deref(),
         Some(b"optional payload".as_slice())
