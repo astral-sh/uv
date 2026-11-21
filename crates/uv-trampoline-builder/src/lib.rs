@@ -175,6 +175,9 @@ pub enum Error {
     #[error("A Windows launcher requires a nonempty Python path")]
     EmptyPath,
     #[cfg(windows)]
+    #[error("The Python path in a Windows launcher cannot contain a NUL character")]
+    NulInPath,
+    #[cfg(windows)]
     #[error("Cannot encode the Python path `{}` as UTF-8 in a Windows launcher", path.user_display())]
     NonUtf8Path { path: PathBuf },
     #[cfg(windows)]
@@ -291,13 +294,23 @@ fn encode_python_path(path: &impl AsRef<Path>) -> Result<&str, Error> {
         .ok_or_else(|| Error::NonUtf8Path {
             path: path.as_ref().to_path_buf(),
         })?;
+    validate_python_path(path)?;
+    Ok(path)
+}
+
+#[cfg(windows)]
+fn validate_python_path(path: &str) -> Result<(), Error> {
     if path.is_empty() {
         return Err(Error::EmptyPath);
     }
     if path.len() > MAX_PYTHON_PATH_BYTES {
         return Err(Error::PathTooLong);
     }
-    Ok(path)
+    // The trampoline passes the path in a NUL-terminated command line.
+    if path.contains('\0') {
+        return Err(Error::NulInPath);
+    }
+    Ok(())
 }
 
 /// Construct a Windows script launcher.

@@ -742,6 +742,33 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
 }
 
 #[test]
+fn nul_in_target_is_rejected() -> Result<()> {
+    let python = "python.exe\0suffix";
+    assert!(matches!(
+        windows_python_launcher(python, WindowMode::Console),
+        Err(super::Error::NulInPath)
+    ));
+    let dir = assert_fs::TempDir::new()?;
+    let path = dir.child("proxy.exe");
+    fs_err::write(
+        path.path(),
+        write_resources(
+            get_launcher_bin(false)?,
+            &[
+                (RESOURCE_TRAMPOLINE_KIND, &[2]),
+                (RESOURCE_PYTHON_PATH, python.as_bytes()),
+            ],
+        )?,
+    )?;
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn unpaired_surrogate_in_target_is_rejected() {
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;

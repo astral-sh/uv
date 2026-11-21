@@ -358,12 +358,14 @@ impl Resources {
 
     fn read_path(&mut self, range: Range<u64>) -> Result<String, ReadError> {
         let length = range.end - range.start;
-        if length == 0 || length > super::MAX_PYTHON_PATH_BYTES as u64 {
+        if length > super::MAX_PYTHON_PATH_BYTES as u64 {
             return Err(Inconclusive);
         }
         let bytes = self.read(range).map_err(ReadError::Payload)?;
-        String::from_utf8(bytes)
-            .map_err(|err| ReadError::Payload(Error::InvalidPath(err.utf8_error())))
+        let path = String::from_utf8(bytes)
+            .map_err(|err| ReadError::Payload(Error::InvalidPath(err.utf8_error())))?;
+        super::validate_python_path(&path).map_err(|_| Inconclusive)?;
+        Ok(path)
     }
 
     fn read(&mut self, range: Range<u64>) -> Result<Vec<u8>, Error> {
