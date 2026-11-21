@@ -118,7 +118,19 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1-}"
-    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    if [ -n "${ZSH_VERSION:+x}" ] ; then
+        # zsh reads `%` in `PS1` as a prompt escape and, with `PROMPT_SUBST`, expands backslashes,
+        # dollar signs and backticks each time the prompt is drawn. Escape them even when
+        # `PROMPT_SUBST` is unset, since it can be enabled after activation.
+        _VIRTUAL_PROMPT="${VIRTUAL_ENV_PROMPT//\\/\\\\}"
+        _VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\$/\\\$}"
+        _VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\`/\\\`}"
+        _VIRTUAL_PROMPT="${_VIRTUAL_PROMPT//\%/%%}"
+        PS1="(${_VIRTUAL_PROMPT}) ${PS1-}"
+        unset _VIRTUAL_PROMPT
+    else
+        PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    fi
     export PS1
 fi
 

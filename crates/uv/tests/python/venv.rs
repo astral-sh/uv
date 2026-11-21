@@ -2229,6 +2229,35 @@ fn activate_non_relocatable_venv_ksh() {
     ");
 }
 
+/// zsh reads `%` in `PS1` as a prompt escape and, with `PROMPT_SUBST`, expands backslashes,
+/// dollar signs and backticks each time the prompt is drawn, so the environment name must be
+/// escaped. Emulate zsh using bash, which takes the zsh branch when `ZSH_VERSION` is set.
+#[test]
+#[cfg(unix)]
+fn activate_venv_zsh_prompt_is_escaped() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context
+        .venv()
+        .arg("a`b`$(c)%n")
+        .arg("--no-relocatable")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.external_command("bash")
+        .arg("-c")
+        .arg(indoc! {r#"
+            PS1='$ '
+            . 'a`b`$(c)%n/bin/activate' && printf '%s\n' "$PS1"
+        "#})
+        .env(EnvVars::ZSH_VERSION, "test"), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    (a\`b\`\$(c)%%n) $
+    ");
+}
+
 #[test]
 fn venv_python_preference() {
     let context =
