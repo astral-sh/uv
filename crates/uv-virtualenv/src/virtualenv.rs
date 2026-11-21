@@ -54,6 +54,9 @@ fn install_distutils_patch(interpreter: &Interpreter) -> bool {
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     for (key, value) in data {
+        // `pyvenv.cfg` is a line-oriented format. Keep user-controlled values such as the
+        // activation prompt on one physical line so they cannot inject additional settings.
+        let value = value.replace(['\r', '\n'], " ");
         writeln!(f, "{key} = {value}")?;
     }
     Ok(())
