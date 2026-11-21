@@ -63,6 +63,18 @@ impl<'lock> RequirementsTxtExport<'lock> {
 
 impl std::fmt::Display for RequirementsTxtExport<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // If all advertised hashes belong to filtered wheels, a bare version pin would
+        // accept new files for the release. Build hashes can cover other platforms, so
+        // require a digest at installation time if the requirement's marker is active.
+        if self.hashes
+            && self.nodes.iter().any(|node| {
+                !node.package.build_hashes.is_empty()
+                    && node.package.artifact_hashes().next().is_none()
+            })
+        {
+            writeln!(f, "--require-hashes")?;
+        }
+
         // Write out each package.
         for ExportableRequirement {
             package,

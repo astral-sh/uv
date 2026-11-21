@@ -323,6 +323,12 @@ fn write_package(
         writer.key_multiline_array("wheels", &package.wheels, write_wheel_inline)?;
     }
 
+    if !package.build_hashes.is_empty() {
+        writer.key_multiline_array("build-hashes", &package.build_hashes, |writer, hash| {
+            writer.value(hash.to_string())
+        })?;
+    }
+
     if !package.optional_dependencies.is_empty() {
         writer.table(&["package", "optional-dependencies"])?;
         for (extra, dependencies) in &package.optional_dependencies {

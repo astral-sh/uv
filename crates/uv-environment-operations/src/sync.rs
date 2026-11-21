@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_command_support::Printer;
@@ -295,7 +294,7 @@ pub async fn sync_from_lock(
     // Also verify artifacts in the full lockfile, including unselected extras and groups.
     let build_hasher = target
         .lock()
-        .hash_strategy(target.install_path(), &FxHashSet::default())?
+        .build_hash_strategy(target.install_path())?
         .with_constraint_hashes(&build_hasher)?;
 
     // Resolve the flat indexes from `--find-links`.
