@@ -1376,8 +1376,26 @@ impl InterpreterInfo {
 
     /// Return the cache entry for an interpreter's absolute and canonical executable paths.
     fn cache_entry(absolute: &Path, canonical: &Path, cache: &Cache) -> CacheEntry {
+        // We use the absolute path for the cache entry to avoid cache collisions for relative
+        // paths. But we don't want to query the executable with symbolic links resolved because
+        // that can change reported values, e.g., `sys.executable`. We include the canonical
+        // path in the cache entry as well, otherwise we can have cache collisions if an
+        // absolute path refers to different interpreters with matching ctimes, e.g., if you
+        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+        // modified at the same time.
+        //
+        // Launcher overrides can also change the reported executable and virtual environment
+        // without changing either executable path.
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
+        let key = (absolute, canonical, &python_executable, &pyvenv_launcher);
+        // Only reuse Windows launcher entries from probes that checked for a
+        // direct target. This avoids inspecting the target PE on cache hits.
+        let digest = if cfg!(windows) && absolute != canonical {
+            cache_digest(&("direct-launcher", key))
+        } else {
+            cache_digest(&key)
+        };
 
         cache.entry(
             CacheBucket::Interpreter,
@@ -1392,20 +1410,7 @@ impl InterpreterInfo {
                     .map(|os_release| os_release.to_string())
                     .unwrap_or_default(),
             )),
-            // We use the absolute path for the cache entry to avoid cache collisions for relative
-            // paths. But we don't want to query the executable with symbolic links resolved because
-            // that can change reported values, e.g., `sys.executable`. We include the canonical
-            // path in the cache entry as well, otherwise we can have cache collisions if an
-            // absolute path refers to different interpreters with matching ctimes, e.g., if you
-            // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
-            // modified at the same time.
-            //
-            // Launcher overrides can also change the reported executable and virtual environment
-            // without changing either executable path.
-            format!(
-                "{}.msgpack",
-                cache_digest(&(absolute, canonical, &python_executable, &pyvenv_launcher))
-            ),
+            format!("{digest}.msgpack"),
         )
     }
 
@@ -1583,6 +1588,18 @@ impl InterpreterInfo {
     ) -> bool {
         // Shims such as pyenv can redirect to a different interpreter without changing the shim.
         if !is_same_file(executable, &wire.metadata.sys_executable).unwrap_or(false) {
+            return false;
+        }
+
+        // When a venv launcher targets another proxy, the two tracked paths
+        // omit the interpreter that supplied the metadata.
+        #[cfg(windows)]
+        if absolute != canonical
+            && !matches!(
+                uv_trampoline_builder::read_launcher_target(canonical),
+                Ok(None)
+            )
+        {
             return false;
         }
 
@@ -1897,6 +1914,37 @@ mod tests {
 
     fn unexpected_probe() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error> {
         Err(io::Error::other("expected an interpreter cache hit").into())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn nested_launcher_bypasses_cache() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let target = dir.path().join("inner.exe");
+        fs::write(
+            &proxy,
+            windows_python_launcher("inner.exe", WindowMode::Console)?,
+        )?;
+        fs::write(
+            &target,
+            windows_python_launcher("base.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let canonical = canonicalize_executable(&proxy)?;
+        let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
+        let response = mocked_interpreter_response(&proxy)?;
+        InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        assert!(!entry.path().exists());
+
+        // A direct target can be tracked by its own timestamp.
+        fs::write(&target, [])?;
+        let response = mocked_interpreter_response(&proxy)?;
+        InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+        Ok(())
     }
 
     #[cfg(windows)]
