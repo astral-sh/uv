@@ -1043,9 +1043,18 @@ pub async fn run(
                     if !entry.file_type()?.is_file() {
                         continue;
                     }
+                    let name = entry.file_name();
+                    // A requirements executable that stays on PATH in its own directory
+                    // still takes precedence over a copy from the base environment.
+                    #[cfg(windows)]
+                    if interpreter.scripts() != requirements_env.scripts()
+                        && requirements_env.scripts().join(&name).is_file()
+                    {
+                        continue;
+                    }
                     match copy_entrypoint(
                         &entry.path(),
-                        &ephemeral_env.scripts().join(entry.file_name()),
+                        &ephemeral_env.scripts().join(name),
                         interpreter.sys_executable(),
                         ephemeral_env.interpreter().sys_executable(),
                     ) {
