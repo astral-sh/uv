@@ -2,9 +2,13 @@ use std::env;
 use std::fmt::{Display, Formatter};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+#[cfg(feature = "fips")]
+use std::sync::Once;
 
 use itertools::Itertools;
 use reqwest::{Certificate, Identity};
+#[cfg(feature = "fips")]
+use rustls::crypto::{CryptoProvider, default_fips_provider};
 use rustls_native_certs::{CertificateResult, load_certs_from_paths};
 use rustls_pki_types::CertificateDer;
 use tracing::{debug, warn};
@@ -189,6 +193,37 @@ impl Display for InvalidCertificateWarning {
         }
 
         Ok(())
+    }
+}
+
+/// Install the process-wide [`rustls`] crypto provider used by all HTTP clients.
+///
+/// When uv is built with the `fips` feature, this installs the FIPS 140-3 validated `aws-lc-rs`
+/// provider ([`rustls::crypto::default_fips_provider`]) as the process default, which reqwest
+/// picks up for every client it builds. Without the `fips` feature, this is a no-op and reqwest
+/// falls back to its default `aws-lc-rs` provider.
+///
+/// This function is idempotent and cheap to call repeatedly.
+///
+/// # Panics
+///
+/// With the `fips` feature, panics if a non-FIPS crypto provider was already installed as the
+/// process default, since continuing would silently use non-validated cryptography.
+pub fn install_crypto_provider() {
+    #[cfg(feature = "fips")]
+    {
+        static INSTALL: Once = Once::new();
+        INSTALL.call_once(|| {
+            // This fails only if a provider is already installed; we verify that one below.
+            let _ = default_fips_provider().install_default();
+            let provider =
+                CryptoProvider::get_default().expect("a rustls crypto provider was just installed");
+            assert!(
+                provider.fips(),
+                "uv was built with the `fips` feature, but a non-FIPS rustls crypto provider is installed"
+            );
+            debug!("Using the FIPS 140-3 validated aws-lc-rs TLS crypto provider");
+        });
     }
 }
 
@@ -503,7 +538,29 @@ pub(crate) fn read_identity(
 mod tests {
     use std::ffi::OsString;
 
+    #[cfg(feature = "fips")]
+    use rustls::{ClientConfig, RootCertStore};
+
     use super::*;
+
+    #[cfg(feature = "fips")]
+    #[test]
+    fn test_fips_crypto_provider() {
+        install_crypto_provider();
+        let provider = CryptoProvider::get_default()
+            .expect("crypto provider should be installed")
+            .clone();
+        assert!(provider.fips());
+
+        // A client config built the way reqwest builds it must also be FIPS-compliant, which
+        // additionally requires extended master secret for TLS 1.2.
+        let config = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(RootCertStore::empty())
+            .with_no_client_auth();
+        assert!(config.fips());
+    }
 
     fn generate_cert_pem() -> String {
         let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
