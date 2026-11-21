@@ -3,7 +3,10 @@ mod nvidia;
 mod tpu;
 mod x86_64;
 
+use std::error::Error;
+
 use tracing::debug;
+use uv_distribution_filename::VariantLabel;
 use uv_distribution_types::{
     SupportedVariantFeature, SupportedVariantProperties, VariantNamespace, VariantProviderRequest,
     VariantsJsonContent,
@@ -61,13 +64,69 @@ trait VendoredVariantProvider: Sync {
     fn namespace(&self) -> &VariantNamespace;
     /// Return compatible properties in preference order.
     fn properties(&self, target: &Platform) -> Option<&[SupportedVariantFeature]>;
+    /// Return a detection failure, which can accompany partially detected properties.
+    fn detection_error(&self) -> Option<&(dyn Error + Send + Sync)> {
+        None
+    }
 }
 
-/// Collect the variant properties supported by enabled static and vendored providers.
-pub fn supported_variant_properties(
+/// One provider's detection result. An error may accompany partially detected properties.
+#[derive(Debug, Default)]
+struct ProviderDetection {
+    properties: Vec<SupportedVariantFeature>,
+    error: Option<Box<dyn Error + Send + Sync>>,
+}
+
+impl ProviderDetection {
+    fn failed(error: impl Error + Send + Sync + 'static) -> Self {
+        Self {
+            error: Some(Box::new(error)),
+            ..Self::default()
+        }
+    }
+}
+
+/// The outcome of detecting compatible wheel variant properties.
+#[derive(Debug)]
+pub struct VariantDetection {
+    supported: SupportedVariantProperties,
+    errors: Vec<VariantProviderError>,
+}
+
+impl VariantDetection {
+    /// Return compatible properties emitted by enabled providers.
+    pub fn supported(&self) -> &SupportedVariantProperties {
+        &self.supported
+    }
+
+    /// Return detection errors for providers with unsupported properties in this variant.
+    pub fn errors_for<'a>(
+        &'a self,
+        metadata: &'a VariantsJsonContent,
+        label: &'a VariantLabel,
+    ) -> impl Iterator<Item = &'a VariantProviderError> {
+        self.errors.iter().filter(move |error| {
+            metadata.is_variant_namespace_unsupported(label, &error.namespace, &self.supported)
+        })
+    }
+}
+
+/// A wheel variant provider failed to detect compatible properties.
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, thiserror::Error)]
+#[error(
+    "The `{namespace}` wheel variant provider failed to detect compatible properties: {message}"
+)]
+pub struct VariantProviderError {
+    namespace: VariantNamespace,
+    message: String,
+}
+
+/// Detect compatible properties from enabled static and vendored providers.
+pub fn detect_variant_properties(
     metadata: &VariantsJsonContent,
     target: &Platform,
-) -> SupportedVariantProperties {
+) -> VariantDetection {
+    let mut errors = Vec::new();
     let detected = metadata
         .provider_requests()
         .filter_map(|(namespace, request)| {
@@ -89,9 +148,18 @@ pub fn supported_variant_properties(
                 }
                 return None;
             };
+            if let Some(error) = provider.detection_error() {
+                errors.push(VariantProviderError {
+                    namespace: namespace.clone(),
+                    message: error.to_string(),
+                });
+            }
             Some((namespace, provider.properties(target)?))
         });
-    metadata.supported_properties(detected)
+    VariantDetection {
+        supported: metadata.supported_properties(detected),
+        errors,
+    }
 }
 
 /// Find a vendored provider that satisfies a plugin request without installing other packages.
