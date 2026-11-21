@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader, Read, Seek, SeekFrom, Take};
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use editpe::constants::{
     IMAGE_SUBSYSTEM_WINDOWS_GUI, PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE,
@@ -78,35 +78,21 @@ enum Languages {
     PreferNeutral,
 }
 
-pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    let Some(launcher) = LauncherFile::open(path)? else {
-        return Ok(None);
-    };
-    let mut target = PathBuf::from(launcher.python_path);
-    if target.is_relative() {
-        // The trampoline joins the stored path to the parent of current_exe().
-        let executable = std::path::absolute(path)?;
-        let parent = executable.parent().ok_or(Error::UnprocessableMetadata)?;
-        target = parent.join(target);
-        // A drive-relative target such as C:python.exe depends on the
-        // working directory for that drive even after the join.
-        if target.is_relative() {
-            return Err(Error::UnprocessableMetadata);
-        }
-    }
-    Ok(Some((launcher.kind, target)))
+pub(super) fn read_stored_target(file: File) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+    Ok(LauncherFile::read(file)?
+        .map(|launcher| (launcher.kind, PathBuf::from(launcher.python_path))))
 }
 
-pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
-    match read_for_rewrite(path) {
+pub(super) fn read_launcher(file: File) -> Result<Option<Launcher>, Error> {
+    match read_for_rewrite(file) {
         Ok(launcher) => Ok(launcher),
         Err(ReadError::Lookup(_) | Inconclusive) => Ok(None),
         Err(ReadError::Payload(err)) => Err(err),
     }
 }
 
-fn read_for_rewrite(path: &Path) -> Result<Option<Launcher>, ReadError> {
-    let Some(mut file) = LauncherFile::open(path)? else {
+fn read_for_rewrite(file: File) -> Result<Option<Launcher>, ReadError> {
+    let Some(mut file) = LauncherFile::read(file)? else {
         return Ok(None);
     };
     let policy = match file.kind {
@@ -149,12 +135,7 @@ struct LauncherFile {
 }
 
 impl LauncherFile {
-    fn open(path: &Path) -> Result<Option<Self>, ReadError> {
-        let file = match File::open(path) {
-            Ok(file) => file,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => return Err(ReadError::Lookup(err)),
-        };
+    fn read(file: File) -> Result<Option<Self>, ReadError> {
         let Some(mut resources) = read_headers(file)? else {
             return Ok(None);
         };

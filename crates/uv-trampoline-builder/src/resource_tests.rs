@@ -595,23 +595,27 @@ fn resources_match_native_windows_updates() -> Result<()> {
 }
 
 #[test]
-fn locked_launcher_reports_read_error_for_target_lookup() -> Result<()> {
+fn header_read_failure_reports_target_lookup_error() -> Result<()> {
+    use fs_err::os::windows::fs::OpenOptionsExt;
+    use windows::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
+
+    use super::resource_reader::{read_launcher, read_stored_target};
+
     let dir = assert_fs::TempDir::new()?;
     let path = dir.child("proxy.exe");
-    fs_err::write(
-        path.path(),
-        windows_python_launcher("python.exe", WindowMode::Console)?,
-    )?;
-    let file = File::open(path.path())?;
-    file.lock()?;
-    // Windows allows another handle to open the file but rejects reads of
-    // the locked range, including the DOS header.
-    File::open(path.path())?;
+    let image = windows_python_launcher("python.exe", WindowMode::Console)?;
+    fs_err::write(path.path(), &image)?;
+
+    // Grant access to metadata so the first denied read is the DOS header.
+    let file = fs_err::OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES.0)
+        .open(path.path())?;
+    assert_eq!(file.metadata()?.len(), image.len() as u64);
     assert!(matches!(
-        super::read_launcher_target(path.path()),
-        Err(super::Error::Io(_))
+        read_stored_target(file.try_clone()?),
+        Err(super::Error::Io(err)) if err.kind() == std::io::ErrorKind::PermissionDenied
     ));
-    assert!(Launcher::try_from_path(path.path())?.is_none());
+    assert!(read_launcher(file)?.is_none());
     Ok(())
 }
 

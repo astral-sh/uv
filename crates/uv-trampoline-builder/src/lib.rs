@@ -65,7 +65,26 @@ const MAX_PYTHON_PATH_BYTES: usize = 3 * 32_767;
 /// language or working directory.
 #[cfg(windows)]
 pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    resource_reader::read_target(path)
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(err.into()),
+    };
+    let Some((kind, mut target)) = resource_reader::read_stored_target(file)? else {
+        return Ok(None);
+    };
+    if target.is_relative() {
+        // The trampoline joins the stored path to the parent of current_exe().
+        let executable = std::path::absolute(path)?;
+        let parent = executable.parent().ok_or(Error::UnprocessableMetadata)?;
+        target = parent.join(target);
+        // A drive-relative target such as C:python.exe depends on the
+        // working directory for that drive even after the join.
+        if target.is_relative() {
+            return Err(Error::UnprocessableMetadata);
+        }
+    }
+    Ok(Some((kind, target)))
 }
 
 /// Returns `Ok(None)` on platforms without Windows trampolines.
@@ -91,7 +110,10 @@ impl Launcher {
     /// Returns `Ok(None)` if the file cannot be identified as a rewritable trampoline.
     /// Returns `Err` if reading or decoding a located launcher payload fails.
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        resource_reader::read_launcher(path)
+        let Ok(file) = File::open(path) else {
+            return Ok(None);
+        };
+        resource_reader::read_launcher(file)
     }
 
     /// Write this trampoline launcher to a file.
