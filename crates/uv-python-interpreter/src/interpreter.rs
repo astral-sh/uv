@@ -1110,7 +1110,7 @@ impl<'a> CacheTarget<'a> {
         };
 
         #[cfg(windows)]
-        if !wire.metadata.shares_cache_inputs(&current) {
+        if !wire.metadata.shares_cache_inputs(executable, &current) {
             return false;
         }
 
@@ -1561,17 +1561,27 @@ struct InterpreterMetadata {
 
 #[cfg(windows)]
 impl InterpreterMetadata {
-    /// A timestamp in uv's view cannot track changes to a different file used by Python.
-    fn shares_cache_inputs(&self, inputs: &HashMap<PathBuf, Option<Timestamp>>) -> bool {
+    /// The launcher and Python can each consult `pyvenv.cfg` in their own view.
+    fn shares_cache_inputs(
+        &self,
+        executable: &Path,
+        inputs: &HashMap<PathBuf, Option<Timestamp>>,
+    ) -> bool {
         use uv_fs::wow64::FileSystemView;
 
-        let view = match self.pointer_size {
+        // Inspect the executable's architecture only if a path may have multiple views.
+        if inputs
+            .keys()
+            .all(|path| matches!(FileSystemView::Unknown.may_redirect(path), Ok(false)))
+        {
+            return true;
+        }
+        let python = match self.pointer_size {
             PointerSize::_32 => FileSystemView::Bit32,
             PointerSize::_64 => FileSystemView::Bit64,
         };
-        inputs
-            .keys()
-            .all(|path| matches!(view.may_redirect(path), Ok(false)))
+        python.matches_current_process()
+            && FileSystemView::for_executable(executable).matches_current_process()
     }
 }
 
@@ -1771,7 +1781,10 @@ impl InterpreterInfo {
         };
 
         #[cfg(windows)]
-        if !cached.metadata.shares_cache_inputs(&cached.file_timestamps) {
+        if !cached
+            .metadata
+            .shares_cache_inputs(executable, &cached.file_timestamps)
+        {
             return None;
         }
 
@@ -2095,15 +2108,20 @@ mod tests {
     use crate::interpreter::{ExecutableTarget, LinkSnapshot, canonicalize_executable};
 
     #[cfg(all(windows, target_pointer_width = "64"))]
+    fn wow64_executable(windows: &Path) -> io::Result<Option<std::path::PathBuf>> {
+        // WOW64 is an optional component on Windows Server.
+        let exe = windows.join(r"SysWOW64\cmd.exe");
+        Ok(exe.try_exists()?.then_some(exe))
+    }
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
     #[test]
     fn configured_home_depends_on_the_launchers_view() -> Result<()> {
         let windows = std::env::var_os("SystemRoot").expect("Windows directory");
         let windows = Path::new(&windows);
-        let wow64 = windows.join(r"SysWOW64\cmd.exe");
-        if !wow64.try_exists()? {
-            // WOW64 is an optional component on Windows Server.
+        let Some(wow64) = wow64_executable(windows)? else {
             return Ok(());
-        }
+        };
         let dir = tempdir()?;
         let scripts = dir.path().join("Scripts");
         fs::create_dir(&scripts)?;
@@ -2306,6 +2324,24 @@ mod tests {
         );
         let entry = resolved.cache_entry(&cache);
         assert!(!entry.path().exists());
+        Ok(())
+    }
+
+    #[cfg(all(windows, target_pointer_width = "64"))]
+    #[test]
+    fn redirected_config_with_native_python_and_wow64_launcher() -> Result<()> {
+        let windows = std::env::var_os("SystemRoot").expect("Windows directory");
+        let windows = Path::new(&windows);
+        let Some(launcher) = wow64_executable(windows)? else {
+            return Ok(());
+        };
+        let metadata = mocked_interpreter_response(&launcher)?.metadata;
+        assert!(metadata.pointer_size.is_64());
+        // Model a proxy checking for a config under System32 before it sets
+        // __PYVENV_LAUNCHER__ for the native Python process.
+        let inputs =
+            std::collections::HashMap::from([(windows.join(r"System32\pyvenv.cfg"), None)]);
+        assert!(!metadata.shares_cache_inputs(&launcher, &inputs));
         Ok(())
     }
 

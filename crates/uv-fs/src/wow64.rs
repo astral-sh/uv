@@ -29,14 +29,18 @@ impl FileSystemView {
         }
     }
 
-    /// Whether this view may resolve a path differently from the current process.
-    pub fn may_redirect(self, path: &Path) -> io::Result<bool> {
-        let shared = match self {
+    /// Whether the executable has the same pointer width as the current process.
+    pub fn matches_current_process(self) -> bool {
+        match self {
             Self::Bit32 => cfg!(target_pointer_width = "32"),
             Self::Bit64 => cfg!(target_pointer_width = "64"),
             Self::Unknown => false,
-        };
-        if shared {
+        }
+    }
+
+    /// Whether this view may resolve a path differently from the current process.
+    pub fn may_redirect(self, path: &Path) -> io::Result<bool> {
+        if self.matches_current_process() {
             return Ok(false);
         }
         may_be_redirected_by_wow64(path)
