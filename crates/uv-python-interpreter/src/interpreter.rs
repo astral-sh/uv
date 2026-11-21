@@ -1567,13 +1567,10 @@ impl InterpreterMetadata {
         executable: &Path,
         inputs: &HashMap<PathBuf, Option<Timestamp>>,
     ) -> bool {
-        use uv_fs::wow64::FileSystemView;
+        use uv_fs::wow64::{FileSystemView, any_path_may_redirect};
 
         // Inspect the executable's architecture only if a path may have multiple views.
-        if inputs
-            .keys()
-            .all(|path| matches!(FileSystemView::Unknown.may_redirect(path), Ok(false)))
-        {
+        if matches!(any_path_may_redirect(inputs.keys()), Ok(false)) {
             return true;
         }
         let python = match self.pointer_size {

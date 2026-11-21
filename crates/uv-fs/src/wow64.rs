@@ -47,11 +47,14 @@ impl FileSystemView {
         if self.matches_current_process() {
             return Ok(false);
         }
-        may_be_redirected_by_wow64(path)
+        any_path_may_redirect([path])
     }
 }
 
-fn may_be_redirected_by_wow64(path: &Path) -> io::Result<bool> {
+/// Whether any path can resolve differently across WOW64 filesystem views.
+pub fn any_path_may_redirect(
+    paths: impl IntoIterator<Item = impl AsRef<Path>>,
+) -> io::Result<bool> {
     let mut buffer = [0; MAX_PATH as usize];
     // SAFETY: The binding supplies the capacity of this writable slice to Windows.
     #[expect(unsafe_code)]
@@ -67,6 +70,15 @@ fn may_be_redirected_by_wow64(path: &Path) -> io::Result<bool> {
     if !windows.is_absolute() {
         return Ok(true);
     }
+    for path in paths {
+        if path_may_redirect(path.as_ref(), &windows)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn path_may_redirect(path: &Path, windows: &Path) -> io::Result<bool> {
     let path = std::path::absolute(path)?;
     for ancestor in path.ancestors() {
         let Some(name) = ancestor.file_name() else {
@@ -76,7 +88,7 @@ fn may_be_redirected_by_wow64(path: &Path) -> io::Result<bool> {
             .iter()
             .any(|location| name.eq_ignore_ascii_case(location))
             && let Some(parent) = ancestor.parent()
-            && same_file::is_same_file(parent, &windows)?
+            && same_file::is_same_file(parent, windows)?
         {
             let suffix = path.strip_prefix(ancestor).expect("ancestor of path");
             if name.eq_ignore_ascii_case("LastGood") {
@@ -120,13 +132,13 @@ mod tests {
     use std::io;
     use std::path::Path;
 
-    use super::may_be_redirected_by_wow64;
+    use super::any_path_may_redirect;
 
     #[test]
     fn sysnative_outside_windows_is_an_ordinary_directory() -> io::Result<()> {
         let dir = tempfile::tempdir()?;
         let path = dir.path().join(r"Sysnative\python.exe");
-        assert!(!may_be_redirected_by_wow64(&path)?);
+        assert!(!any_path_may_redirect([path])?);
         Ok(())
     }
 
@@ -134,10 +146,9 @@ mod tests {
     fn only_etc_is_shared_under_system32_drivers() -> io::Result<()> {
         let windows = std::env::var_os("SystemRoot").expect("Windows directory");
         let drivers = Path::new(&windows).join(r"System32\drivers");
-        assert!(may_be_redirected_by_wow64(&drivers.join("python.exe"))?);
-        assert!(!may_be_redirected_by_wow64(
-            &drivers.join(r"etc\python.exe")
-        )?);
+        let shared = drivers.join(r"etc\python.exe");
+        assert!(!any_path_may_redirect([&shared])?);
+        assert!(any_path_may_redirect([shared, drivers.join("python.exe")])?);
         Ok(())
     }
 }
