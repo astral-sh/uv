@@ -866,21 +866,17 @@ fn wow64_proxy_target_depends_on_the_launchers_view() -> Result<()> {
     let proxy = dir.child("proxy.exe");
     let windows = std::env::var_os("SystemRoot").context("Missing Windows directory")?;
     let redirected = Path::new(&windows).join(r"Sysnative\python.exe");
-    let write_proxy = |target: &Path| -> Result<()> {
-        let bytes = write_resources(
-            include_bytes!("../trampolines/uv-trampoline-i686-console.exe"),
-            &[
-                (RESOURCE_TRAMPOLINE_KIND, &[2]),
-                (
-                    RESOURCE_PYTHON_PATH,
-                    target.to_str().context("Invalid path")?.as_bytes(),
-                ),
-            ],
-        )?;
-        fs_err::write(proxy.path(), bytes)?;
-        Ok(())
-    };
-    write_proxy(&redirected)?;
+    let bytes = write_resources(
+        include_bytes!("../trampolines/uv-trampoline-i686-console.exe"),
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[2]),
+            (
+                RESOURCE_PYTHON_PATH,
+                redirected.to_str().context("Invalid path")?.as_bytes(),
+            ),
+        ],
+    )?;
+    fs_err::write(proxy.path(), bytes)?;
     assert!(matches!(
         super::read_launcher_target(proxy.path()),
         Err(super::Error::UnprocessableMetadata)
@@ -893,27 +889,6 @@ fn wow64_proxy_target_depends_on_the_launchers_view() -> Result<()> {
     assert_eq!(
         super::read_launcher_target(proxy.path())?,
         Some((LauncherKind::Python, redirected))
-    );
-
-    let ordinary = dir.path().join(r"Sysnative\python.exe");
-    write_proxy(&ordinary)?;
-    assert_eq!(
-        super::read_launcher_target(proxy.path())?,
-        Some((LauncherKind::Python, ordinary))
-    );
-
-    let drivers = Path::new(&windows).join(r"System32\drivers");
-    write_proxy(&drivers.join("python.exe"))?;
-    assert!(matches!(
-        super::read_launcher_target(proxy.path()),
-        Err(super::Error::UnprocessableMetadata)
-    ));
-
-    let shared = drivers.join(r"etc\python.exe");
-    write_proxy(&shared)?;
-    assert_eq!(
-        super::read_launcher_target(proxy.path())?,
-        Some((LauncherKind::Python, shared))
     );
     Ok(())
 }

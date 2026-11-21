@@ -106,3 +106,30 @@ fn wow64_shared_subdirectory(path: &Path) -> bool {
         .iter()
         .any(|shared| name.eq_ignore_ascii_case(shared))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+    use std::path::Path;
+
+    use super::may_be_redirected_by_wow64;
+
+    #[test]
+    fn sysnative_outside_windows_is_an_ordinary_directory() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join(r"Sysnative\python.exe");
+        assert!(!may_be_redirected_by_wow64(&path)?);
+        Ok(())
+    }
+
+    #[test]
+    fn only_etc_is_shared_under_system32_drivers() -> io::Result<()> {
+        let windows = std::env::var_os("SystemRoot").expect("Windows directory");
+        let drivers = Path::new(&windows).join(r"System32\drivers");
+        assert!(may_be_redirected_by_wow64(&drivers.join("python.exe"))?);
+        assert!(!may_be_redirected_by_wow64(
+            &drivers.join(r"etc\python.exe")
+        )?);
+        Ok(())
+    }
+}
