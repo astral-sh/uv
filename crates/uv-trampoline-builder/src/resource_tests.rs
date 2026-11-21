@@ -374,6 +374,7 @@ fn deeply_nested_unrelated_resource() -> Result<()> {
     }
     fs_err::write(path.path(), &launcher)?;
 
+    assert_eq!(super::read_launcher_target(path.path())?, None);
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
 }
