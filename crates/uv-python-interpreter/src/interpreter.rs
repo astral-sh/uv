@@ -958,19 +958,37 @@ impl<'a> ExecutableTarget<'a> {
         let Self::Trampoline(target) = self else {
             return Ok(Vec::new());
         };
-        let target = std::path::absolute(target)?;
-        if target == canonical {
-            return Ok(Vec::new());
-        }
+        let mut target = std::path::absolute(target)?;
         let mut times = Vec::new();
-        for path in target.ancestors() {
-            let metadata = fs::symlink_metadata(path)?;
-            times.push((metadata.creation_time(), metadata.last_write_time()));
-            if canonical.starts_with(path) {
-                break;
+        for _ in 0..=40 {
+            if target == canonical {
+                return Ok(times);
             }
+            let mut redirect = None;
+            for path in target.ancestors() {
+                let metadata = fs::symlink_metadata(path)?;
+                times.push((metadata.creation_time(), metadata.last_write_time()));
+                if canonical.starts_with(path) {
+                    break;
+                }
+                if metadata.is_symlink() {
+                    redirect = Some(path);
+                }
+            }
+            // Follow the outermost junction first. Its destination may contain
+            // another junction with a different containing directory.
+            let Some(link) = redirect else {
+                return Ok(times);
+            };
+            let destination = fs::read_link(link)?;
+            let mut next = link.with_file_name(dunce::simplified(&destination));
+            let suffix = target.strip_prefix(link).expect("link is an ancestor");
+            if !suffix.as_os_str().is_empty() {
+                next.push(suffix);
+            }
+            target = std::path::absolute(next)?;
         }
-        Ok(times)
+        Err(io::Error::other("Too many links in launcher target"))
     }
 }
 
@@ -2047,11 +2065,15 @@ mod tests {
         let first = dir.path().join("first");
         let second = dir.path().join("second");
         let current = dir.path().join("current");
+        let managed = dir.path().join("managed");
+        fs::create_dir(&managed)?;
+        let minor = managed.join("minor");
         for installation in [&first, &second] {
             fs::create_dir(installation)?;
             fs::write(installation.join("python.exe"), [])?;
         }
-        uv_fs::replace_symlink(&first, &current)?;
+        uv_fs::replace_symlink(&first, &minor)?;
+        uv_fs::replace_symlink(&minor, &current)?;
         let target = current.join("python.exe");
         fs::write(
             &proxy,
@@ -2064,7 +2086,7 @@ mod tests {
         fs::OpenOptions::new()
             .access_mode(FILE_WRITE_ATTRIBUTES.0)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
-            .open(dir.path())?
+            .open(&managed)?
             .set_modified(UNIX_EPOCH)?;
         let probe = || {
             let mut response = mocked_interpreter_response(&proxy).expect("Valid mocked metadata");
@@ -2073,9 +2095,9 @@ mod tests {
             Ok::<_, Error>((response, None))
         };
         let info = InterpreterInfo::query_cached(&proxy, &cache, || {
-            uv_fs::replace_symlink(&second, &current)?;
+            uv_fs::replace_symlink(&second, &minor)?;
             let result = probe()?;
-            uv_fs::replace_symlink(&first, &current)?;
+            uv_fs::replace_symlink(&first, &minor)?;
             Ok(result)
         })?;
         assert_eq!(info.metadata.sys_base_prefix, dunce::canonicalize(&second)?);
