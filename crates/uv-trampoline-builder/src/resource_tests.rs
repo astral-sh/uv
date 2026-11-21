@@ -963,6 +963,10 @@ fn interpreter_lookup_limits_path_allocation() -> Result<()> {
         super::read_launcher_target(path.path()),
         Err(super::Error::PathResourceTooLarge)
     ));
+    assert!(matches!(
+        Launcher::try_from_path(path.path()),
+        Err(super::Error::InvalidPath(_))
+    ));
     Ok(())
 }
 
