@@ -22,6 +22,17 @@ pub enum AuditOutputFormat {
     Sarif,
 }
 
+/// The output format for tool upgrades.
+#[derive(Debug, Default, Clone, Copy)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum ToolUpgradeFormat {
+    /// Display the result in a human-readable format.
+    #[default]
+    Text,
+    /// Display the result in JSON format.
+    Json,
+}
+
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum VersionFormat {
