@@ -1064,6 +1064,17 @@ fn python_find_venv_missing_home() -> Result<()> {
 
     hint: Consider recreating the environment (e.g., with `uv venv`)
     ");
+
+    // Locate the same config when the caller is already in `Scripts`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .current_dir(venv_bin_path(&context.venv))
+        .arg(r".\python.exe"), @r"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Python home `[TEMP_DIR]/removed` configured for `./[PYTHON]` does not exist
+
+    hint: Consider recreating the environment (e.g., with `uv venv`)
+    ");
     Ok(())
 }
 

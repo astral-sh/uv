@@ -952,20 +952,33 @@ impl<'a> ExecutableTarget<'a> {
     fn broken_link(&self, executable: &Path) -> Option<BrokenLink> {
         // A uv launcher selects Python from its resources. CPython's venv
         // launcher selects by home and reports localized errors if it's removed.
-        let kind = match &self.launcher {
-            Some((_, target)) => {
-                if target.try_exists().ok()? {
-                    return None;
-                }
-                BrokenLinkKind::Trampoline(target.clone())
+        let kind = if let Some((_, target)) = &self.launcher {
+            if target.try_exists().ok()? {
+                return None;
             }
-            None => BrokenLinkKind::MissingHome(missing_python_home(executable)?),
+            BrokenLinkKind::Trampoline(target.clone())
+        } else {
+            // Windows venv launchers locate the config from their own module path.
+            let path = if cfg!(windows) {
+                self.absolute
+            } else {
+                executable
+            };
+            BrokenLinkKind::MissingHome(missing_python_home(path)?)
         };
         let current = Self::identify(self.absolute)?;
         if current.launcher != self.launcher {
             return None;
         }
-        Some(BrokenLink::new(executable, kind))
+        Some(self.link_error(executable, kind))
+    }
+
+    fn link_error(&self, executable: &Path, kind: BrokenLinkKind) -> BrokenLink {
+        BrokenLink {
+            path: executable.to_path_buf(),
+            kind,
+            venv: uv_fs::is_virtualenv_executable(self.absolute),
+        }
     }
 
     fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
@@ -998,7 +1011,7 @@ impl<'a> ExecutableTarget<'a> {
             .symlink_metadata()
             .is_ok_and(|metadata| metadata.is_symlink())
         {
-            return Err(Error::BrokenLink(BrokenLink::new(
+            return Err(Error::BrokenLink(self.link_error(
                 executable,
                 BrokenLinkKind::Symlink(fs::read_link(self.absolute).ok()),
             )));
@@ -1413,14 +1426,6 @@ enum BrokenLinkKind {
 }
 
 impl BrokenLink {
-    fn new(path: &Path, kind: BrokenLinkKind) -> Self {
-        Self {
-            path: path.to_path_buf(),
-            kind,
-            venv: uv_fs::is_virtualenv_executable(path),
-        }
-    }
-
     /// Whether the interpreter belonged to a virtual environment when the broken link was detected.
     pub fn is_virtualenv(&self) -> bool {
         self.venv
