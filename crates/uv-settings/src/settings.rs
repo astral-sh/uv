@@ -1,8 +1,10 @@
 #[cfg(feature = "schemars")]
 use std::borrow::Cow;
-use std::{fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf};
+use std::{
+    collections::BTreeMap, fmt::Debug, num::NonZeroUsize, path::Path, path::PathBuf, str::FromStr,
+};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use uv_cache_info::CacheKey;
 use uv_configuration::{
@@ -21,7 +23,7 @@ use uv_install_wheel::LinkMode;
 use uv_macros::{CombineOptions, DeserializeUntagged, OptionsMetadata};
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
 use uv_pep508::Requirement;
-use uv_preview::{MaybePreviewFeature, Preview};
+use uv_preview::{MaybePreviewFeature, Preview, PreviewFeature};
 use uv_pypi_types::{SupportedEnvironments, VerbatimParsedUrl};
 use uv_python_types::{PythonDownloadMirrors, PythonDownloads, PythonPreference, PythonVersion};
 use uv_redacted::SafeUrl;
@@ -453,6 +455,7 @@ struct GlobalOptionsWire {
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
 
+    #[serde(default, deserialize_with = "deserialize_preview_setting")]
     preview: Option<bool>,
     preview_features: Option<PreviewFeaturesOption>,
 
@@ -2699,8 +2702,11 @@ struct OptionsWire {
     offline: Option<bool>,
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
+
+    #[serde(default, deserialize_with = "deserialize_preview_setting")]
     preview: Option<bool>,
     preview_features: Option<PreviewFeaturesOption>,
+
     python_preference: Option<PythonPreference>,
     python_downloads: Option<PythonDownloads>,
     concurrent_downloads: Option<NonZeroUsize>,
@@ -3136,6 +3142,115 @@ impl MalwareCheckSettings {
                 .clone()
                 .or_else(|| audit.and_then(|audit| audit.malware_check_url.clone())),
         }
+    }
+}
+
+/// The wire representation of the deprecated `preview` setting, used to emit clear error
+/// messages when the value is not a boolean (e.g. a `[tool.uv.preview]` table of feature names).
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PreviewSettingWire {
+    Bool(bool),
+    Map(BTreeMap<String, toml::Value>),
+    Seq(Vec<toml::Value>),
+    Str(String),
+    Other(toml::Value),
+}
+
+/// Deserialize the deprecated `preview` setting, which must be a boolean.
+///
+/// A table, list, or string of preview feature names (e.g. `[tool.uv.preview]` with
+/// `nonexistent = true`, `preview = ["nonexistent"]`, or `preview = "json-output"`) is rejected
+/// with an error that reports any unknown preview features and points to the `preview-features`
+/// setting, instead of a generic "invalid type" error that is easy to miss.
+fn deserialize_preview_setting<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+
+    /// A hint pointing to the `preview-features` setting, which accepts preview feature names.
+    fn preview_features_hint() -> String {
+        r#"the `preview` setting must be a boolean; to enable specific preview features, use `preview-features` (e.g. `preview-features = ["json-output"]`)"#
+            .to_string()
+    }
+
+    /// Return the candidate names that do not refer to a known preview feature.
+    fn unknown_feature_names<'a>(names: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
+        names
+            .map(str::trim)
+            .filter(|name| !name.is_empty() && PreviewFeature::from_str(name).is_err())
+            .collect()
+    }
+
+    /// Format a list of unknown preview feature names for an error message.
+    fn unknown_features_message(unknown: &[&str], context: &str) -> String {
+        format!(
+            "unknown preview feature{} {} {context}; {}",
+            if unknown.len() == 1 { "" } else { "s" },
+            unknown
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            preview_features_hint(),
+        )
+    }
+
+    match Option::<PreviewSettingWire>::deserialize(deserializer)? {
+        None => Ok(None),
+        Some(PreviewSettingWire::Bool(value)) => Ok(Some(value)),
+        Some(PreviewSettingWire::Map(map)) => {
+            let unknown = unknown_feature_names(map.keys().map(String::as_str));
+            if unknown.is_empty() {
+                // Every key is a known preview feature, e.g. `[tool.uv.preview] json-output = true`.
+                let names = map
+                    .keys()
+                    .map(|key| format!("\"{key}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(D::Error::custom(format!(
+                    "invalid type: table, expected a boolean for `preview`; to enable these \
+                     preview features, use `preview-features = [{names}]`"
+                )))
+            } else {
+                Err(D::Error::custom(unknown_features_message(
+                    &unknown,
+                    "in the `preview` table",
+                )))
+            }
+        }
+        Some(PreviewSettingWire::Seq(seq)) => {
+            let unknown = unknown_feature_names(seq.iter().filter_map(toml::Value::as_str));
+            if unknown.is_empty() {
+                Err(D::Error::custom(format!(
+                    "invalid type: sequence, expected a boolean for `preview`; {}",
+                    preview_features_hint()
+                )))
+            } else {
+                Err(D::Error::custom(unknown_features_message(
+                    &unknown,
+                    "in the `preview` list",
+                )))
+            }
+        }
+        Some(PreviewSettingWire::Str(value)) => {
+            let value = value.trim();
+            if PreviewFeature::from_str(value).is_ok() {
+                Err(D::Error::custom(format!(
+                    r#"invalid type: string, expected a boolean for `preview`; to enable the `{value}` preview feature, use `preview-features = ["{value}"]`"#
+                )))
+            } else {
+                Err(D::Error::custom(format!(
+                    "invalid type: string `{value}`, expected a boolean for `preview`; {}",
+                    preview_features_hint()
+                )))
+            }
+        }
+        Some(PreviewSettingWire::Other(value)) => Err(D::Error::custom(format!(
+            "invalid type: {value}, expected a boolean for `preview`; {}",
+            preview_features_hint()
+        ))),
     }
 }
 

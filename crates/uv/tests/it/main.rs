@@ -18,6 +18,8 @@ mod help;
 
 mod network;
 
+mod preview;
+
 #[cfg(feature = "test-python")]
 mod proxy_index;
 
