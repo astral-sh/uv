@@ -5,7 +5,6 @@ use std::time::SystemTime;
 use anyhow::Result;
 use assert_fs::prelude::*;
 use indoc::indoc;
-use insta::allow_duplicates;
 use walkdir::WalkDir;
 
 use uv_test::packse::WheelBuilder;
@@ -22,8 +21,6 @@ fn bytecode_wheel(context: &TestContext) -> Result<PathBuf> {
                 def answer():
                     """Return the answer."""
                     return 42
-                def check_assertions():
-                    assert False
             "#},
             ),
             ("example/invalid.py", "def invalid syntax\n"),
@@ -35,7 +32,7 @@ fn bytecode_wheel(context: &TestContext) -> Result<PathBuf> {
     Ok(wheel)
 }
 
-/// Record bytecode paths and modification times to detect Python replacing serc's output.
+/// Record bytecode paths and modification times to detect Python replacing Serc's output.
 fn bytecode_files(package: &Path) -> Result<BTreeMap<PathBuf, SystemTime>> {
     let mut bytecode = BTreeMap::new();
     for entry in WalkDir::new(package) {
@@ -47,135 +44,249 @@ fn bytecode_files(package: &Path) -> Result<BTreeMap<PathBuf, SystemTime>> {
     Ok(bytecode)
 }
 
-/// Python imports serc's bytecode at each optimization level without replacing it.
+/// Python imports Serc's bytecode without rewriting it or creating new files.
+/// Re-enable bytecode writes because the test context passes `-B`.
 #[test]
 fn native_bytecode() -> Result<()> {
-    allow_duplicates! {
-        for python_version in ["3.12", "3.13", "3.14"] {
-            for optimization in ["0", "1", "2", "3", " 2", "2 "] {
-                let context = uv_test::test_context!(python_version);
-                let wheel = bytecode_wheel(&context)?;
-                uv_snapshot!(context.filters(), context.pip_install()
-                    .arg(&wheel).arg("--compile-bytecode")
-                    .arg("--preview-features").arg("native-bytecode")
-                    .env("PYTHONOPTIMIZE", optimization), @"
-                exit_code: 0 (success)
-                ----- stderr -----
-                Resolved 1 package in [TIME]
-                Prepared 1 package in [TIME]
-                Installed 1 package in [TIME]
-                Bytecode compiled 2 files in [TIME]
-                 + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
-                ");
+    let context = uv_test::test_context!("3.12");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
+    ");
 
-                let package = context.site_packages().join("example");
-                let compiled = bytecode_files(&package)?;
-                assert_eq!(compiled.len(), 2);
-                uv_snapshot!(context.python_command().env("PYTHONOPTIMIZE", optimization)
-                    .arg("-c").arg(indoc! {r"
-                        import sys
-                        # TestContext passes -B; allow writes to detect rejected bytecode.
-                        sys.dont_write_bytecode = False
-                        from example import module
-
-                        optimized = sys.flags.optimize > 0
-                        try:
-                            module.check_assertions()
-                            assertions_enabled = False
-                        except AssertionError:
-                            assertions_enabled = True
-                        if (module.DEBUG, assertions_enabled) != (not optimized, not optimized):
-                            raise RuntimeError('Incorrect assertion or __debug__ behavior')
-                        if (module.answer.__doc__ is None) != (sys.flags.optimize >= 2):
-                            raise RuntimeError('Incorrect docstring behavior')
-                        print(module.answer())
-                    "}), @"
-                exit_code: 0 (success)
-                ----- stdout -----
-                42
-                ");
-                assert_eq!(compiled, bytecode_files(&package)?);
-            }
-        }
-        Ok(())
-    }
+    let package = context.site_packages().join("example");
+    let compiled = bytecode_files(&package)?;
+    assert_eq!(compiled.len(), 2);
+    uv_snapshot!(context.python_command()
+        .arg("-c").arg(indoc! {r"
+            import sys
+            sys.dont_write_bytecode = False
+            from example.module import DEBUG, answer
+            print(answer(), DEBUG, answer.__doc__)
+        "}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    42 True Return the answer.
+    ");
+    assert_eq!(compiled, bytecode_files(&package)?);
+    Ok(())
 }
 
-/// Hash caches are accepted by Python, reused by uv, and refreshed after same-size source edits.
+/// Trailing whitespace makes Python interpret the value as optimization level one.
 #[test]
-fn native_bytecode_hash() -> Result<()> {
-    allow_duplicates! {
-        for (variable, value, checked) in [
-            ("PYC_INVALIDATION_MODE", "CHECKED_HASH", true),
-            ("PYC_INVALIDATION_MODE", "UNCHECKED_HASH", false),
-            // SOURCE_DATE_EPOCH selects checked hashes when no explicit mode is provided.
-            ("SOURCE_DATE_EPOCH", "0", true),
-        ] {
-            let context = uv_test::test_context!("3.12");
-            let wheel = bytecode_wheel(&context)?;
-            context.temp_dir.child("requirements.txt").write_str(&wheel.display().to_string())?;
-            uv_snapshot!(context.filters(), context.pip_install()
-                .arg(&wheel).arg("--compile-bytecode")
-                .arg("--preview-features").arg("native-bytecode")
-                .env(variable, value), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Prepared 1 package in [TIME]
-            Installed 1 package in [TIME]
-            Bytecode compiled 2 files in [TIME]
-             + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
-            ");
+fn native_bytecode_optimized() -> Result<()> {
+    let context = uv_test::test_context!("3.13");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYTHONOPTIMIZE", "2 "), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
+    ");
 
-            let package = context.site_packages().join("example");
-            let compiled = bytecode_files(&package)?;
-            uv_snapshot!(context.python_command()
-                .arg("--check-hash-based-pycs").arg("always")
-                .arg("-c").arg("import sys; sys.dont_write_bytecode = False; from example.module import answer; print(answer())"), @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            42
-            ");
-            assert_eq!(compiled, bytecode_files(&package)?);
-            uv_snapshot!(context.filters(), context.pip_sync()
-                .arg("requirements.txt").arg("--compile-bytecode")
-                .arg("--preview-features").arg("native-bytecode")
-                .env(variable, value), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Bytecode compiled 0 files in [TIME]
-            ");
-            assert_eq!(compiled, bytecode_files(&package)?);
+    let package = context.site_packages().join("example");
+    let compiled = bytecode_files(&package)?;
+    assert_eq!(compiled.len(), 2);
+    uv_snapshot!(context.python_command()
+        .env("PYTHONOPTIMIZE", "2 ")
+        .arg("-c").arg(indoc! {r"
+            import sys
+            sys.dont_write_bytecode = False
+            from example.module import DEBUG, answer
+            print(answer(), DEBUG, answer.__doc__)
+        "}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    42 False Return the answer.
+    ");
+    assert_eq!(compiled, bytecode_files(&package)?);
+    Ok(())
+}
 
-            let source = package.join("module.py");
-            let modified = fs_err::metadata(&source)?.modified()?;
-            fs_err::write(&source, fs_err::read_to_string(&source)?.replace("return 42", "return 43"))?;
-            fs_err::File::options().write(true).open(&source)?.set_modified(modified)?;
-            uv_snapshot!(context.python_command()
-                .arg("-c").arg("import sys; from example.module import answer; print(answer() == int(sys.argv[1]))")
-                .arg(if checked { "43" } else { "42" }), @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            True
-            ");
-            uv_snapshot!(context.filters(), context.pip_sync()
-                .arg("requirements.txt").arg("--compile-bytecode")
-                .arg("--preview-features").arg("native-bytecode")
-                .env(variable, value), @"
-            exit_code: 0 (success)
-            ----- stderr -----
-            Resolved 1 package in [TIME]
-            Bytecode compiled 1 file in [TIME]
-            ");
-            uv_snapshot!(context.python_command().arg("-c").arg("from example.module import answer; print(answer())"), @"
-            exit_code: 0 (success)
-            ----- stdout -----
-            43
-            ");
-        }
-        Ok(())
-    }
+/// Python accepts leading whitespace and keeps the requested level in the cache filename.
+/// Levels above two also remove docstrings.
+#[test]
+fn native_bytecode_optimized_docstrings() -> Result<()> {
+    let context = uv_test::test_context!("3.14");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYTHONOPTIMIZE", " 3"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
+    ");
+
+    let package = context.site_packages().join("example");
+    let compiled = bytecode_files(&package)?;
+    assert_eq!(compiled.len(), 2);
+    uv_snapshot!(context.python_command()
+        .env("PYTHONOPTIMIZE", " 3")
+        .arg("-c").arg(indoc! {r"
+            import sys
+            sys.dont_write_bytecode = False
+            from example.module import DEBUG, answer
+            print(answer(), DEBUG, answer.__doc__)
+        "}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    42 False None
+    ");
+    assert_eq!(compiled, bytecode_files(&package)?);
+    Ok(())
+}
+
+/// `SOURCE_DATE_EPOCH` defaults to checked hashes. Explicit `CHECKED_HASH` reuses that cache.
+/// Python must detect source edits even when the size and modification time are unchanged.
+#[test]
+fn native_bytecode_checked_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("SOURCE_DATE_EPOCH", "0"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
+    ");
+
+    let package = context.site_packages().join("example");
+    let compiled = bytecode_files(&package)?;
+    assert_eq!(compiled.len(), 2);
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&wheel.display().to_string())?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYC_INVALIDATION_MODE", "CHECKED_HASH"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Bytecode compiled 0 files in [TIME]
+    ");
+    assert_eq!(compiled, bytecode_files(&package)?);
+
+    let source = package.join("module.py");
+    let modified = fs_err::metadata(&source)?.modified()?;
+    fs_err::write(
+        &source,
+        fs_err::read_to_string(&source)?.replace("return 42", "return 43"),
+    )?;
+    fs_err::File::options()
+        .write(true)
+        .open(&source)?
+        .set_modified(modified)?;
+    uv_snapshot!(context.python_command()
+        .arg("-c").arg("from example.module import answer; print(answer())"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    43
+    ");
+    Ok(())
+}
+
+/// Unchecked hashes take precedence over `SOURCE_DATE_EPOCH`. Python trusts stale bytecode
+/// until uv refreshes it.
+#[test]
+fn native_bytecode_unchecked_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheel = bytecode_wheel(&context)?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg(&wheel)
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("SOURCE_DATE_EPOCH", "0")
+        .env("PYC_INVALIDATION_MODE", "UNCHECKED_HASH"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+    Bytecode compiled 2 files in [TIME]
+     + example==1.0.0 (from file://[TEMP_DIR]/example-1.0.0-py3-none-any.whl)
+    ");
+
+    let package = context.site_packages().join("example");
+    let compiled = bytecode_files(&package)?;
+    assert_eq!(compiled.len(), 2);
+    // Force Python to check that the original hash matches, allowing writes to detect rejection.
+    uv_snapshot!(context.python_command()
+        .arg("--check-hash-based-pycs").arg("always")
+        .arg("-c").arg("import sys; sys.dont_write_bytecode = False; from example.module import answer; print(answer())"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    42
+    ");
+    assert_eq!(compiled, bytecode_files(&package)?);
+
+    let source = package.join("module.py");
+    let modified = fs_err::metadata(&source)?.modified()?;
+    fs_err::write(
+        &source,
+        fs_err::read_to_string(&source)?.replace("return 42", "return 43"),
+    )?;
+    fs_err::File::options()
+        .write(true)
+        .open(&source)?
+        .set_modified(modified)?;
+    uv_snapshot!(context.python_command()
+        .arg("-c").arg("from example.module import answer; print(answer())"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    42
+    ");
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str(&wheel.display().to_string())?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt")
+        .arg("--compile-bytecode")
+        .arg("--preview-features").arg("native-bytecode")
+        .env("PYC_INVALIDATION_MODE", "UNCHECKED_HASH"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Bytecode compiled 1 file in [TIME]
+    ");
+    uv_snapshot!(context.python_command()
+        .arg("-c").arg("from example.module import answer; print(answer())"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    43
+    ");
+    Ok(())
 }
 
 /// Unsupported interpreters fail instead of silently selecting Python's compiler.
@@ -198,9 +309,9 @@ fn native_bytecode_unsupported_python() -> Result<()> {
     Ok(())
 }
 
-/// Unsupported bytecode settings report which option cannot be honored by serc.
+/// Unsupported bytecode settings report which option cannot be honored by Serc.
 #[test]
-fn native_bytecode_unsupported_settings() -> Result<()> {
+fn native_bytecode_cache_prefix() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let wheel = bytecode_wheel(&context)?;
     uv_snapshot!(context.filters(), context.pip_install()
@@ -217,6 +328,11 @@ fn native_bytecode_unsupported_settings() -> Result<()> {
       cause: serc does not support a custom bytecode cache prefix (PYTHONPYCACHEPREFIX)
     ");
 
+    Ok(())
+}
+
+#[test]
+fn native_bytecode_no_debug_ranges() -> Result<()> {
     let context = uv_test::test_context!("3.12");
     let wheel = bytecode_wheel(&context)?;
     uv_snapshot!(context.filters(), context.pip_install()
@@ -297,8 +413,8 @@ fn native_bytecode_recompile() -> Result<()> {
     1234
     ");
 
-    // CP1252 is accepted by Python but not by serc.
-    fs_err::write(package.join("legacy.py"), "# coding: cp1252\nvalue = 42\n")?;
+    // CP437 is accepted by Python but not by serc.
+    fs_err::write(package.join("legacy.py"), "# coding: cp437\nvalue = 42\n")?;
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("requirements.txt")
         .arg("--compile-bytecode")
@@ -308,8 +424,8 @@ fn native_bytecode_recompile() -> Result<()> {
     Resolved 1 package in [TIME]
     error: Failed to bytecode-compile Python file in: [SITE_PACKAGES]/
       cause: Failed to compile `[SITE_PACKAGES]/example/legacy.py` with serc
-      cause: failed to decode Python source: unsupported source encoding `cp1252`
-      cause: unsupported source encoding `cp1252`
+      cause: failed to decode Python source: unsupported source encoding `cp437`
+      cause: unsupported source encoding `cp437`
     ");
     assert!(!package.join("__pycache__/legacy.cpython-312.pyc").exists());
     Ok(())

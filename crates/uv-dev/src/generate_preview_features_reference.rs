@@ -333,9 +333,9 @@ mod tests {
 
         ### `native-bytecode` {#native-bytecode}
 
-        Uses the Rust-based [serc](https://github.com/astral-sh/serc) compiler for bytecode compilation
+        Uses [Serc](https://github.com/astral-experiments/serc) for bytecode compilation
         on CPython 3.12–3.15, including optimized and hash-based bytecode. Unsupported interpreter
-        settings and source encodings cause an error; invalid Python source is skipped.
+        settings and source encodings cause an error. Invalid Python source is skipped.
 
         ### `package-conflicts` {#package-conflicts}
 
