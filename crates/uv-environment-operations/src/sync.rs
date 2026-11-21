@@ -298,8 +298,13 @@ pub async fn sync_from_lock(
         .hash_strategy(target.install_path(), &FxHashSet::default())?
         .with_constraint_hashes(&build_hasher)?;
 
-    // Resolve the flat indexes from `--find-links`.
-    let flat_index = FlatIndex::load(&client, cache, index_locations).await?;
+    // The lockfile fixes runtime distributions. Find-links indexes are needed only when a source
+    // build may resolve build dependencies; cached or remote wheels need no further resolution.
+    let flat_index = if !dry_run.enabled() && installation_plan.requires_source_build() {
+        FlatIndex::load(&client, cache, index_locations).await?
+    } else {
+        FlatIndex::default()
+    };
 
     // Create a build dispatch.
     let build_dispatch = BuildDispatch::new(
