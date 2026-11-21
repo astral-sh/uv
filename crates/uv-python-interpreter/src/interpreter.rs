@@ -1598,19 +1598,6 @@ impl InterpreterInfo {
         cache: &Cache,
         probe: impl FnOnce() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error>,
     ) -> Result<Self, Error> {
-        #[expect(
-            clippy::redundant_closure_for_method_calls,
-            reason = "the method reference binds the target lifetime before the absolute path is created"
-        )]
-        Self::query_cached_with(executable, cache, |target| target.canonicalize(), probe)
-    }
-
-    fn query_cached_with(
-        executable: &Path,
-        cache: &Cache,
-        canonicalize: impl FnOnce(&ExecutableTarget<'_>) -> io::Result<PathBuf>,
-        probe: impl FnOnce() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error>,
-    ) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
         let uncached = |(wire, _)| Self::from_probe(executable, wire, HashMap::new());
@@ -1620,7 +1607,7 @@ impl InterpreterInfo {
             return uncached(probe()?);
         };
 
-        let Some(canonical) = target.cache_input(executable, &absolute, canonicalize(&target))?
+        let Some(canonical) = target.cache_input(executable, &absolute, target.canonicalize())?
         else {
             return uncached(probe()?);
         };
@@ -2271,18 +2258,39 @@ mod tests {
     }
 
     #[cfg(windows)]
-    #[tokio::test]
-    async fn failed_canonicalization_of_existing_target_bypasses_cache() -> Result<()> {
+    #[test]
+    fn existing_target_can_be_probed_when_normalized_path_is_unavailable() -> Result<()> {
         use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-        use windows::Win32::Foundation::ERROR_CANT_RESOLVE_FILENAME;
 
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
-        let target = dir.path().join("base.exe");
-        fs::write(&target, [])?;
+        fs::write(dir.path().join("base.exe"), [])?;
         fs::write(
             &proxy,
             windows_python_launcher("base.exe", WindowMode::Console)?,
+        )?;
+        let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
+        for error in [io::ErrorKind::PermissionDenied, io::ErrorKind::NotFound] {
+            let input = target.cache_input::<()>(&proxy, &proxy, Err(error.into()))?;
+            assert!(input.is_none());
+        }
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn junction_loop_bypasses_cache() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let home = dir.path().join("home");
+        let target = home.join("python.exe");
+        fs::create_dir(&home)?;
+        fs::write(&target, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(r"home\python.exe", WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
         let mut response = mocked_interpreter_response(&proxy)?;
@@ -2290,28 +2298,27 @@ mod tests {
         let cached = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
         InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
 
+        // Move a junction onto its own destination, leaving the proxy intact.
+        let redirect = dir.path().join("redirect");
+        let saved = dir.path().join("saved");
+        uv_fs::create_symlink(&home, &redirect)?;
+        fs::rename(&home, &saved)?;
+        fs::rename(&redirect, &home)?;
+        let err = canonicalize_executable(&proxy).unwrap_err();
+        assert_ne!(err.kind(), io::ErrorKind::NotFound, "{err}");
         let prefix = dir.path().join("fresh-probe");
-        for error in [
-            io::Error::from(io::ErrorKind::PermissionDenied),
-            io::Error::from(io::ErrorKind::NotFound),
-            // A loop of directory junctions in the stored target.
-            io::Error::from_raw_os_error(ERROR_CANT_RESOLVE_FILENAME.0.cast_signed()),
-        ] {
-            let mut response = mocked_interpreter_response(&proxy)?;
-            response.metadata.sys_prefix = prefix.clone();
-            response.metadata.sys_base_executable = Some(target.clone());
-            let info = InterpreterInfo::query_cached_with(
-                &proxy,
-                &cache,
-                |_| Err(error),
-                || Ok((response, None)),
-            )?;
-            assert_eq!(info.metadata.sys_prefix, prefix);
-            let proxy_entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
-            assert!(!proxy_entry.path().exists());
-            let after = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
-            assert_eq!(after.metadata.sys_prefix, cached.metadata.sys_prefix);
-        }
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_prefix = prefix.clone();
+        response.metadata.sys_base_executable = Some(target);
+        let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        assert_eq!(info.metadata.sys_prefix, prefix);
+        let proxy_entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
+        assert!(!proxy_entry.path().exists());
+
+        uv_fs::remove_symlink(&home)?;
+        fs::rename(&saved, &home)?;
+        let after = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+        assert_eq!(after.metadata.sys_prefix, cached.metadata.sys_prefix);
         Ok(())
     }
 
