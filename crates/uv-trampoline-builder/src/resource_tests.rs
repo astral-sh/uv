@@ -396,7 +396,10 @@ fn mui_configuration_precludes_launcher_identification() -> Result<()> {
     image.set_resource_directory(resources)?;
     fs_err::write(path.path(), image.data())?;
 
-    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
 }
@@ -424,7 +427,10 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
         0x0407,
         &[(RESOURCE_PYTHON_PATH, b"missing-de.exe")],
     )?;
-    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
 
     let python = which::which("python")?;
     update_native_resources(
@@ -451,7 +457,10 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     assert_eq!(&neutral[second..second + 4], &0x0407_u32.to_le_bytes());
     neutral[second..second + 4].fill(0);
     fs_err::write(path.path(), neutral)?;
-    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
     Ok(())
 }
 
@@ -645,7 +654,10 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
             ],
         )?,
     )?;
-    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
     assert!(Launcher::try_from_path(path.path())?.is_none());
 
     assert!(matches!(
@@ -709,7 +721,10 @@ fn interpreter_path_resource_size_limit() -> Result<()> {
             ],
         )?,
     )?;
-    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
 }
@@ -741,7 +756,10 @@ fn drive_relative_target_cannot_establish_ownership() -> Result<()> {
         path.path(),
         windows_python_launcher(target, WindowMode::Console)?,
     )?;
-    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
     assert_eq!(launcher.python_path(), target);
     Ok(())

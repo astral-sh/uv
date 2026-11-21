@@ -59,7 +59,10 @@ const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 const MAX_PYTHON_PATH_BYTES: usize = 3 * 32_767;
 
 /// Read the launcher kind and interpreter path without inspecting the script payload.
-/// Return a target only if it is absolute after resolving it against the launcher's directory.
+/// Return `Ok(None)` if the launcher kind resource cannot be identified.
+/// Once identified, return an error if its interpreter cannot be resolved to a single
+/// absolute path relative to the launcher. Such a proxy can still run a Python
+/// selected by the user's language or working directory.
 #[cfg(windows)]
 pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
     resource_reader::read_target(path)

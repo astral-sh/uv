@@ -895,6 +895,11 @@ impl Interpreter {
 /// but will resolve junctions if they are part of a trampoline target.
 pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let path = path.as_ref();
+    Ok(cache_target(path)?.unwrap_or_else(|| path.to_path_buf()))
+}
+
+/// The canonical executable for the cache key, if the target can be identified.
+fn cache_target(path: &Path) -> io::Result<Option<PathBuf>> {
     debug_assert!(
         path.is_absolute(),
         "path must be absolute: {}",
@@ -903,15 +908,18 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
 
     #[cfg(windows)]
     {
-        if let Ok(Some((_, target))) = uv_trampoline_builder::read_launcher_target(path) {
-            Ok(dunce::canonicalize(target)?)
-        } else {
-            Ok(path.to_path_buf())
+        match uv_trampoline_builder::read_launcher_target(path) {
+            Ok(Some((_, target))) => dunce::canonicalize(target).map(Some),
+            Ok(None) => Ok(Some(path.to_path_buf())),
+            Err(err) => {
+                trace!("Unresolved launcher target for `{}`: {err}", path.display());
+                Ok(None)
+            }
         }
     }
 
     #[cfg(unix)]
-    fs_err::canonicalize(path)
+    fs_err::canonicalize(path).map(Some)
 }
 
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
@@ -1482,7 +1490,12 @@ impl InterpreterInfo {
             }
         };
 
-        let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
+        let Some(canonical) = cache_target(&absolute).map_err(handle_io_error)? else {
+            // A venv launcher reports itself as `sys.executable`. Its timestamp
+            // cannot invalidate metadata when the selected interpreter changes.
+            let (wire, _) = probe()?;
+            return Self::from_probe(executable, wire, HashMap::new());
+        };
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
@@ -1507,6 +1520,19 @@ impl InterpreterInfo {
             &mut file_timestamps,
         );
 
+        let info = Self::from_probe(executable, wire, file_timestamps)?;
+        if cacheable {
+            fs::create_dir_all(cache_entry.dir())?;
+            write_atomic_sync(cache_entry.path(), rmp_serde::to_vec(&info)?)?;
+        }
+        Ok(info)
+    }
+
+    fn from_probe(
+        executable: &Path,
+        wire: InterpreterInfoWire,
+        file_timestamps: HashMap<PathBuf, Option<Timestamp>>,
+    ) -> Result<Self, Error> {
         let cpu_info = match wire.cpu_info {
             CpuProbe::Detected(info) => Some(info),
             CpuProbe::UnsupportedArchitecture(architecture) => {
@@ -1539,18 +1565,11 @@ impl InterpreterInfo {
                 None
             }
         };
-        let info = Self {
+        Ok(Self {
             platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),
             metadata: wire.metadata,
             file_timestamps,
-        };
-
-        if cacheable {
-            fs::create_dir_all(cache_entry.dir())?;
-            write_atomic_sync(cache_entry.path(), rmp_serde::to_vec(&info)?)?;
-        }
-
-        Ok(info)
+        })
     }
 
     /// Determine whether the probe result can be cached and record any discovered file inputs.
@@ -1788,7 +1807,6 @@ fn python_home(interpreter: &Path) -> Option<PathBuf> {
     pyvenv_cfg.home
 }
 
-#[cfg(unix)]
 #[cfg(test)]
 mod tests {
     use std::io;
@@ -1879,6 +1897,41 @@ mod tests {
 
     fn unexpected_probe() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error> {
         Err(io::Error::other("expected an interpreter cache hit").into())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn unresolved_launcher_bypasses_cache() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        // The target depends on the current directory for the drive. A venv probe reports
+        // the proxy as `sys.executable` regardless of which interpreter actually ran.
+        fs::write(
+            &proxy,
+            windows_python_launcher("C:python.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
+        let response = mocked_interpreter_response(&proxy)?;
+        let mut info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        assert!(!entry.path().exists());
+
+        // Seed an entry keyed on the proxy alone, with a fresh timestamp.
+        info.file_timestamps
+            .insert(proxy.clone(), Some(Timestamp::from_path(&proxy)?));
+        fs::create_dir_all(entry.dir())?;
+        fs::write(entry.path(), rmp_serde::to_vec(&info)?)?;
+        assert!(InterpreterInfo::read_cached(&cache, &entry, &proxy).is_some());
+        let mut probed = false;
+        let response = mocked_interpreter_response(&proxy)?;
+        InterpreterInfo::query_cached(&proxy, &cache, || {
+            probed = true;
+            Ok((response, None))
+        })?;
+        assert!(probed);
+        Ok(())
     }
 
     #[tokio::test]

@@ -53,34 +53,32 @@ enum Languages {
 }
 
 pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    let Some(mut resources) = Resources::open(path) else {
+    let Some((mut resources, kind_languages)) = Resources::open_launcher(path) else {
         return Ok(None);
     };
-    let Some((kind, target)) = resources.target()? else {
-        return Ok(None);
-    };
+    let (kind, target) = resources
+        .target(kind_languages)?
+        .ok_or(Error::UnprocessableMetadata)?;
     let mut target = PathBuf::from(target);
     if target.is_relative() {
         // The trampoline joins the stored path to the parent of current_exe().
         let executable = std::path::absolute(path)?;
-        let Some(parent) = executable.parent() else {
-            return Ok(None);
-        };
+        let parent = executable.parent().ok_or(Error::UnprocessableMetadata)?;
         target = parent.join(target);
         // A drive-relative target such as C:python.exe depends on the
         // working directory for that drive even after the join.
         if target.is_relative() {
-            return Ok(None);
+            return Err(Error::UnprocessableMetadata);
         }
     }
     Ok(Some((kind, target)))
 }
 
 pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
-    let Some(mut resources) = Resources::open(path) else {
+    let Some((mut resources, kind_languages)) = Resources::open_launcher(path) else {
         return Ok(None);
     };
-    let Some((kind, python_path)) = resources.target()? else {
+    let Some((kind, python_path)) = resources.target(kind_languages)? else {
         return Ok(None);
     };
     let languages = match kind {
@@ -112,7 +110,8 @@ struct Resources {
 }
 
 impl Resources {
-    fn open(path: &Path) -> Option<Self> {
+    /// Identify the launcher by its kind resource and return its language directory.
+    fn open_launcher(path: &Path) -> Option<(Self, u32)> {
         let file = File::open(path).ok()?;
         let file_size = file.metadata().ok()?.len();
         if file_size < u64::from(PE_PTR_OFFSET) + 4 {
@@ -140,12 +139,12 @@ impl Resources {
             return None;
         };
         resources.rcdata = rcdata;
-        // With MUI configuration, FindResourceW can obtain a different target from
-        // a language-specific sidecar. Only infer ownership from a standalone image.
-        if let Lookup::Found(_) = resources.subdirectory(0, Key::Name("MUI"))? {
+        let Lookup::Found(kind_languages) =
+            resources.subdirectory(rcdata, Key::Name(RESOURCE_TRAMPOLINE_KIND))?
+        else {
             return None;
-        }
-        Some(resources)
+        };
+        Some((resources, kind_languages))
     }
 
     /// Locate a file-backed range by its relative virtual address (RVA).
@@ -247,6 +246,10 @@ impl Resources {
         let Lookup::Found(languages) = self.subdirectory(self.rcdata, Key::Name(name))? else {
             return Some(Lookup::Missing);
         };
+        self.locate_language(languages, policy).map(Lookup::Found)
+    }
+
+    fn locate_language(&mut self, languages: u32, policy: Languages) -> Option<Range<u64>> {
         let header: ResourceDirectoryTable = self.read_entry(languages)?;
         if header.number_of_name_entries != 0 || header.number_of_id_entries == 0 {
             return None;
@@ -284,13 +287,19 @@ impl Resources {
         } else {
             self.offset(data.data_rva, data.size)?
         };
-        Some(Lookup::Found(offset..offset + u64::from(data.size)))
+        Some(offset..offset + u64::from(data.size))
     }
 
-    fn target(&mut self) -> Result<Option<(LauncherKind, String)>, Error> {
-        let Some(Lookup::Found(payload)) =
-            self.locate(RESOURCE_TRAMPOLINE_KIND, Languages::PreferNeutral)
-        else {
+    fn target(&mut self, kind_languages: u32) -> Result<Option<(LauncherKind, String)>, Error> {
+        // With MUI configuration, FindResourceW can obtain a different target from
+        // a language-specific sidecar. Only infer ownership from a standalone image.
+        if !matches!(
+            self.subdirectory(0, Key::Name("MUI")),
+            Some(Lookup::Missing)
+        ) {
+            return Ok(None);
+        }
+        let Some(payload) = self.locate_language(kind_languages, Languages::PreferNeutral) else {
             return Ok(None);
         };
         if payload.is_empty() {
