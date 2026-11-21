@@ -1919,6 +1919,11 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn nested_launcher_bypasses_cache() -> Result<()> {
+        use std::env;
+        use std::path::PathBuf;
+
+        use uv_cache_key::cache_digest;
+        use uv_static::EnvVars;
         use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
         let dir = tempdir()?;
@@ -1926,7 +1931,7 @@ mod tests {
         let target = dir.path().join("inner.exe");
         fs::write(
             &proxy,
-            windows_python_launcher("inner.exe", WindowMode::Console)?,
+            windows_python_launcher(&target, WindowMode::Console)?,
         )?;
         fs::write(
             &target,
@@ -1936,8 +1941,19 @@ mod tests {
         let canonical = canonicalize_executable(&proxy)?;
         let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
         let response = mocked_interpreter_response(&proxy)?;
-        InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
         assert!(!entry.path().exists());
+
+        // Older entries for an absolute target track both proxies. Their timestamps
+        // can remain fresh after the final interpreter changes.
+        let digest = cache_digest(&(
+            proxy.as_path(),
+            canonical.as_path(),
+            env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from),
+            env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from),
+        ));
+        let legacy = entry.with_file(format!("{digest}.msgpack"));
+        assert_bypasses_fresh_entry(&cache, &legacy, &proxy, &info)?;
 
         // A direct target can be tracked by its own timestamp.
         fs::write(&target, [])?;
@@ -1969,12 +1985,22 @@ mod tests {
         // Seed an entry keyed on the proxy alone, with a fresh timestamp.
         info.file_timestamps
             .insert(proxy.clone(), Some(Timestamp::from_path(&proxy)?));
+        assert_bypasses_fresh_entry(&cache, &entry, &proxy, &info)
+    }
+
+    #[cfg(windows)]
+    fn assert_bypasses_fresh_entry(
+        cache: &Cache,
+        entry: &uv_cache::CacheEntry,
+        proxy: &Path,
+        info: &InterpreterInfo,
+    ) -> Result<()> {
         fs::create_dir_all(entry.dir())?;
-        fs::write(entry.path(), rmp_serde::to_vec(&info)?)?;
-        assert!(InterpreterInfo::read_cached(&cache, &entry, &proxy).is_some());
+        fs::write(entry.path(), rmp_serde::to_vec(info)?)?;
+        assert!(InterpreterInfo::read_cached(cache, entry, proxy).is_some());
         let mut probed = false;
-        let response = mocked_interpreter_response(&proxy)?;
-        InterpreterInfo::query_cached(&proxy, &cache, || {
+        let response = mocked_interpreter_response(proxy)?;
+        InterpreterInfo::query_cached(proxy, cache, || {
             probed = true;
             Ok((response, None))
         })?;
