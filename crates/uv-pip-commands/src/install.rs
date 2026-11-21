@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
@@ -49,7 +49,7 @@ use uv_workspace::pyproject::ExtraBuildDependencies;
 
 use crate::install_report::write_install_report;
 use crate::pylock::{read_pylock_toml, resolve_pylock_toml};
-use crate::reporters::report_target_environment;
+use crate::reporters::report_target_environment_from;
 use crate::resolve_build_hash_checking;
 use uv_command_support::{ExitStatus, Printer, UvError};
 use uv_install_operations::Changelog;
@@ -82,6 +82,7 @@ impl Hinted for ExternallyManagedError {
 /// Install packages into the current environment.
 #[expect(clippy::fn_params_excessive_bools)]
 pub async fn pip_install(
+    working_dir: &Path,
     requirements: &[RequirementsSource],
     constraints: &[RequirementsSource],
     overrides: &[RequirementsSource],
@@ -244,7 +245,7 @@ pub async fn pip_install(
             python_arch,
             &cache,
         )?;
-        report_target_environment(&environment, &cache, printer)?;
+        report_target_environment_from(&environment, &cache, working_dir, printer)?;
         environment
     };
 

@@ -12,6 +12,8 @@ use either::Either;
 pub mod child;
 mod printer;
 pub mod progress;
+#[cfg(feature = "test-output")]
+pub mod test_output;
 pub mod update_shell;
 
 pub use printer::{Printer, Stderr, Stdout};
@@ -75,14 +77,20 @@ impl UvError {
     }
 }
 
-impl From<ExitStatus> for ExitCode {
+impl From<ExitStatus> for u8 {
     fn from(status: ExitStatus) -> Self {
         match status {
-            ExitStatus::Success => Self::from(0),
-            ExitStatus::Failure => Self::from(1),
-            ExitStatus::Error => Self::from(2),
-            ExitStatus::External(code) => Self::from(code),
+            ExitStatus::Success => 0,
+            ExitStatus::Failure => 1,
+            ExitStatus::Error => 2,
+            ExitStatus::External(code) => code,
         }
+    }
+}
+
+impl From<ExitStatus> for ExitCode {
+    fn from(status: ExitStatus) -> Self {
+        Self::from(u8::from(status))
     }
 }
 
@@ -178,6 +186,10 @@ impl Write for OutputWriter<'_> {
 
         // Write to standard output.
         if let Some(stdout) = &mut self.stdout {
+            #[cfg(feature = "test-output")]
+            if test_output::write(buf, |out| &mut out.stdout) {
+                return Ok(buf.len());
+            }
             stdout.write_all(buf)?;
         }
 
