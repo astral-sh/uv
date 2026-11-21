@@ -414,15 +414,17 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
             (RESOURCE_PYTHON_PATH, b"missing-en.exe"),
         ],
     )?;
-    let launcher = Launcher::try_from_path(path.path())?.context("Missing localized launcher")?;
-    assert_eq!(launcher.python_path(), Path::new("missing-en.exe"));
+    assert_eq!(
+        super::read_launcher_target(path.path())?,
+        Some((LauncherKind::Python, temp_dir.path().join("missing-en.exe")))
+    );
 
     update_native_resources(
         path.path(),
         0x0407,
         &[(RESOURCE_PYTHON_PATH, b"missing-de.exe")],
     )?;
-    assert!(Launcher::try_from_path(path.path())?.is_none());
+    assert!(super::read_launcher_target(path.path())?.is_none());
 
     let python = which::which("python")?;
     update_native_resources(
@@ -437,8 +439,10 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
         .args(["-c", "pass"])
         .assert()
         .success();
-    let launcher = Launcher::try_from_path(path.path())?.context("Missing neutral launcher")?;
-    assert_eq!(launcher.python_path(), python);
+    assert_eq!(
+        super::read_launcher_target(path.path())?,
+        Some((LauncherKind::Python, python))
+    );
 
     // A binary search can find the second neutral entry when IDs are duplicated.
     let mut neutral = fs_err::read(path.path())?;
@@ -447,7 +451,7 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     assert_eq!(&neutral[second..second + 4], &0x0407_u32.to_le_bytes());
     neutral[second..second + 4].fill(0);
     fs_err::write(path.path(), neutral)?;
-    assert!(Launcher::try_from_path(path.path())?.is_none());
+    assert!(super::read_launcher_target(path.path())?.is_none());
     Ok(())
 }
 
