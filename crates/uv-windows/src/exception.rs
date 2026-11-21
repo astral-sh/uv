@@ -235,13 +235,19 @@ fn dump_regs(e: &mut ExceptionSafeStderr, c: &CONTEXT) -> std::fmt::Result {
     Ok(())
 }
 
-fn dump_exception(exception_info: *const EXCEPTION_POINTERS) -> std::fmt::Result {
+/// # Safety
+///
+/// `exception_info` may be null. Otherwise, it must point to an aligned, initialized
+/// `EXCEPTION_POINTERS`, whose non-null `ExceptionRecord` and `ContextRecord` fields point to
+/// aligned, initialized records of their respective types. All three records must remain
+/// readable and unchanged for the duration of this call.
+unsafe fn dump_exception(exception_info: *const EXCEPTION_POINTERS) -> std::fmt::Result {
     let mut e = ExceptionSafeStderr::new().map_err(|_| std::fmt::Error)?;
     writeln!(e, "error: unhandled exception in uv, please report a bug:")?;
     let mut context = None;
-    // SAFETY: Pointer comes from the OS
+    // SAFETY: The caller guarantees that a non-null exception_info is valid for shared access.
     if let Some(info) = unsafe { exception_info.as_ref() } {
-        // SAFETY: Pointer comes from the OS
+        // SAFETY: The caller also guarantees shared access to a non-null ExceptionRecord.
         if let Some(exc) = unsafe { info.ExceptionRecord.as_ref() } {
             writeln!(
                 e,
@@ -274,7 +280,7 @@ fn dump_exception(exception_info: *const EXCEPTION_POINTERS) -> std::fmt::Result
         } else {
             writeln!(e, "(ExceptionRecord is NULL)")?;
         }
-        // SAFETY: Pointer comes from the OS
+        // SAFETY: The caller also guarantees shared access to a non-null ContextRecord.
         context = unsafe { info.ContextRecord.as_ref() };
     } else {
         writeln!(e, "(ExceptionInfo is NULL)")?;
@@ -297,10 +303,15 @@ fn dump_exception(exception_info: *const EXCEPTION_POINTERS) -> std::fmt::Result
     Ok(())
 }
 
+/// # Safety
+///
+/// `exception_info` must satisfy the safety requirements of `dump_exception`.
 unsafe extern "system" fn unhandled_exception_filter(
     exception_info: *const EXCEPTION_POINTERS,
 ) -> i32 {
-    let _ = dump_exception(exception_info);
+    // SAFETY: Windows supplies initialized exception and context records that remain valid for
+    // the duration of an unhandled-exception-filter callback.
+    let _ = unsafe { dump_exception(exception_info) };
     EXCEPTION_CONTINUE_SEARCH
 }
 

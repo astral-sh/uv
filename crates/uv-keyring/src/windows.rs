@@ -111,7 +111,11 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_password(&self) -> Result<String> {
-        self.extract_from_platform(extract_password).await
+        self.extract_from_platform(|credential| {
+            // SAFETY: extract_from_platform keeps the CredReadW allocation alive and unchanged.
+            unsafe { extract_password(credential) }
+        })
+        .await
     }
 
     /// Look up the secret for this entry, if any.
@@ -119,7 +123,11 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_secret(&self) -> Result<Vec<u8>> {
-        self.extract_from_platform(extract_secret).await
+        self.extract_from_platform(|credential| {
+            // SAFETY: extract_from_platform keeps the CredReadW allocation alive and unchanged.
+            unsafe { extract_secret(credential) }
+        })
+        .await
     }
 
     /// Get the attributes from the credential for this entry, if it exists.
@@ -127,7 +135,12 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn get_attributes(&self) -> Result<HashMap<String, String>> {
-        let cred = self.extract_from_platform(Self::extract_credential).await?;
+        let cred = self
+            .extract_from_platform(|credential| {
+                // SAFETY: extract_from_platform keeps the CredReadW allocation alive and unchanged.
+                unsafe { Self::extract_credential(credential) }
+            })
+            .await?;
         let mut attributes: HashMap<String, String> = HashMap::new();
         attributes.insert("comment".to_string(), cred.comment.clone());
         attributes.insert("target_alias".to_string(), cred.target_alias.clone());
@@ -140,8 +153,18 @@ impl CredentialApi for WinCredential {
     /// Returns a [`NoEntry`](ErrorCode::NoEntry) error if there is no
     /// credential in the store.
     async fn update_attributes(&self, attributes: &HashMap<&str, &str>) -> Result<()> {
-        let secret = self.extract_from_platform(extract_secret).await?;
-        let mut cred = self.extract_from_platform(Self::extract_credential).await?;
+        let secret = self
+            .extract_from_platform(|credential| {
+                // SAFETY: extract_from_platform keeps the CredReadW allocation alive and unchanged.
+                unsafe { extract_secret(credential) }
+            })
+            .await?;
+        let mut cred = self
+            .extract_from_platform(|credential| {
+                // SAFETY: extract_from_platform keeps the CredReadW allocation alive and unchanged.
+                unsafe { Self::extract_credential(credential) }
+            })
+            .await?;
         if let Some(comment) = attributes.get(&"comment") {
             cred.comment = (*comment).to_string();
         }
@@ -289,9 +312,18 @@ impl WinCredential {
     /// This can be useful for seeing modifications made by a third party.
     #[cfg(test)]
     async fn get_credential(&self) -> Result<Self> {
-        self.extract_from_platform(Self::extract_credential).await
+        self.extract_from_platform(|credential| {
+            // SAFETY: extract_from_platform keeps the CredReadW allocation alive and unchanged.
+            unsafe { Self::extract_credential(credential) }
+        })
+        .await
     }
 
+    /// Call `f` with a complete, initialized credential allocation returned by `CredReadW`.
+    ///
+    /// The credential's blob and NUL-terminated strings remain readable and unchanged until `f`
+    /// returns. Their Windows-defined maximum lengths fit in `isize::MAX`. The allocation is
+    /// then erased and freed.
     async fn extract_from_platform<F, T>(&self, f: F) -> Result<T>
     where
         F: FnOnce(&CREDENTIALW) -> Result<T> + Send + 'static,
@@ -318,8 +350,9 @@ impl WinCredential {
             // the passed extractor function to it.
             let ref_cred: &mut CREDENTIALW = unsafe { &mut *p_credential };
             let result = f(ref_cred);
-            // Finally, we erase the secret and free the allocated credential.
-            erase_secret(ref_cred);
+            // SAFETY: We exclusively own the still-live CredReadW allocation, and the extractor
+            // has returned, so there are no outstanding borrows of its credential blob.
+            unsafe { erase_secret(ref_cred) };
             let p_credential = p_credential;
             // SAFETY: `CredReadW` succeeded, so p_credential points at an allocated credential.
             // Free the allocation.
@@ -329,13 +362,20 @@ impl WinCredential {
         .await
     }
 
+    /// # Safety
+    ///
+    /// The `UserName`, `TargetName`, `TargetAlias`, and `Comment` pointers must each satisfy
+    /// the safety requirements of `from_wstr` for the duration of this call.
     #[expect(clippy::unnecessary_wraps)]
-    fn extract_credential(w_credential: &CREDENTIALW) -> Result<Self> {
-        Ok(Self {
-            username: unsafe { from_wstr(w_credential.UserName.as_ptr()) },
-            target_name: unsafe { from_wstr(w_credential.TargetName.as_ptr()) },
-            target_alias: unsafe { from_wstr(w_credential.TargetAlias.as_ptr()) },
-            comment: unsafe { from_wstr(w_credential.Comment.as_ptr()) },
+    unsafe fn extract_credential(w_credential: &CREDENTIALW) -> Result<Self> {
+        // SAFETY: The caller guarantees that each string pointer meets from_wstr's contract.
+        Ok(unsafe {
+            Self {
+                username: from_wstr(w_credential.UserName.as_ptr()),
+                target_name: from_wstr(w_credential.TargetName.as_ptr()),
+                target_alias: from_wstr(w_credential.TargetAlias.as_ptr()),
+                comment: from_wstr(w_credential.Comment.as_ptr()),
+            }
         })
     }
 
@@ -405,8 +445,12 @@ impl CredentialBuilderApi for WinCredentialBuilder {
     }
 }
 
-fn extract_password(credential: &CREDENTIALW) -> Result<String> {
-    let mut blob = extract_secret(credential)?;
+/// # Safety
+///
+/// `credential` must satisfy the safety requirements of `extract_secret`.
+unsafe fn extract_password(credential: &CREDENTIALW) -> Result<String> {
+    // SAFETY: The caller guarantees that the credential blob satisfies extract_secret's contract.
+    let mut blob = unsafe { extract_secret(credential) }?;
     // 3rd parties may write credential data with an odd number of bytes,
     // so we make sure that we don't try to decode those as utf16
     if blob.len() % 2 != 0 {
@@ -429,23 +473,35 @@ fn extract_password(credential: &CREDENTIALW) -> Result<String> {
     result
 }
 
+/// # Safety
+///
+/// If `CredentialBlobSize` is nonzero, `CredentialBlob` must point to that many initialized
+/// bytes in one allocation. The length must not exceed `isize::MAX`, and the bytes must remain
+/// readable and unchanged for the duration of this call.
 #[expect(clippy::unnecessary_wraps)]
-fn extract_secret(credential: &CREDENTIALW) -> Result<Vec<u8>> {
+unsafe fn extract_secret(credential: &CREDENTIALW) -> Result<Vec<u8>> {
     let blob_pointer: *const u8 = credential.CredentialBlob;
     let blob_len: usize = credential.CredentialBlobSize as usize;
     if blob_len == 0 {
         return Ok(Vec::new());
     }
+    // SAFETY: The caller guarantees that the nonempty blob is valid for this shared slice.
     let blob = unsafe { std::slice::from_raw_parts(blob_pointer, blob_len) };
     Ok(blob.to_vec())
 }
 
-fn erase_secret(credential: &mut CREDENTIALW) {
+/// # Safety
+///
+/// If `CredentialBlobSize` is nonzero, `CredentialBlob` must point to that many initialized
+/// bytes in one allocation. The length must not exceed `isize::MAX`, and the bytes must remain
+/// exclusively accessible and writable for the duration of this call.
+unsafe fn erase_secret(credential: &mut CREDENTIALW) {
     let blob_pointer: *mut u8 = credential.CredentialBlob;
     let blob_len: usize = credential.CredentialBlobSize as usize;
     if blob_len == 0 {
         return;
     }
+    // SAFETY: The caller guarantees that the nonempty blob is valid for this exclusive slice.
     let blob = unsafe { std::slice::from_raw_parts_mut(blob_pointer, blob_len) };
     blob.zeroize();
 }
@@ -458,6 +514,11 @@ fn to_wstr_no_null(s: &str) -> Vec<u16> {
     s.encode_utf16().collect()
 }
 
+/// # Safety
+///
+/// `ws` must be null or point to an aligned, initialized, NUL-terminated sequence of `u16` values
+/// in one allocation. The sequence, including its terminator, must fit within `isize::MAX` bytes
+/// and remain readable and unchanged for the duration of this call.
 #[expect(clippy::maybe_infinite_iter)]
 unsafe fn from_wstr(ws: *const u16) -> String {
     // null pointer case, return empty string
@@ -465,10 +526,12 @@ unsafe fn from_wstr(ws: *const u16) -> String {
         return String::new();
     }
     // this code from https://stackoverflow.com/a/48587463/558006
+    // SAFETY: The caller guarantees a readable NUL terminator within the same allocation.
     let len = (0..).take_while(|&i| unsafe { *ws.offset(i) != 0 }).count();
     if len == 0 {
         return String::new();
     }
+    // SAFETY: The scan found `len` initialized, non-NUL elements in the caller-provided allocation.
     let slice = unsafe { std::slice::from_raw_parts(ws, len) };
     String::from_utf16_lossy(slice)
 }
@@ -567,7 +630,8 @@ mod tests {
         LittleEndian::write_u16_into(&malformed_utf16, &mut malformed_bytes);
         for bytes in [&mut odd_bytes, &mut malformed_bytes] {
             let credential = make_platform_credential(bytes);
-            match extract_password(&credential) {
+            // SAFETY: The credential blob points to the initialized bytes of the still-live Vec.
+            match unsafe { extract_password(&credential) } {
                 Err(ErrorCode::BadEncoding(str)) => assert_eq!(&str, bytes),
                 Err(other) => panic!("Bad password ({bytes:?}) decode gave wrong error: {other}"),
                 Ok(s) => panic!("Bad password ({bytes:?}) decode gave results: {s:?}"),
