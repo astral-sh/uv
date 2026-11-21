@@ -367,7 +367,7 @@ fn help_subcommand() {
     check if the virtual environment contains a PyPy interpreter then check if each executable
     in the path is a PyPy interpreter.
 
-    uv supports discovering CPython, PyPy, and GraalPy interpreters. Unsupported interpreters
+    uv supports discovering CPython, PyPy, GraalPy, and Imre interpreters. Unsupported interpreters
     will be skipped during discovery. If an unsupported interpreter implementation is requested,
     uv will exit with an error.
 

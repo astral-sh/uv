@@ -13,6 +13,7 @@ pub enum Error {
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Default, PartialOrd, Ord, Hash, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ImplementationName {
+    Imre,
     Pyodide,
     GraalPy,
     PyPy,
@@ -35,6 +36,7 @@ impl ImplementationName {
             Self::PyPy => "pypy",
             Self::GraalPy => "graalpy",
             Self::Pyodide => "pyodide",
+            Self::Imre => "imre",
         }
     }
 
@@ -44,12 +46,19 @@ impl ImplementationName {
             Self::CPython => Some("cp"),
             Self::PyPy => Some("pp"),
             Self::GraalPy => Some("gp"),
-            Self::Pyodide => None,
+            Self::Pyodide | Self::Imre => None,
         }
     }
 
     pub(crate) fn iter_all() -> impl Iterator<Item = Self> {
-        [Self::CPython, Self::PyPy, Self::GraalPy, Self::Pyodide].into_iter()
+        [
+            Self::CPython,
+            Self::PyPy,
+            Self::GraalPy,
+            Self::Pyodide,
+            Self::Imre,
+        ]
+        .into_iter()
     }
 
     pub(crate) fn pretty(self) -> &'static str {
@@ -58,6 +67,7 @@ impl ImplementationName {
             Self::PyPy => "PyPy",
             Self::GraalPy => "GraalPy",
             Self::Pyodide => "Pyodide",
+            Self::Imre => "Imre",
         }
     }
 
@@ -65,7 +75,7 @@ impl ImplementationName {
     pub fn executable_name(self) -> &'static str {
         match self {
             Self::CPython | Self::Pyodide => "python",
-            Self::PyPy | Self::GraalPy => self.long_name(),
+            Self::PyPy | Self::GraalPy | Self::Imre => self.long_name(),
         }
     }
 
