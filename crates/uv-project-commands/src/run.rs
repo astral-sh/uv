@@ -1043,8 +1043,9 @@ pub async fn run(
                     if !entry.file_type()?.is_file() {
                         continue;
                     }
+                    let source = entry.path();
                     match copy_entrypoint(
-                        &entry.path(),
+                        &source,
                         &ephemeral_env.scripts().join(entry.file_name()),
                         interpreter.sys_executable(),
                         ephemeral_env.interpreter().sys_executable(),
@@ -1056,7 +1057,7 @@ pub async fn run(
                         {
                             trace!(
                                 "Skipping copy of entrypoint `{}`: already exists",
-                                &entry.path().display()
+                                source.display()
                             );
                         }
                         Err(CopyEntrypointError::Io(err))
@@ -1064,10 +1065,14 @@ pub async fn run(
                         {
                             trace!(
                                 "Skipping copy of entrypoint `{}`: permission denied",
-                                &entry.path().display()
+                                source.display()
                             );
                         }
-                        Err(err) => return Err(err.into()),
+                        Err(err) => {
+                            return Err(err).with_context(|| {
+                                format!("Failed to copy entrypoint `{}`", source.user_display())
+                            });
+                        }
                     }
                 }
 
