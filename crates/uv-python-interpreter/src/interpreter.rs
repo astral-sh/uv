@@ -1666,9 +1666,7 @@ impl InterpreterInfo {
             // The Windows CPython trampoline reports localized errors. Only diagnose
             // an uninstalled interpreter when its `pyvenv.cfg` home is known to be
             // missing, since this diagnosis can trigger environment replacement.
-            if visible_python_home(interpreter)
-                .is_some_and(|home| matches!(home.try_exists(), Ok(false)))
-            {
+            if has_missing_python_home(interpreter) {
                 return Err(Error::BrokenLink(BrokenLink::new(
                     interpreter,
                     BrokenLinkKind::Trampoline(None),
@@ -2060,21 +2058,51 @@ fn find_base_python(
     }
 }
 
-/// Return the Python home when the interpreter shares uv's view of both the config and its target.
-fn visible_python_home(interpreter: &Path) -> Option<PathBuf> {
-    let config = interpreter.parent()?.parent()?.join("pyvenv.cfg");
+/// A missing home in the environment's configuration can trigger its replacement.
+/// On Windows the CPython launcher checks beside the executable first, while a uv
+/// proxy checks the environment root. A competing config must also indicate a
+/// missing home before we can infer one from a failed probe.
+fn has_missing_python_home(interpreter: &Path) -> bool {
+    let Some(parent) = interpreter.parent() else {
+        return false;
+    };
+    let Some(root) = parent.parent() else {
+        return false;
+    };
     #[cfg(windows)]
     let view = uv_fs::wow64::FileSystemView::for_executable(interpreter);
-    #[cfg(windows)]
-    if view.may_redirect(&config).ok()? {
-        return None;
+    let directories = [
+        #[cfg(windows)]
+        parent,
+        root,
+    ];
+    for directory in directories {
+        let config = directory.join("pyvenv.cfg");
+        #[cfg(windows)]
+        if !matches!(view.may_redirect(&config), Ok(false)) {
+            return false;
+        }
+        let cfg = match PyVenvConfiguration::parse(&config) {
+            Ok(cfg) => cfg,
+            Err(crate::virtualenv::Error::ParsePyVenvCfg(_, err))
+                if directory != root && err.kind() == io::ErrorKind::NotFound =>
+            {
+                continue;
+            }
+            Err(_) => return false,
+        };
+        let Some(home) = cfg.home else {
+            return false;
+        };
+        #[cfg(windows)]
+        if !matches!(view.may_redirect(&home), Ok(false)) {
+            return false;
+        }
+        if !matches!(home.try_exists(), Ok(false)) {
+            return false;
+        }
     }
-    let home = PyVenvConfiguration::parse(config).ok()?.home?;
-    #[cfg(windows)]
-    if view.may_redirect(&home).ok()? {
-        return None;
-    }
-    Some(home)
+    true
 }
 
 #[cfg(test)]
@@ -2137,12 +2165,35 @@ mod tests {
 
         // Sysnative exists only in the 32-bit view.
         fs::copy(wow64, &interpreter)?;
-        assert_eq!(super::visible_python_home(&interpreter), None);
+        assert!(!super::has_missing_python_home(&interpreter));
         fs::write(
             &interpreter,
             windows_python_launcher("python.exe", WindowMode::Console)?,
         )?;
-        assert_eq!(super::visible_python_home(&interpreter), Some(home));
+        assert!(super::has_missing_python_home(&interpreter));
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn conflicting_configs_do_not_imply_a_missing_python_home() -> Result<()> {
+        let dir = tempdir()?;
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let interpreter = scripts.join("python.exe");
+        let root = dir.path().join("pyvenv.cfg");
+        let sibling = scripts.join("pyvenv.cfg");
+        let present = format!("home = {}\n", dir.path().display());
+        let missing = format!("home = {}\n", dir.path().join("missing").display());
+
+        fs::write(&root, &missing)?;
+        assert!(super::has_missing_python_home(&interpreter));
+        fs::write(&sibling, &present)?;
+        assert!(!super::has_missing_python_home(&interpreter));
+        fs::write(&sibling, &missing)?;
+        assert!(super::has_missing_python_home(&interpreter));
+        fs::write(&root, &present)?;
+        assert!(!super::has_missing_python_home(&interpreter));
         Ok(())
     }
 
