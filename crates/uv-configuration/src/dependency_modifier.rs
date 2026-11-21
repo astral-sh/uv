@@ -40,6 +40,11 @@ impl DependencyModifiers {
         }
     }
 
+    /// Return whether any overrides or exclusions are configured.
+    pub fn is_empty(&self) -> bool {
+        self.overrides.is_empty() && self.excludes.is_empty()
+    }
+
     /// Return whether any modifiers are scoped to this package.
     pub fn has_scoped_package(&self, package: &PackageName) -> bool {
         self.overrides.has_scoped_package(package) || self.excludes.has_scoped_package(package)
