@@ -1935,38 +1935,39 @@ mod tests {
 
     #[cfg(windows)]
     #[tokio::test]
-    async fn launcher_target_changes_during_probe() -> Result<()> {
+    async fn launcher_junction_moves_during_probe() -> Result<()> {
         use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
-        let first = dir.path().join("first.exe");
-        let second = dir.path().join("second.exe");
-        fs::write(&first, [])?;
-        fs::write(&second, [])?;
+        let first = dir.path().join("first");
+        let second = dir.path().join("second");
+        let link = dir.path().join("current");
+        fs::create_dir(&first)?;
+        fs::create_dir(&second)?;
+        fs::write(first.join("python.exe"), [])?;
+        fs::write(second.join("python.exe"), [])?;
+        uv_fs::replace_symlink(&first, &link)?;
         fs::write(
             &proxy,
-            windows_python_launcher(&first, WindowMode::Console)?,
+            windows_python_launcher(link.join("python.exe"), WindowMode::Console)?,
         )?;
-        let replacement = windows_python_launcher(&second, WindowMode::Console)?;
-        let modified = fs::metadata(&proxy)?.modified()?;
         let cache = Cache::temp()?.init().await?;
         let canonical = canonicalize_executable(&proxy)?;
+        assert_eq!(canonical, dunce::canonicalize(first.join("python.exe"))?);
         let mut response = mocked_interpreter_response(&proxy)?;
-        response.metadata.sys_base_executable = Some(first);
+        response.metadata.sys_base_executable = Some(canonical.clone());
         InterpreterInfo::query_cached(&proxy, &cache, || {
-            // As when a minor-version junction moves, change the resolved target
-            // while leaving both the proxy and original target timestamps intact.
-            fs::write(&proxy, &replacement)?;
-            fs::OpenOptions::new()
-                .write(true)
-                .open(&proxy)?
-                .set_modified(modified)?;
-            assert_eq!(fs::metadata(&proxy)?.modified()?, modified);
-            assert_ne!(canonicalize_executable(&proxy)?, canonical);
+            // A minor-version update can move the junction while both the
+            // proxy and the interpreter that answered the probe stay intact.
+            uv_fs::replace_symlink(&second, &link)?;
             Ok((response, None))
         })?;
 
+        assert_eq!(
+            canonicalize_executable(&proxy)?,
+            dunce::canonicalize(second.join("python.exe"))?
+        );
         let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
         assert!(!entry.path().exists());
         Ok(())
