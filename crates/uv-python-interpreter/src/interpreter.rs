@@ -936,6 +936,22 @@ impl<'a> ExecutableTarget<'a> {
         }
     }
 
+    fn diagnose_probe_error(&self, executable: &Path, error: Error) -> Error {
+        // A uv launcher selects the interpreter from its resources; a stale
+        // configured home says nothing about it. CPython's venv launcher
+        // selects by home and reports localized errors when Python is removed.
+        if self.trampoline_target.is_none()
+            && matches!(error, Error::StatusCode(_))
+            && has_missing_python_home(executable)
+        {
+            return Error::BrokenLink(BrokenLink::new(
+                executable,
+                BrokenLinkKind::Trampoline(None),
+            ));
+        }
+        error
+    }
+
     fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
         let err = match input {
             Ok(value) => return Ok(Some(value)),
@@ -1663,16 +1679,6 @@ impl InterpreterInfo {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-            // The Windows CPython trampoline reports localized errors. Only diagnose
-            // an uninstalled interpreter when its `pyvenv.cfg` home is known to be
-            // missing, since this diagnosis can trigger environment replacement.
-            if has_missing_python_home(interpreter) {
-                return Err(Error::BrokenLink(BrokenLink::new(
-                    interpreter,
-                    BrokenLinkKind::Trampoline(None),
-                )));
-            }
-
             // If the Python version is too old, we may not even be able to invoke the query script
             if stderr.contains("Unknown option: -I") {
                 return Err(Error::QueryScript {
@@ -1821,6 +1827,7 @@ impl InterpreterInfo {
         let Some(resolved) = CacheTarget::resolve(&absolute, executable)? else {
             return uncached(probe()?);
         };
+        let probe = || probe().map_err(|err| resolved.target.diagnose_probe_error(executable, err));
         let cache_entry = resolved.cache_entry(cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
@@ -2059,9 +2066,8 @@ fn find_base_python(
 }
 
 /// A missing home in the environment's configuration can trigger its replacement.
-/// On Windows the CPython launcher checks beside the executable first, while a uv
-/// proxy checks the environment root. A competing config must also indicate a
-/// missing home before we can infer one from a failed probe.
+/// CPython's Windows venv launcher checks beside the executable first. A config
+/// there must also indicate a missing home before we infer one from a failed probe.
 fn has_missing_python_home(interpreter: &Path) -> bool {
     let Some(parent) = interpreter.parent() else {
         return false;
@@ -2642,6 +2648,29 @@ mod tests {
             windows_python_launcher(&second, WindowMode::Console)?,
         )?;
         assert!(resolve()?.is_none());
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn failed_proxy_probe_with_stale_home() -> Result<()> {
+        let dir = tempdir()?;
+        let scripts = dir.path().join("Scripts");
+        fs::create_dir(&scripts)?;
+        let proxy = scripts.join("python.exe");
+        fs::write(
+            &proxy,
+            windows_python_launcher("target.exe", WindowMode::Console)?,
+        )?;
+        // The target exists but cannot answer a Python probe.
+        fs::write(scripts.join("target.exe"), [])?;
+        fs::write(
+            dir.path().join("pyvenv.cfg"),
+            format!("home = {}\n", dir.path().join("missing").display()),
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let err = Interpreter::query(&proxy, &cache).unwrap_err();
+        assert!(matches!(err, Error::StatusCode(_)), "{err}");
         Ok(())
     }
 
