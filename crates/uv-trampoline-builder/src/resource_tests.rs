@@ -837,7 +837,7 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
     )?;
     assert!(matches!(
         super::read_launcher_target(path.path()),
-        Err(super::Error::UnprocessableMetadata)
+        Err(super::Error::EmptyPath)
     ));
     assert!(Launcher::try_from_path(path.path())?.is_none());
 
@@ -882,7 +882,7 @@ fn nul_in_target_is_rejected() -> Result<()> {
     )?;
     assert!(matches!(
         super::read_launcher_target(path.path()),
-        Err(super::Error::UnprocessableMetadata)
+        Err(super::Error::NulInPath)
     ));
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
@@ -935,7 +935,7 @@ fn interpreter_path_resource_size_limit() -> Result<()> {
     )?;
     assert!(matches!(
         super::read_launcher_target(path.path()),
-        Err(super::Error::UnprocessableMetadata)
+        Err(super::Error::PathTooLong)
     ));
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())

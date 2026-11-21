@@ -46,10 +46,10 @@ enum Key<'a> {
 }
 
 // Rewriting skips failed lookups but surfaces errors reading a located payload.
-// Target identification needs the underlying I/O error at either stage.
+// Target identification needs the underlying error at either stage.
 enum ReadError {
     Inconclusive,
-    Lookup(io::Error),
+    Lookup(Error),
     Payload(Error),
 }
 
@@ -57,7 +57,7 @@ impl From<io::Error> for ReadError {
     fn from(err: io::Error) -> Self {
         match err.kind() {
             io::ErrorKind::UnexpectedEof => Self::Inconclusive,
-            _ => Self::Lookup(err),
+            _ => Self::Lookup(Error::Io(err)),
         }
     }
 }
@@ -66,8 +66,7 @@ impl From<ReadError> for Error {
     fn from(err: ReadError) -> Self {
         match err {
             ReadError::Inconclusive => Self::UnprocessableMetadata,
-            ReadError::Lookup(err) => Self::Io(err),
-            ReadError::Payload(err) => err,
+            ReadError::Lookup(err) | ReadError::Payload(err) => err,
         }
     }
 }
@@ -344,12 +343,12 @@ impl Resources {
     fn read_path(&mut self, range: Range<u64>) -> Result<String, ReadError> {
         let length = range.end - range.start;
         if length > super::MAX_PYTHON_PATH_BYTES as u64 {
-            return Err(Inconclusive);
+            return Err(ReadError::Lookup(Error::PathTooLong));
         }
         let bytes = self.read(range).map_err(ReadError::Payload)?;
         let path = String::from_utf8(bytes)
             .map_err(|err| ReadError::Payload(Error::InvalidPath(err.utf8_error())))?;
-        super::validate_python_path(&path).map_err(|_| Inconclusive)?;
+        super::validate_python_path(&path).map_err(ReadError::Lookup)?;
         Ok(path)
     }
 
