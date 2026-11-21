@@ -856,13 +856,17 @@ fn interpreter_path_resource_size_limit() -> Result<()> {
         windows_python_launcher(&python, WindowMode::Console),
         Err(super::Error::PathTooLong)
     ));
+    // Exceed the limit by one byte that would cause a UTF-8 decoding error
+    // if the reader didn't reject the declared size first.
+    let mut payload = python.into_bytes();
+    *payload.last_mut().unwrap() = 0xff;
     fs_err::write(
         path.path(),
         write_resources(
             get_launcher_bin(false)?,
             &[
                 (RESOURCE_TRAMPOLINE_KIND, &[2]),
-                (RESOURCE_PYTHON_PATH, python.as_bytes()),
+                (RESOURCE_PYTHON_PATH, &payload),
             ],
         )?,
     )?;
