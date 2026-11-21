@@ -625,6 +625,24 @@ fn python_proxy_keeps_its_optional_payload() -> Result<()> {
 }
 
 #[test]
+fn relative_target_is_resolved_beside_the_launcher() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("proxy.exe");
+    let target = Path::new("python.exe");
+    fs_err::write(
+        path.path(),
+        windows_python_launcher(target, WindowMode::Console)?,
+    )?;
+    assert_eq!(
+        super::read_launcher_target(path.path())?,
+        Some((LauncherKind::Python, temp_dir.path().join(target)))
+    );
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
+    assert_eq!(launcher.python_path, target);
+    Ok(())
+}
+
+#[test]
 fn python_proxy_target_is_independent_of_script_languages() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");

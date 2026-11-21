@@ -54,6 +54,7 @@ const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH";
 const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 
 /// Read the launcher kind and interpreter path without inspecting the script payload.
+/// Relative interpreter paths are resolved against the launcher's directory.
 #[cfg(windows)]
 pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
     resource_reader::read_target(path)

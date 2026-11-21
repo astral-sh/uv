@@ -51,7 +51,18 @@ pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>
     let Some(mut resources) = Resources::open(path) else {
         return Ok(None);
     };
-    resources.target()
+    let Some((kind, mut target)) = resources.target()? else {
+        return Ok(None);
+    };
+    if target.is_relative() {
+        // The trampoline joins the stored path to the parent of current_exe().
+        let executable = std::path::absolute(path)?;
+        let Some(parent) = executable.parent() else {
+            return Ok(None);
+        };
+        target = parent.join(target);
+    }
+    Ok(Some((kind, target)))
 }
 
 pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
