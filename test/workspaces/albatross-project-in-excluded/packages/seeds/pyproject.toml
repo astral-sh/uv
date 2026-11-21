@@ -5,8 +5,8 @@ requires-python = ">=3.12"
 dependencies = ["idna==3.6"]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
 
 [tool.uv]
 managed = false
