@@ -8,7 +8,9 @@ use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_distribution_types::{DependencyMetadata, Diagnostic, InstalledDistKind, Name};
+use uv_distribution_types::{
+    DependencyMetadata, Diagnostic, InstalledDistKind, Name, RequirementUrl,
+};
 use uv_fs::Simplified;
 use uv_installer::SitePackages;
 use uv_normalize::PackageName;
@@ -83,7 +85,7 @@ pub fn pip_freeze(
         None => vec![SitePackages::from_environment(&environment)?],
     };
 
-    site_packages
+    let distributions = site_packages
         .iter()
         .flat_map(uv_installer::SitePackages::iter)
         .filter(|dist| {
@@ -95,7 +97,13 @@ pub fn pip_freeze(
             }
             true
         })
-        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())))
+        .sorted_unstable_by(|a, b| a.name().cmp(b.name()).then(a.version().cmp(b.version())));
+    for dist in distributions.as_slice() {
+        if let InstalledDistKind::Url(dist) = &dist.kind {
+            RequirementUrl::Stripped(dist.url.with_policy_ref(Stripped)).validate(dist.name())?;
+        }
+    }
+    distributions
         .map(|dist| match &dist.kind {
             InstalledDistKind::Registry(dist) => {
                 format!("{}=={}", dist.name().bold(), dist.version)

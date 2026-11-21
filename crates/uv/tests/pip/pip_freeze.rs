@@ -125,6 +125,36 @@ fn freeze_url() -> Result<()> {
     Ok(())
 }
 
+/// A credentialed origin may have a fragment the requirements parser would reject without userinfo.
+#[test]
+fn freeze_ambiguous_stripped_url() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let site_packages = ChildPath::new(context.site_packages());
+    let ordinary = site_packages.child("ordinary-1.0.0.dist-info");
+    ordinary.create_dir_all()?;
+    ordinary.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: ordinary
+        Version: 1.0.0
+    "})?;
+    let project = site_packages.child("project-1.0.0.dist-info");
+    project.create_dir_all()?;
+    project.child("METADATA").write_str(indoc! {"
+        Metadata-Version: 2.1
+        Name: project
+        Version: 1.0.0
+    "})?;
+    project.child("direct_url.json").write_str(
+        r#"{"url":"https://user:password@example.com/project-1.0.0.tar.gz?sig=synthetic-signature#subdirectory=build:channel@nightly","archive_info":{}}"#,
+    )?;
+    uv_snapshot!(context.filters(), context.pip_freeze(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot write a requirement for `project`: its URL path or fragment is ambiguous after removing credentials
+    ");
+    Ok(())
+}
+
 /// Preserve signed queries and archive hashes from `direct_url.json` so that frozen requirements
 /// can fetch and verify their artifacts, while removing URL userinfo.
 #[test]

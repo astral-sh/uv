@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use uv_normalize::PackageName;
 use uv_pep508::VerbatimUrl;
+use uv_redacted::SafeUrl;
 use uv_redacted::policy::{SerializationPolicy, Stripped};
 
 use crate::error::Error;
@@ -100,12 +101,48 @@ pub trait Verbatim {
     fn verbatim(&self) -> Cow<'_, str>;
 }
 
+/// The URL spelling used for a requirement, which can contain credentials.
+pub enum RequirementUrl<'a> {
+    /// The URL as written in the input.
+    Given(&'a str),
+    /// A reconstructed URL with sensitive userinfo stripped.
+    Stripped(&'a SafeUrl<Stripped>),
+}
+
+impl<'a, P: SerializationPolicy> From<&'a VerbatimUrl<P>> for RequirementUrl<'a> {
+    fn from(url: &'a VerbatimUrl<P>) -> Self {
+        if let Some(given) = url.given() {
+            Self::Given(given)
+        } else {
+            Self::Stripped(url.with_policy_ref(Stripped))
+        }
+    }
+}
+
+impl RequirementUrl<'_> {
+    /// Check that writing this URL will not make it unreadable.
+    pub fn validate(&self, name: &PackageName) -> Result<(), AmbiguousRequirementUrl> {
+        if let Self::Stripped(url) = self
+            && url.is_ambiguous_without_credentials()
+        {
+            return Err(AmbiguousRequirementUrl(name.clone()));
+        }
+        Ok(())
+    }
+}
+
+/// Stripping credentials makes the requirement's URL ambiguous.
+#[derive(Debug, thiserror::Error)]
+#[error(
+    "Cannot write a requirement for `{0}`: its URL path or fragment is ambiguous after removing credentials"
+)]
+pub struct AmbiguousRequirementUrl(PackageName);
+
 impl<P: SerializationPolicy> Verbatim for VerbatimUrl<P> {
     fn verbatim(&self) -> Cow<'_, str> {
-        if let Some(given) = self.given() {
-            Cow::Borrowed(given)
-        } else {
-            self.with_policy_ref(Stripped).to_serialized_string()
+        match RequirementUrl::from(self) {
+            RequirementUrl::Given(given) => Cow::Borrowed(given),
+            RequirementUrl::Stripped(url) => url.to_serialized_string(),
         }
     }
 }
