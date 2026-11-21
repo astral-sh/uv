@@ -110,16 +110,14 @@ fn read_for_rewrite(file: File) -> Result<Option<Launcher>, ReadError> {
     let Some(mut file) = LauncherFile::read(file)? else {
         return Ok(None);
     };
-    let policy = match file.kind {
-        LauncherKind::Script => Languages::Single,
-        LauncherKind::Python => Languages::PreferNeutral,
+    let mut locate_script = |policy| {
+        file.resources
+            .locate(file.rcdata, RESOURCE_SCRIPT_DATA, policy)
     };
-    let range = file
-        .resources
-        .locate(file.rcdata, RESOURCE_SCRIPT_DATA, policy)?;
-    if file.kind == LauncherKind::Script && range.is_none() {
-        return Err(Inconclusive);
-    }
+    let range = match file.kind {
+        LauncherKind::Script => Some(locate_script(Languages::Single)?.ok_or(Inconclusive)?),
+        LauncherKind::Python => locate_script(Languages::PreferNeutral)?,
+    };
     let python_path = file.resources.read_path(file.python_path)?;
     let script_data = range
         .map(|range| file.resources.read(range))
