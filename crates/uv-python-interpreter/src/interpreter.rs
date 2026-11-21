@@ -1389,10 +1389,10 @@ impl InterpreterInfo {
         let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
         let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
         let key = (absolute, canonical, &python_executable, &pyvenv_launcher);
-        // Only reuse Windows launcher entries from probes that checked for a
-        // direct target. This avoids inspecting the target PE on cache hits.
+        // Only reuse Windows launcher entries from probes that verified the
+        // reported base executable against the target.
         let digest = if cfg!(windows) && absolute != canonical {
-            cache_digest(&("direct-launcher", key))
+            cache_digest(&("verified-launcher", key))
         } else {
             cache_digest(&key)
         };
@@ -1591,17 +1591,19 @@ impl InterpreterInfo {
             return false;
         }
 
-        // A managed junction can redirect the launcher during the probe, and a
-        // nested proxy can hide the interpreter that supplied the metadata.
+        // A managed junction can redirect the launcher during the probe.
+        // A shim at the target path can start an entirely different interpreter.
         #[cfg(windows)]
-        if absolute != canonical
-            && (!matches!(cache_target(absolute), Ok(Some(current)) if current == canonical)
-                || !matches!(
-                    uv_trampoline_builder::read_launcher_target(canonical),
-                    Ok(None)
-                ))
-        {
-            return false;
+        if absolute != canonical {
+            let Some(base) = wire.metadata.sys_base_executable.as_deref() else {
+                return false;
+            };
+            if !base.is_absolute()
+                || !is_same_file(base, canonical).unwrap_or(false)
+                || !matches!(cache_target(absolute), Ok(Some(current)) if current == canonical)
+            {
+                return false;
+            }
         }
 
         let Ok(current) = Self::cache_file_timestamps(absolute, canonical, &wire.file_inputs)
@@ -1932,7 +1934,8 @@ mod tests {
         let modified = fs::metadata(&proxy)?.modified()?;
         let cache = Cache::temp()?.init().await?;
         let canonical = canonicalize_executable(&proxy)?;
-        let response = mocked_interpreter_response(&proxy)?;
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(first);
         InterpreterInfo::query_cached(&proxy, &cache, || {
             // As when a minor-version junction moves, change the resolved target
             // while leaving both the proxy and original target timestamps intact.
@@ -1968,6 +1971,8 @@ mod tests {
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
         let target = dir.path().join("inner.exe");
+        let base = dir.path().join("base.exe");
+        fs::write(&base, [])?;
         fs::write(
             &proxy,
             windows_python_launcher(&target, WindowMode::Console)?,
@@ -1979,7 +1984,8 @@ mod tests {
         let cache = Cache::temp()?.init().await?;
         let canonical = canonicalize_executable(&proxy)?;
         let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
-        let response = mocked_interpreter_response(&proxy)?;
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(base.clone());
         let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
         assert!(!entry.path().exists());
 
@@ -1994,9 +2000,18 @@ mod tests {
         let legacy = entry.with_file(format!("{digest}.msgpack"));
         assert_bypasses_fresh_entry(&cache, &legacy, &proxy, &info)?;
 
-        // A direct target can be tracked by its own timestamp.
+        // A third-party shim can redirect Python without any uv resources.
         fs::write(&target, [])?;
-        let response = mocked_interpreter_response(&proxy)?;
+        for reported_base in [None, Some(base)] {
+            let mut response = mocked_interpreter_response(&proxy)?;
+            response.metadata.sys_base_executable = reported_base;
+            InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+            assert!(!entry.path().exists());
+        }
+
+        // A direct target can be tracked by its own timestamp.
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(target);
         InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
         InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
         Ok(())
