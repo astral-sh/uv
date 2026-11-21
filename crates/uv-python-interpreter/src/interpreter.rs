@@ -1077,36 +1077,56 @@ impl uv_errors::Hinted for Error {
 #[derive(Debug, Error)]
 pub struct BrokenLink {
     pub path: PathBuf,
-    /// Whether the broken link is a symlink or a Windows trampoline.
-    pub unix: bool,
+    kind: BrokenLinkKind,
     /// Whether the interpreter path looks like a virtual environment.
-    pub venv: bool,
+    venv: bool,
+}
+
+#[derive(Debug)]
+enum BrokenLinkKind {
+    Symlink,
+    Trampoline(Option<PathBuf>),
 }
 
 impl BrokenLink {
-    fn trampoline(path: &Path) -> Self {
+    fn new(path: &Path, kind: BrokenLinkKind) -> Self {
         Self {
             path: path.to_path_buf(),
-            unix: false,
+            kind,
             venv: uv_fs::is_virtualenv_executable(path),
         }
+    }
+
+    /// Return the path of the link and its target, reading the target of a symlink.
+    /// The `pyvenv.cfg` heuristic identifies broken trampolines without an exact target.
+    pub fn into_paths(self) -> io::Result<(PathBuf, Option<PathBuf>)> {
+        let target = match self.kind {
+            BrokenLinkKind::Symlink => Some(fs::read_link(&self.path)?),
+            BrokenLinkKind::Trampoline(target) => target,
+        };
+        Ok((self.path, target))
     }
 }
 
 impl Display for BrokenLink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.unix {
-            write!(
+        match &self.kind {
+            BrokenLinkKind::Symlink => write!(
                 f,
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )
-        } else {
-            write!(
+            ),
+            BrokenLinkKind::Trampoline(Some(target)) => write!(
+                f,
+                "Python trampoline at `{}` points to a missing interpreter at `{}`",
+                self.path.user_display(),
+                target.user_display()
+            ),
+            BrokenLinkKind::Trampoline(None) => write!(
                 f,
                 "Broken Python trampoline at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
-            )
+            ),
         }
     }
 }
@@ -1307,7 +1327,10 @@ impl InterpreterInfo {
             // whether the `home` from `pyvenv.cfg` still exists, it's missing if the Python
             // interpreter was uninstalled.
             if python_home(interpreter).is_some_and(|home| !home.exists()) {
-                return Err(Error::BrokenLink(BrokenLink::trampoline(interpreter)));
+                return Err(Error::BrokenLink(BrokenLink::new(
+                    interpreter,
+                    BrokenLinkKind::Trampoline(None),
+                )));
             }
 
             // If the Python version is too old, we may not even be able to invoke the query script
@@ -1496,8 +1519,13 @@ impl InterpreterInfo {
         // A missing executable can surface during canonicalization or the metadata read.
         let handle_io_error = |err: io::Error| -> Error {
             if err.kind() == io::ErrorKind::NotFound {
-                if matches!(target, ExecutableTarget::Trampoline(_)) && absolute.is_file() {
-                    return Error::BrokenLink(BrokenLink::trampoline(executable));
+                if let ExecutableTarget::Trampoline(target) = &target
+                    && absolute.is_file()
+                {
+                    return Error::BrokenLink(BrokenLink::new(
+                        executable,
+                        BrokenLinkKind::Trampoline(Some(target.clone())),
+                    ));
                 }
                 // Check if it looks like a venv interpreter where the underlying Python
                 // installation was removed.
@@ -1505,11 +1533,7 @@ impl InterpreterInfo {
                     .symlink_metadata()
                     .is_ok_and(|metadata| metadata.is_symlink())
                 {
-                    Error::BrokenLink(BrokenLink {
-                        path: executable.to_path_buf(),
-                        unix: true,
-                        venv: uv_fs::is_virtualenv_executable(executable),
-                    })
+                    Error::BrokenLink(BrokenLink::new(executable, BrokenLinkKind::Symlink))
                 } else {
                     Error::NotFound(executable.to_path_buf())
                 }

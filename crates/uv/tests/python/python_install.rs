@@ -3410,7 +3410,7 @@ fn uninstall_last_patch() {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to inspect Python interpreter from active virtual environment at `.venv/[BIN]/python`
-      cause: Broken Python trampoline at `.venv/[BIN]/python`, was the underlying Python interpreter removed?
+      cause: Python trampoline at `.venv/[BIN]/python` points to a missing interpreter at `managed/cpython-3.10-[PLATFORM]/python`
 
     hint: Consider recreating the environment (e.g., with `uv venv`)
     "
