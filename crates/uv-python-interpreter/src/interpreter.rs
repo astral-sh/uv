@@ -2124,9 +2124,13 @@ mod tests {
             Ok::<_, Error>((response, None))
         };
         let info = InterpreterInfo::query_cached(&proxy, &cache, || {
-            uv_fs::replace_symlink(&second, &minor)?;
+            // Move the original junction back with its own timestamps intact.
+            let saved = managed.join("saved");
+            fs::rename(&minor, &saved)?;
+            uv_fs::create_symlink(&second, &minor)?;
             let result = probe()?;
-            uv_fs::replace_symlink(&first, &minor)?;
+            uv_fs::remove_symlink(&minor)?;
+            fs::rename(&saved, &minor)?;
             Ok(result)
         })?;
         assert_eq!(info.metadata.sys_base_prefix, dunce::canonicalize(&second)?);
