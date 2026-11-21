@@ -308,7 +308,7 @@ impl<P: SerializationPolicy> SafeUrl<P> {
 
     /// Borrow the parsed URL with a different serialization policy.
     #[must_use]
-    fn with_policy_ref<Q: SerializationPolicy>(&self, _policy: Q) -> &SafeUrl<Q> {
+    pub fn with_policy_ref<Q: SerializationPolicy>(&self, _policy: Q) -> &SafeUrl<Q> {
         RefCast::ref_cast(&self.0)
     }
 
