@@ -2059,6 +2059,8 @@ fn copy_entrypoint(
     _previous_executable: &Path,
     python_executable: &Path,
 ) -> Result<(), CopyEntrypointError> {
+    use std::io::Write;
+
     use uv_trampoline_builder::Launcher;
 
     let launcher = match Launcher::try_from_path(source) {
@@ -2076,12 +2078,15 @@ fn copy_entrypoint(
         python_executable.to_path_buf()
     };
 
-    let launcher = launcher.with_python_path(python_path);
+    let Some(output) = launcher.with_python_path(python_path).into_bytes(is_gui)? else {
+        return Ok(());
+    };
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(&mut file, is_gui)?;
+    file.write_all(&output)
+        .map_err(uv_trampoline_builder::Error::Io)?;
 
     trace!("Updated entrypoint at `{}`", target.user_display());
 

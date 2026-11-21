@@ -341,6 +341,17 @@ impl Resources {
     }
 }
 
+/// Return the archive bytes visible within the search window common to supported Pythons.
+pub(super) fn visible_archive(bytes: &[u8]) -> Option<&[u8]> {
+    let len = bytes.len() as u64;
+    let start = len.saturating_sub(ZIP_SEARCH_SIZE);
+    let archive = archive_range(&bytes[usize::try_from(start).ok()?..], start)?;
+    if len.checked_sub(archive.end)? > ZIP_MAX_COMMENT {
+        return None;
+    }
+    bytes.get(usize::try_from(archive.start).ok()?..usize::try_from(archive.end).ok()?)
+}
+
 /// Locate the last ZIP's start by subtracting the central directory size and
 /// its archive-relative offset from the position of the end record.
 fn archive_range(tail: &[u8], start: u64) -> Option<Range<u64>> {

@@ -6,8 +6,6 @@ use std::str::Utf8Error;
 use editpe::{
     Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
 };
-#[cfg(windows)]
-use fs_err::File;
 use thiserror::Error;
 
 use uv_fs::Simplified;
@@ -85,11 +83,8 @@ impl Launcher {
         resource_reader::read_launcher(path)
     }
 
-    /// Write this trampoline launcher to a file.
-    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
-        use std::io::Write;
-        use uv_fs::Simplified;
-
+    /// Serialize the launcher, declining a layout that changes the visible ZIP.
+    pub fn into_bytes(self, is_gui: bool) -> Result<Option<Vec<u8>>, Error> {
         let python_path = self.python_path.simplified_display().to_string();
 
         let launcher_bin = get_launcher_bin(is_gui)?;
@@ -99,16 +94,20 @@ impl Launcher {
             (RESOURCE_TRAMPOLINE_KIND, &kind_value),
             (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
         ];
-        let script_data;
-        if let Some(data) = self.script_data {
-            script_data = data;
-            resources.push((RESOURCE_SCRIPT_DATA, &script_data));
+        if let Some(payload) = &self.script_data {
+            resources.push((RESOURCE_SCRIPT_DATA, payload));
         }
 
         let output = write_resources(launcher_bin, &resources)?;
-        file.write_all(&output)?;
-
-        Ok(())
+        // Changing the interpreter path changes the padding after the script.
+        if self.kind == LauncherKind::Script
+            && let Some(payload) = self.script_data.as_deref()
+            && resource_reader::visible_archive(payload)
+                != resource_reader::visible_archive(&output)
+        {
+            return Ok(None);
+        }
+        Ok(Some(output))
     }
 
     #[must_use]

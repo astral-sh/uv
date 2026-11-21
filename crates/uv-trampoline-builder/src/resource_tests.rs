@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::PathChild;
 use editpe::{Image, ResourceEntry, ResourceEntryName, ResourceTable};
-use fs_err::File;
 use goblin::pe::{
     PE, options::ParseOptions, resource::ResourceEntry as DirectoryEntry, utils::find_offset,
 };
@@ -711,6 +710,24 @@ fn archive_hidden_by_trailing_data_is_not_rewritten() -> Result<()> {
 }
 
 #[test]
+fn rewrite_declines_a_zip_hidden_by_section_padding() -> Result<()> {
+    let mut archive = script_archive("pass")?;
+    let end = archive.len();
+    assert_eq!(&archive[end - 22..end - 18], b"PK\x05\x06");
+    archive[end - 2..].copy_from_slice(&u16::MAX.to_le_bytes());
+    archive.resize(end + usize::from(u16::MAX), 0);
+    let launcher = Launcher {
+        kind: LauncherKind::Script,
+        python_path: "python.exe".into(),
+        script_data: Some(archive),
+    };
+    // The payload's end record is exactly at the edge of the search window.
+    // Any bytes following the payload in the new executable will hide it.
+    assert!(launcher.into_bytes(false)?.is_none());
+    Ok(())
+}
+
+#[test]
 fn truncated_appended_end_record_is_not_rewritten() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
@@ -795,12 +812,11 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         .context("Missing original script data")?;
     assert!(script_data.len() > 65_536);
 
-    {
-        let mut file = File::create(rewritten_path.path())?;
-        launcher
-            .with_python_path(python.clone())
-            .write_to_file(&mut file, false)?;
-    }
+    let bytes = launcher
+        .with_python_path(python.clone())
+        .into_bytes(false)?
+        .context("Could not rewrite launcher")?;
+    fs_err::write(rewritten_path.path(), bytes)?;
     let launcher = Launcher::try_from_path(rewritten_path.path())?
         .context("Rewritten launcher was not recognized")?;
     assert_eq!(launcher.python_path, python);
@@ -808,10 +824,10 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         launcher.script_data.as_deref(),
         Some(script_data.as_slice())
     );
-    {
-        let mut file = File::create(repeated_path.path())?;
-        launcher.write_to_file(&mut file, false)?;
-    }
+    let bytes = launcher
+        .into_bytes(false)?
+        .context("Could not rewrite launcher")?;
+    fs_err::write(repeated_path.path(), bytes)?;
 
     for path in [rewritten_path.path(), repeated_path.path()] {
         Command::new(path)
