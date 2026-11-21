@@ -391,6 +391,7 @@ fn mui_configuration_precludes_launcher_identification() -> Result<()> {
     image.set_resource_directory(resources)?;
     fs_err::write(path.path(), image.data())?;
 
+    assert!(super::read_launcher_target(path.path())?.is_none());
     assert!(Launcher::try_from_path(path.path())?.is_none());
     Ok(())
 }
