@@ -931,23 +931,49 @@ impl<'a> ExecutableTarget<'a> {
         }
     }
 
-    fn cache_input<T>(&self, input: io::Result<T>) -> io::Result<Option<T>> {
+    fn cache_input<T>(
+        &self,
+        executable: &Path,
+        absolute: &Path,
+        input: io::Result<T>,
+    ) -> Result<Option<T>, Error> {
+        let err = match input {
+            Ok(value) => return Ok(Some(value)),
+            Err(err) => err,
+        };
+
         // Unless the target is missing, let the probe decide if the launcher
         // works. An error resolving a cache input would stop Python discovery,
         // even when the failure is local to one launcher (e.g., a junction loop).
-        match (self, input) {
-            (Self::Trampoline(target), Err(err))
-                if err.kind() != io::ErrorKind::NotFound
-                    || !matches!(target.try_exists(), Ok(false)) =>
-            {
+        if let Self::Trampoline(target) = self {
+            if err.kind() != io::ErrorKind::NotFound || !matches!(target.try_exists(), Ok(false)) {
                 trace!(
                     "Skipping interpreter cache for launcher targeting `{}`: {err}",
                     target.display()
                 );
-                Ok(None)
+                return Ok(None);
             }
-            (_, result) => result.map(Some),
+            if absolute.is_file() {
+                return Err(Error::BrokenLink(BrokenLink::new(
+                    executable,
+                    BrokenLinkKind::Trampoline(Some(target.clone())),
+                )));
+            }
         }
+
+        if err.kind() != io::ErrorKind::NotFound {
+            return Err(err.into());
+        }
+        if absolute
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_symlink())
+        {
+            return Err(Error::BrokenLink(BrokenLink::new(
+                executable,
+                BrokenLinkKind::Symlink(fs::read_link(absolute).ok()),
+            )));
+        }
+        Err(Error::NotFound(executable.to_path_buf()))
     }
 
     /// Snapshot the part of a launcher's path that differs from its resolved target.
@@ -1594,38 +1620,7 @@ impl InterpreterInfo {
             return uncached(probe()?);
         };
 
-        // A missing executable can surface during canonicalization or the metadata read.
-        let handle_io_error = |err: io::Error| -> Error {
-            if err.kind() == io::ErrorKind::NotFound {
-                if let ExecutableTarget::Trampoline(target) = &target
-                    && absolute.is_file()
-                {
-                    return Error::BrokenLink(BrokenLink::new(
-                        executable,
-                        BrokenLinkKind::Trampoline(Some(target.clone())),
-                    ));
-                }
-                // Check if it looks like a venv interpreter where the underlying Python
-                // installation was removed.
-                if absolute
-                    .symlink_metadata()
-                    .is_ok_and(|metadata| metadata.is_symlink())
-                {
-                    Error::BrokenLink(BrokenLink::new(
-                        executable,
-                        BrokenLinkKind::Symlink(fs::read_link(&absolute).ok()),
-                    ))
-                } else {
-                    Error::NotFound(executable.to_path_buf())
-                }
-            } else {
-                err.into()
-            }
-        };
-
-        let Some(canonical) = target
-            .cache_input(canonicalize(&target))
-            .map_err(handle_io_error)?
+        let Some(canonical) = target.cache_input(executable, &absolute, canonicalize(&target))?
         else {
             return uncached(probe()?);
         };
@@ -1635,7 +1630,7 @@ impl InterpreterInfo {
         }
 
         let inputs = Self::cache_file_timestamps(&absolute, &canonical, &BTreeSet::new());
-        let Some(mut file_timestamps) = target.cache_input(inputs).map_err(handle_io_error)? else {
+        let Some(mut file_timestamps) = target.cache_input(executable, &absolute, inputs)? else {
             return uncached(probe()?);
         };
 
