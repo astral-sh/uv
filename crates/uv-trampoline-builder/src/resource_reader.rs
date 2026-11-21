@@ -324,6 +324,9 @@ impl Resources {
         let Some(Lookup::Found(path)) = self.locate(RESOURCE_PYTHON_PATH) else {
             return Ok(None);
         };
+        if path.range.is_empty() {
+            return Ok(None);
+        }
         let path = String::from_utf8(self.read(path.range)?)
             .map_err(|err| Error::InvalidPath(err.utf8_error()))?;
         Ok(Some((kind, PathBuf::from(path))))

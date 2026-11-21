@@ -625,6 +625,25 @@ fn python_proxy_keeps_its_optional_payload() -> Result<()> {
 }
 
 #[test]
+fn empty_target_is_not_a_launcher() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("proxy.exe");
+    fs_err::write(
+        path.path(),
+        write_resources(
+            get_launcher_bin(false)?,
+            &[
+                (RESOURCE_TRAMPOLINE_KIND, &[2]),
+                (RESOURCE_PYTHON_PATH, &[]),
+            ],
+        )?,
+    )?;
+    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn relative_target_is_resolved_beside_the_launcher() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
