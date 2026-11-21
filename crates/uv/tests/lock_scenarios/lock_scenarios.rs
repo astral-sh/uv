@@ -409,7 +409,7 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 2 packages in [TIME]
+    Resolved 3 packages in [TIME]
     "
     );
 
@@ -432,9 +432,24 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         name = "a"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'darwin'",
+        ]
         sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:957f99ff1d65ce0d7883d50f4e67ed8d4b42e76d2c2b5e62384ff0ba538647b5", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:f936eedc194aa91ca01a4c6c9981136ca6c75ce6df47e3951b12522881dce809", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:9610291c2bd57390019f58ca72d0dd4584bb9e7073fa347633ed8bc7267fccfe", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:833374310e0a15880f3be9e6d082f527c9ac70129b2054d733da9b754315361f", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -442,7 +457,8 @@ fn fork_allows_non_conflicting_non_overlapping_dependencies() -> Result<()> {
         version = "0.1.0"
         source = { virtual = "." }
         dependencies = [
-            { name = "a", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'darwin'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
         ]
 
         [package.metadata]
@@ -3757,7 +3773,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 11 packages in [TIME]
+    Resolved 12 packages in [TIME]
     "
     );
 
@@ -3833,7 +3849,7 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         source = { registry = "http://[LOCALHOST]/simple/" }
         dependencies = [
             { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
-            { name = "foo", marker = "sys_platform == 'linux'" },
+            { name = "foo", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/cleaver-1.0.0.tar.gz", hash = "sha256:e48e43a500c95e61d1f1e18d830ec1df0ed3065842738493669f850a2c3da9ad", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -3856,14 +3872,28 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
         dependencies = [
-            { name = "c", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
-            { name = "c", version = "3.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+            { name = "c", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" } },
             { name = "reject-cleaver-1" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/foo-1.0.0.tar.gz", hash = "sha256:693cd5b07b84a596dc7595d47d3bedebd7540b5455eedb4fa7ddf4196bbcb205", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/foo-1.0.0-py3-none-any.whl", hash = "sha256:a6a8594d7d818843d31479b216b325e9140b6c5b180a55427b03fd85bbd261ad", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-2.0.0.tar.gz", hash = "sha256:0844fb99ba8e9076a002c3b63b350414a229faa5c52465cca03e367b56d5c483", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-2.0.0-py3-none-any.whl", hash = "sha256:a223f06d65bce8a9babcf625e0a12bf28b2c997c3173de3b9d072daf3c6cf5e4", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -3874,7 +3904,8 @@ fn preferences_dependent_forking_tristable() -> Result<()> {
             { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
             { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
             { name = "cleaver" },
-            { name = "foo" },
+            { name = "foo", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "foo", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
         ]
 
         [package.metadata]
@@ -4038,7 +4069,7 @@ fn preferences_dependent_forking() -> Result<()> {
     uv_snapshot!(filters, cmd, @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     "
     );
 
@@ -4086,7 +4117,7 @@ fn preferences_dependent_forking() -> Result<()> {
         source = { registry = "http://[LOCALHOST]/simple/" }
         dependencies = [
             { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
-            { name = "foo", marker = "sys_platform == 'linux'" },
+            { name = "foo", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
         ]
         sdist = { url = "http://[LOCALHOST]/files/cleaver-1.0.0.tar.gz", hash = "sha256:e48e43a500c95e61d1f1e18d830ec1df0ed3065842738493669f850a2c3da9ad", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
@@ -4097,9 +4128,24 @@ fn preferences_dependent_forking() -> Result<()> {
         name = "foo"
         version = "1.0.0"
         source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform == 'linux'",
+        ]
         sdist = { url = "http://[LOCALHOST]/files/foo-1.0.0.tar.gz", hash = "sha256:70bd56242b5a5c7f6c04694a8ed2aafdb036726de0fcca1dd1d2f1f467c71ee1", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/foo-1.0.0-py3-none-any.whl", hash = "sha256:df9a39d54a6d71872deb1537d7e331de0ede3b725d630a050fee3efd3fe5145b", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "foo"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/foo-2.0.0.tar.gz", hash = "sha256:0844fb99ba8e9076a002c3b63b350414a229faa5c52465cca03e367b56d5c483", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/foo-2.0.0-py3-none-any.whl", hash = "sha256:a223f06d65bce8a9babcf625e0a12bf28b2c997c3173de3b9d072daf3c6cf5e4", upload-time = "2024-03-24T00:00:00Z" },
         ]
 
         [[package]]
@@ -4110,7 +4156,8 @@ fn preferences_dependent_forking() -> Result<()> {
             { name = "bar", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
             { name = "bar", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
             { name = "cleaver" },
-            { name = "foo" },
+            { name = "foo", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "foo", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
         ]
 
         [package.metadata]

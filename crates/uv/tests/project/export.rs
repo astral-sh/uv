@@ -3454,7 +3454,6 @@ fn requirements_txt_non_project_fork() -> Result<()> {
             source = { registry = "https://pypi.org/simple" }
             resolution-markers = [
                 "sys_platform == 'linux'",
-                "sys_platform != 'linux' and sys_platform != 'win32'",
             ]
             dependencies = [
                 { name = "idna" },
@@ -3463,6 +3462,22 @@ fn requirements_txt_non_project_fork() -> Result<()> {
             sdist = { url = "https://files.pythonhosted.org/packages/99/0d/65165f99e5f4f3b4c43a5ed9db0fb7aa655f5a58f290727a30528a87eb45/anyio-3.0.0.tar.gz", hash = "sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9", size = 116952, upload-time = "2021-04-20T14:02:14.75Z" }
             wheels = [
                 { url = "https://files.pythonhosted.org/packages/3b/49/ebee263b69fe243bd1fd0a88bc6bb0f7732bf1794ba3273cb446351f9482/anyio-3.0.0-py3-none-any.whl", hash = "sha256:e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395", size = 72182, upload-time = "2021-04-20T14:02:13.663Z" },
+            ]
+
+            [[package]]
+            name = "anyio"
+            version = "4.3.0"
+            source = { registry = "https://pypi.org/simple" }
+            resolution-markers = [
+                "sys_platform != 'linux' and sys_platform != 'win32'",
+            ]
+            dependencies = [
+                { name = "idna" },
+                { name = "sniffio" },
+            ]
+            sdist = { url = "https://files.pythonhosted.org/packages/db/4d/3970183622f0330d3c23d9b8a5f52e365e50381fd484d08e3285104333d3/anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6", size = 159642, upload-time = "2024-02-19T08:36:28.641Z" }
+            wheels = [
+                { url = "https://files.pythonhosted.org/packages/14/fd/2f20c40b45e4fb4324834aea24bd4afdf1143390242c0b33774da0e2e34f/anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8", size = 85584, upload-time = "2024-02-19T08:36:26.842Z" },
             ]
 
             [[package]]
@@ -3526,7 +3541,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--group").arg("async"), @r"
@@ -3539,10 +3554,13 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         --hash=sha256:0b8375c8fc665236cb4d143ea13e849eb9e074d727b1b5c27d88aba44ca8c547 \
         --hash=sha256:ceca4669ffa3f02bf20ef3d6c2a0c323b16cdc71d1ce0b0bc03c6f1f36054826
         # via child
-    anyio==3.0.0 ; sys_platform != 'win32' \
+    anyio==3.0.0 ; sys_platform == 'linux' \
         --hash=sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9 \
         --hash=sha256:e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395
         # via child
+    anyio==4.3.0 ; sys_platform != 'linux' and sys_platform != 'win32' \
+        --hash=sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8 \
+        --hash=sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6
     idna==3.6 \
         --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
         --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
@@ -3553,7 +3571,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--group").arg("async").arg("--prune").arg("child"), @r"
@@ -3564,9 +3582,12 @@ fn requirements_txt_non_project_fork() -> Result<()> {
     anyio==2.0.0 ; sys_platform == 'win32' \
         --hash=sha256:0b8375c8fc665236cb4d143ea13e849eb9e074d727b1b5c27d88aba44ca8c547 \
         --hash=sha256:ceca4669ffa3f02bf20ef3d6c2a0c323b16cdc71d1ce0b0bc03c6f1f36054826
-    anyio==3.0.0 ; sys_platform != 'win32' \
+    anyio==3.0.0 ; sys_platform == 'linux' \
         --hash=sha256:b553598332c050af19f7d41f73a7790142f5bc3d5eb8bd82f5e515ec22019bd9 \
         --hash=sha256:e71c3d9d72291d12056c0265d07c6bbedf92332f78573e278aeb116f24f30395
+    anyio==4.3.0 ; sys_platform != 'linux' and sys_platform != 'win32' \
+        --hash=sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8 \
+        --hash=sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6
     idna==3.6 \
         --hash=sha256:9ecdbbd083b06798ae1e86adcbfe8ab1479cf864e4ee30fe4e46a003d12491ca \
         --hash=sha256:c05567e9c24a6b9faaa835c4821bad0590fbb9d5779e7caa6e1cc4978e7eb24f
@@ -3577,7 +3598,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
         # via anyio
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     uv_snapshot!(context.filters(), context.export().arg("--prune").arg("child"), @"
@@ -3587,7 +3608,7 @@ fn requirements_txt_non_project_fork() -> Result<()> {
     #    uv export --cache-dir [CACHE_DIR] --prune child
 
     ----- stderr -----
-    Resolved 5 packages in [TIME]
+    Resolved 6 packages in [TIME]
     ");
 
     Ok(())

@@ -1,3 +1,4 @@
+use std::cell::LazyCell;
 use std::fmt::{Display, Formatter};
 use std::ops::Bound;
 
@@ -7,7 +8,9 @@ use smallvec::SmallVec;
 use tracing::{debug, trace};
 
 use uv_configuration::IndexStrategy;
-use uv_distribution_types::{DistributionMetadata, IndexUrl, Name, ResolutionRecorder};
+use uv_distribution_types::{
+    DistributionMetadata, IndexUrl, Name, RequiresPython, ResolutionRecorder,
+};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 use uv_platform_tags::Tags;
@@ -89,6 +92,7 @@ impl CandidateSelector {
         exclusions: &'a Exclusions,
         index: Option<&'a IndexUrl>,
         env: &ResolverEnvironment,
+        requires_python: &RequiresPython,
         tags: Option<&'a Tags>,
     ) -> Option<Candidate<'a>> {
         if let Some(recorder) = &self.recorder {
@@ -97,6 +101,26 @@ impl CandidateSelector {
         let reinstall = exclusions.reinstall(package_name);
         let upgrade = exclusions.upgrade(package_name);
         let prerelease_selection = self.prerelease_strategy.selection(package_name, env);
+
+        // Most preferences need no version search. If a sibling's upper bound calls for
+        // a comparison, reuse the same candidate for ordinary selection below.
+        let mut best = LazyCell::new(|| {
+            self.select_no_preference_with(
+                package_name,
+                range,
+                version_maps,
+                prerelease_selection,
+                env,
+            )
+        });
+
+        // PubGrub rejects an incompatible candidate before trying the next version.
+        // Check the artifacts only when an installable candidate would replace a sibling pin.
+        let lacks_portable_dist = LazyCell::new(|| {
+            best.as_ref()
+                .and_then(Candidate::compatible)
+                .is_some_and(|dist| !dist.has_portable_distribution(requires_python))
+        });
 
         // If we have a preference (e.g., from a lockfile), search for a version matching that
         // preference.
@@ -118,6 +142,12 @@ impl CandidateSelector {
             prerelease_selection,
             env,
             tags,
+            |entry| {
+                env.fork_markers().is_none_or(|fork| {
+                    entry.applies_in(fork, || best.as_ref().map(|candidate| candidate.version))
+                        || *lacks_portable_dist
+                })
+            },
         ) {
             trace!("Using preference {} {}", preferred.name, preferred.version);
             return Some(preferred);
@@ -141,13 +171,7 @@ impl CandidateSelector {
         }
 
         // Otherwise, find the best candidate from the version maps.
-        let compatible = self.select_no_preference_with(
-            package_name,
-            range,
-            version_maps,
-            prerelease_selection,
-            env,
-        );
+        let compatible = LazyCell::force_mut(&mut best).take();
 
         // Cross-reference against the already-installed distribution.
         //
@@ -173,15 +197,11 @@ impl CandidateSelector {
         compatible
     }
 
-    /// If the package has a preference, an existing version from an existing lockfile or a version
-    /// from a sibling fork, and the preference satisfies the current range, use that.
+    /// Prefer existing lockfile pins and versions selected by sibling forks.
     ///
-    /// We try to find a resolution that, depending on the input, does not diverge from the
-    /// lockfile or matches a sibling fork. We try an exact match for the current markers (fork
-    /// or specific) first, to ensure stability with repeated locking. If that doesn't work, we
-    /// fall back to preferences that don't match in hopes of still resolving different forks into
-    /// the same version; A solution with less different versions is more desirable than one where
-    /// we may have more recent version in some cases, but overall more versions.
+    /// Try pins matching the current markers first so repeated locks keep their versions.
+    /// Other forks can share a version unless the normal candidate is a newer public
+    /// release excluded only by another fork's upper bounds.
     fn get_preferred<'a, InstalledPackages: InstalledPackagesProvider>(
         &'a self,
         package_name: &'a PackageName,
@@ -194,6 +214,7 @@ impl CandidateSelector {
         prerelease_selection: PrereleaseSelection,
         env: &ResolverEnvironment,
         tags: Option<&'a Tags>,
+        reuse: impl Fn(&Entry) -> bool,
     ) -> Option<Candidate<'a>> {
         let preferences = preferences.get(package_name);
 
@@ -205,7 +226,7 @@ impl CandidateSelector {
                 if index.is_some_and(|index| !entry.index().matches(index)) {
                     return None;
                 }
-                Either::Left(std::iter::once((entry.pin().version(), entry.source())))
+                Either::Left(std::iter::once(entry))
             }
             [..] => {
                 type Entries<'a> = SmallVec<[&'a Entry; 3]>;
@@ -233,16 +254,12 @@ impl CandidateSelector {
                     std::cmp::Reverse((matches_env, version))
                 });
 
-                Either::Right(
-                    preferences
-                        .into_iter()
-                        .map(|entry| (entry.pin().version(), entry.source())),
-                )
+                Either::Right(preferences.into_iter())
             }
         };
 
         Self::get_preferred_from_iter(
-            preferences,
+            preferences.filter(|entry| range.contains(entry.pin().version()) && reuse(entry)),
             package_name,
             range,
             version_maps,
@@ -255,7 +272,7 @@ impl CandidateSelector {
 
     /// Return the first preference that satisfies the current range and is allowed.
     fn get_preferred_from_iter<'a, InstalledPackages: InstalledPackagesProvider>(
-        preferences: impl Iterator<Item = (&'a Version, PreferenceSource)>,
+        preferences: impl Iterator<Item = &'a Entry>,
         package_name: &'a PackageName,
         range: &Range<Version>,
         version_maps: &'a [VersionMap],
@@ -264,12 +281,8 @@ impl CandidateSelector {
         prerelease_selection: PrereleaseSelection,
         tags: Option<&Tags>,
     ) -> Option<Candidate<'a>> {
-        for (version, source) in preferences {
-            // Respect the version range for this requirement.
-            if !range.contains(version) {
-                continue;
-            }
-
+        for entry in preferences {
+            let version = entry.pin().version();
             // Check for a locally installed distribution that matches the preferred version, unless
             // we have to reinstall, in which case we can't reuse an already-installed distribution.
             if !reinstall {
@@ -320,7 +333,7 @@ impl CandidateSelector {
                     PrereleaseSelection::Disallow => false,
                     // If the pre-release was provided via an existing file, rather than from the
                     // current solve, accept it unless pre-releases are completely banned.
-                    PrereleaseSelection::PreferStable => match source {
+                    PrereleaseSelection::PreferStable => match entry.source() {
                         PreferenceSource::Resolver => false,
                         PreferenceSource::Lock
                         | PreferenceSource::Environment
