@@ -22,13 +22,7 @@ use super::{
 };
 
 /// Use the Windows resource editor as an independent reference for resource readback.
-fn write_native_resources(
-    path: &Path,
-    launcher: &[u8],
-    language: u16,
-    resources: &[(&str, &[u8])],
-) -> Result<Vec<u8>> {
-    fs_err::write(path, launcher)?;
+fn update_native_resources(path: &Path, language: u16, resources: &[(&str, &[u8])]) -> Result<()> {
     let path_wide = path
         .as_os_str()
         .encode_wide()
@@ -72,7 +66,7 @@ fn write_native_resources(
         finish.context("EndUpdateResourceW failed")?;
     }
 
-    Ok(fs_err::read(path)?)
+    Ok(())
 }
 
 fn assert_pe_layout(original: &[u8], output: &[u8]) -> Result<()> {
@@ -401,9 +395,9 @@ fn mui_configuration_precludes_launcher_identification() -> Result<()> {
 fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
-    let english = write_native_resources(
+    fs_err::write(path.path(), get_launcher_bin(false)?)?;
+    update_native_resources(
         path.path(),
-        get_launcher_bin(false)?,
         0x0409,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[2]),
@@ -413,18 +407,16 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     let launcher = Launcher::try_from_path(path.path())?.context("Missing localized launcher")?;
     assert_eq!(launcher.python_path, Path::new("missing-en.exe"));
 
-    let localized = write_native_resources(
+    update_native_resources(
         path.path(),
-        &english,
         0x0407,
         &[(RESOURCE_PYTHON_PATH, b"missing-de.exe")],
     )?;
     assert!(Launcher::try_from_path(path.path())?.is_none());
 
     let python = which::which("python")?;
-    let mut neutral = write_native_resources(
+    update_native_resources(
         path.path(),
-        &localized,
         0,
         &[(
             RESOURCE_PYTHON_PATH,
@@ -439,6 +431,7 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     assert_eq!(launcher.python_path, python);
 
     // A binary search can find the second neutral entry when IDs are duplicated.
+    let mut neutral = fs_err::read(path.path())?;
     let (offset, name) = path_resource(&neutral)?;
     let second = offset + usize::try_from(name.offset_to_directory())? + 16 + 8;
     assert_eq!(&neutral[second..second + 4], &0x0407_u32.to_le_bytes());
@@ -497,7 +490,9 @@ fn resources_match_native_windows_updates() -> Result<()> {
                 (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
                 (RESOURCE_SCRIPT_DATA, &payload),
             ];
-            let native = write_native_resources(native_path.path(), launcher, 0, resources)?;
+            fs_err::write(native_path.path(), launcher)?;
+            update_native_resources(native_path.path(), 0, resources)?;
+            let native = fs_err::read(native_path.path())?;
             let edited = write_resources(launcher, resources)?;
             fs_err::write(edited_path.path(), &edited)?;
 
@@ -551,9 +546,9 @@ fn missing_script_resource_is_rejected() -> Result<()> {
 fn multiple_script_payloads_are_rejected() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
-    let launcher = write_native_resources(
+    fs_err::write(path.path(), get_launcher_bin(false)?)?;
+    update_native_resources(
         path.path(),
-        get_launcher_bin(false)?,
         0x0409,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[1]),
@@ -562,9 +557,8 @@ fn multiple_script_payloads_are_rejected() -> Result<()> {
         ],
     )?;
     assert!(Launcher::try_from_path(path.path())?.is_some());
-    write_native_resources(
+    update_native_resources(
         path.path(),
-        &launcher,
         0,
         &[(RESOURCE_SCRIPT_DATA, b"neutral payload")],
     )?;
@@ -733,9 +727,9 @@ fn python_proxy_target_is_independent_of_script_languages() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
     let python = "C:/Python312/python.exe";
-    let bytes = write_native_resources(
+    fs_err::write(path.path(), get_launcher_bin(false)?)?;
+    update_native_resources(
         path.path(),
-        get_launcher_bin(false)?,
         0x0407,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[2]),
@@ -744,12 +738,7 @@ fn python_proxy_target_is_independent_of_script_languages() -> Result<()> {
         ],
     )?;
     assert!(Launcher::try_from_path(path.path())?.is_some());
-    write_native_resources(
-        path.path(),
-        &bytes,
-        0x0409,
-        &[(RESOURCE_SCRIPT_DATA, b"unused")],
-    )?;
+    update_native_resources(path.path(), 0x0409, &[(RESOURCE_SCRIPT_DATA, b"unused")])?;
     assert_eq!(
         super::read_launcher_target(path.path())?,
         Some((LauncherKind::Python, python.into()))
