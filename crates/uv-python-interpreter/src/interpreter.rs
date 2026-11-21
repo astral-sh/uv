@@ -901,9 +901,9 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
     }
 }
 
-enum ExecutableTarget<'a> {
-    Executable(&'a Path),
-    Trampoline(PathBuf),
+struct ExecutableTarget<'a> {
+    absolute: &'a Path,
+    trampoline_target: Option<PathBuf>,
 }
 
 impl<'a> ExecutableTarget<'a> {
@@ -914,8 +914,10 @@ impl<'a> ExecutableTarget<'a> {
             path.display()
         );
         match uv_trampoline_builder::read_launcher_target(path) {
-            Ok(Some((_, target))) => Some(Self::Trampoline(target)),
-            Ok(None) => Some(Self::Executable(path)),
+            Ok(launcher) => Some(Self {
+                absolute: path,
+                trampoline_target: launcher.map(|(_, target)| target),
+            }),
             Err(err) => {
                 trace!("Unresolved launcher target for `{}`: {err}", path.display());
                 None
@@ -924,19 +926,14 @@ impl<'a> ExecutableTarget<'a> {
     }
 
     fn canonicalize(&self) -> io::Result<PathBuf> {
-        match self {
-            Self::Trampoline(target) => dunce::canonicalize(target),
-            Self::Executable(path) if cfg!(windows) => Ok(path.to_path_buf()),
-            Self::Executable(path) => fs_err::canonicalize(path),
+        match &self.trampoline_target {
+            Some(target) => dunce::canonicalize(target),
+            None if cfg!(windows) => Ok(self.absolute.to_path_buf()),
+            None => fs_err::canonicalize(self.absolute),
         }
     }
 
-    fn cache_input<T>(
-        &self,
-        executable: &Path,
-        absolute: &Path,
-        input: io::Result<T>,
-    ) -> Result<Option<T>, Error> {
+    fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
         let err = match input {
             Ok(value) => return Ok(Some(value)),
             Err(err) => err,
@@ -945,11 +942,11 @@ impl<'a> ExecutableTarget<'a> {
         // Unless the target is missing, let the probe decide if the launcher
         // works. An error resolving a cache input would stop Python discovery,
         // even when the failure is local to one launcher (e.g., a junction loop).
-        if let Self::Trampoline(target) = self {
+        if let Some(target) = &self.trampoline_target {
             if err.kind() == io::ErrorKind::NotFound
                 && matches!(target.try_exists(), Ok(false))
-                && let Some(ExecutableTarget::Trampoline(current)) =
-                    ExecutableTarget::identify(absolute)
+                && let Some(current) =
+                    Self::identify(self.absolute).and_then(|launcher| launcher.trampoline_target)
                 && current == *target
             {
                 return Err(Error::BrokenLink(BrokenLink::new(
@@ -967,13 +964,14 @@ impl<'a> ExecutableTarget<'a> {
         if err.kind() != io::ErrorKind::NotFound {
             return Err(err.into());
         }
-        if absolute
+        if self
+            .absolute
             .symlink_metadata()
             .is_ok_and(|metadata| metadata.is_symlink())
         {
             return Err(Error::BrokenLink(BrokenLink::new(
                 executable,
-                BrokenLinkKind::Symlink(fs::read_link(absolute).ok()),
+                BrokenLinkKind::Symlink(fs::read_link(self.absolute).ok()),
             )));
         }
         Err(Error::NotFound(executable.to_path_buf()))
@@ -986,7 +984,7 @@ impl<'a> ExecutableTarget<'a> {
     fn link_timestamps(&self, canonical: &Path) -> Option<Vec<(u64, u64)>> {
         use std::os::windows::fs::MetadataExt;
 
-        let Self::Trampoline(target) = self else {
+        let Some(target) = &self.trampoline_target else {
             return Some(Vec::new());
         };
         let mut target = std::path::absolute(dunce::simplified(target)).ok()?;
@@ -1610,8 +1608,7 @@ impl InterpreterInfo {
             return uncached(probe()?);
         };
 
-        let Some(canonical) = target.cache_input(executable, &absolute, target.canonicalize())?
-        else {
+        let Some(canonical) = target.cache_input(executable, target.canonicalize())? else {
             return uncached(probe()?);
         };
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
@@ -1620,7 +1617,7 @@ impl InterpreterInfo {
         }
 
         let inputs = Self::cache_file_timestamps(&absolute, &canonical, &BTreeSet::new());
-        let Some(mut file_timestamps) = target.cache_input(executable, &absolute, inputs)? else {
+        let Some(mut file_timestamps) = target.cache_input(executable, inputs)? else {
             return uncached(probe()?);
         };
 
@@ -2052,6 +2049,8 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn link_snapshot_requires_reaching_the_canonical_path() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
         let dir = tempdir()?;
         let base = dir.path().join("python.exe");
         fs::write(&base, [])?;
@@ -2060,7 +2059,12 @@ mod tests {
         // link whose timestamps would track the mapping (e.g., a subst drive).
         let alias = dir.path().join("alias.exe");
         fs::hard_link(&base, &alias)?;
-        let target = super::ExecutableTarget::Trampoline(alias);
+        let proxy = dir.path().join("proxy.exe");
+        fs::write(
+            &proxy,
+            windows_python_launcher(&alias, WindowMode::Console)?,
+        )?;
+        let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
         assert!(target.link_timestamps(&canonical).is_none());
         Ok(())
     }
@@ -2274,7 +2278,7 @@ mod tests {
         )?;
         let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
         for error in [io::ErrorKind::PermissionDenied, io::ErrorKind::NotFound] {
-            let input = target.cache_input::<()>(&proxy, &proxy, Err(error.into()))?;
+            let input = target.cache_input::<()>(&proxy, Err(error.into()))?;
             assert!(input.is_none());
         }
         Ok(())
@@ -2296,7 +2300,7 @@ mod tests {
             windows_python_launcher(&first, WindowMode::Console)?,
         )?;
         let target = super::ExecutableTarget::identify(&proxy).expect("valid proxy");
-        let resolve = || target.cache_input(&proxy, &proxy, target.canonicalize());
+        let resolve = || target.cache_input(&proxy, target.canonicalize());
 
         fs::remove_file(&first)?;
         let Err(Error::BrokenLink(link)) = resolve() else {
