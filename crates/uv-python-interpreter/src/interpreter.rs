@@ -2471,6 +2471,8 @@ mod tests {
     #[cfg(all(windows, target_pointer_width = "64"))]
     #[tokio::test]
     async fn redirected_inputs_bypass_interpreter_cache() -> Result<()> {
+        use crate::PointerSize::_32 as Bits32;
+
         // A native launcher can start a 32-bit process. Use an existing
         // executable as its target so the test needs no writes to System32.
         let windows = std::env::var_os("SystemRoot").expect("Windows directory");
@@ -2489,7 +2491,7 @@ mod tests {
             .cache_entry(&cache);
         let mut response = mocked_interpreter_response(&executable)?;
         response.metadata.sys_base_executable = Some(target.clone());
-        response.metadata.pointer_size = serde_json::from_value("32".into())?;
+        response.metadata.pointer_size = Bits32;
         let info = InterpreterInfo::query_cached(&executable, &cache, || Ok((response, None)))?;
         assert!(!entry.path().exists());
 
