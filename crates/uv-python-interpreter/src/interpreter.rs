@@ -930,6 +930,23 @@ impl<'a> ExecutableTarget<'a> {
             Self::Executable(path) => fs_err::canonicalize(path),
         }
     }
+
+    fn cache_input<T>(&self, input: io::Result<T>) -> io::Result<Option<T>> {
+        // An SMB share may permit execution while denying access to the
+        // normalized target path or its metadata. Probe the launcher directly.
+        match (self, input) {
+            (Self::Trampoline(target), Err(err))
+                if err.kind() == io::ErrorKind::PermissionDenied =>
+            {
+                trace!(
+                    "Skipping interpreter cache for launcher targeting `{}`: {err}",
+                    target.display()
+                );
+                Ok(None)
+            }
+            (_, result) => result.map(Some),
+        }
+    }
 }
 
 /// The `EXTERNALLY-MANAGED` file in a Python installation.
@@ -1507,13 +1524,26 @@ impl InterpreterInfo {
         cache: &Cache,
         probe: impl FnOnce() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error>,
     ) -> Result<Self, Error> {
+        #[expect(
+            clippy::redundant_closure_for_method_calls,
+            reason = "the method reference binds the target lifetime before the absolute path is created"
+        )]
+        Self::query_cached_with(executable, cache, |target| target.canonicalize(), probe)
+    }
+
+    fn query_cached_with(
+        executable: &Path,
+        cache: &Cache,
+        canonicalize: impl FnOnce(&ExecutableTarget<'_>) -> io::Result<PathBuf>,
+        probe: impl FnOnce() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error>,
+    ) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
+        let uncached = |(wire, _)| Self::from_probe(executable, wire, HashMap::new());
         let Some(target) = ExecutableTarget::identify(&absolute) else {
             // A venv launcher reports itself as `sys.executable`. Its timestamp
             // cannot invalidate metadata when the selected interpreter changes.
-            let (wire, _) = probe()?;
-            return Self::from_probe(executable, wire, HashMap::new());
+            return uncached(probe()?);
         };
 
         // A missing executable can surface during canonicalization or the metadata read.
@@ -1542,15 +1572,21 @@ impl InterpreterInfo {
             }
         };
 
-        let canonical = target.canonicalize().map_err(handle_io_error)?;
+        let Some(canonical) = target
+            .cache_input(canonicalize(&target))
+            .map_err(handle_io_error)?
+        else {
+            return uncached(probe()?);
+        };
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
         }
 
-        let mut file_timestamps =
-            Self::cache_file_timestamps(&absolute, &canonical, &BTreeSet::new())
-                .map_err(handle_io_error)?;
+        let inputs = Self::cache_file_timestamps(&absolute, &canonical, &BTreeSet::new());
+        let Some(mut file_timestamps) = target.cache_input(inputs).map_err(handle_io_error)? else {
+            return uncached(probe()?);
+        };
 
         trace!(
             "Querying interpreter executable at `{}`",
@@ -2086,6 +2122,43 @@ mod tests {
         InterpreterInfo::query_cached(&proxy, &cache, probe)?;
         assert_eq!(probes, 2);
         InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn denied_target_lookup_bypasses_cache() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let target = dir.path().join("base.exe");
+        fs::write(&target, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher("base.exe", WindowMode::Console)?,
+        )?;
+        let cache = Cache::temp()?.init().await?;
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_base_executable = Some(target.clone());
+        let cached = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
+        InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+
+        let prefix = dir.path().join("fresh-probe");
+        let mut response = mocked_interpreter_response(&proxy)?;
+        response.metadata.sys_prefix = prefix.clone();
+        response.metadata.sys_base_executable = Some(target);
+        let info = InterpreterInfo::query_cached_with(
+            &proxy,
+            &cache,
+            |_| Err(io::ErrorKind::PermissionDenied.into()),
+            || Ok((response, None)),
+        )?;
+        assert_eq!(info.metadata.sys_prefix, prefix);
+        let proxy_entry = InterpreterInfo::cache_entry(&proxy, &proxy, &cache);
+        assert!(!proxy_entry.path().exists());
+        let after = InterpreterInfo::query_cached(&proxy, &cache, unexpected_probe)?;
+        assert_eq!(after.metadata.sys_prefix, cached.metadata.sys_prefix);
         Ok(())
     }
 
