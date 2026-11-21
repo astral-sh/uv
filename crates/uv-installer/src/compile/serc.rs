@@ -6,7 +6,6 @@ use serde::Deserialize;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::process::Command;
 use tracing::debug;
-use walkdir::WalkDir;
 
 use uv_bin_install::install_serc;
 use uv_cache::Cache;
@@ -15,44 +14,25 @@ use uv_configuration::Concurrency;
 use uv_python_interpreter::Interpreter;
 use uv_static::EnvVars;
 
-use super::{CompileError, compile_timeout};
+use super::{CompileError, compile_timeout, python_sources};
 
-/// Compile a directory using the downloaded serc executable.
+/// Compile a directory using the downloaded Serc executable.
+///
+/// Return `None` if there are no sources and `Some(0)` if all bytecode is current.
 pub async fn compile_serc_tree(
     dir: &Path,
     interpreter: &Interpreter,
     concurrency: &Concurrency,
     cache: &Cache,
     client: &BaseClient,
-) -> Result<usize, CompileError> {
-    let mut files = Vec::new();
-    for entry in WalkDir::new(dir)
-        .into_iter()
-        .filter_entry(|entry| entry.file_name() != "__pycache__")
-    {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err)
-                if err
-                    .io_error()
-                    .is_some_and(|err| err.kind() == io::ErrorKind::NotFound) =>
-            {
-                continue;
-            }
-            Err(err) => return Err(err.into()),
-        };
-        if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
-            files.push(entry.into_path());
-        }
+) -> Result<Option<usize>, CompileError> {
+    let files = python_sources(dir).collect::<Result<Vec<_>, _>>()?;
+    if files.is_empty() {
+        return Ok(None);
     }
-    compile_serc_files(
-        files.into_iter().map(Ok),
-        interpreter,
-        concurrency,
-        cache,
-        client,
-    )
-    .await
+    compile(&files, interpreter, concurrency, cache, client)
+        .await
+        .map(Some)
 }
 
 /// Compile the given source files using the downloaded serc executable.
@@ -67,6 +47,17 @@ pub async fn compile_serc_files(
         .into_iter()
         .collect::<anyhow::Result<Vec<_>>>()
         .map_err(CompileError::SourceFiles)?;
+    compile(&files, interpreter, concurrency, cache, client).await
+}
+
+/// Send the paths to a single Serc process and count the files it compiled.
+async fn compile(
+    files: &[PathBuf],
+    interpreter: &Interpreter,
+    concurrency: &Concurrency,
+    cache: &Cache,
+    client: &BaseClient,
+) -> Result<usize, CompileError> {
     if files.is_empty() {
         return Ok(0);
     }
@@ -111,7 +102,7 @@ pub async fn compile_serc_files(
             .ok_or_else(|| CompileError::SercStdin(io::Error::other("missing stdin pipe")))?;
         let write = async {
             let mut stdin = BufWriter::new(stdin);
-            for file in &files {
+            for file in files {
                 // These are raw path bytes on Unix and, after validation above, UTF-8 on Windows.
                 stdin.write_all(file.as_os_str().as_encoded_bytes()).await?;
                 stdin.write_all(b"\0").await?;

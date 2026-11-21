@@ -46,6 +46,7 @@ pub(super) async fn compile_bytecode(
                 client,
             )
             .await
+            .map(Option::unwrap_or_default)
         } else {
             compile_tree(
                 &site_packages,
