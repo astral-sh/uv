@@ -822,17 +822,6 @@ fn source_satisfies_environment_preference(
 /// Returns false when an error could be due to a faulty Python installation and we should continue searching for a working one.
 impl Error {
     pub(crate) fn is_critical(&self) -> bool {
-        let missing_is_critical = |source: &PythonSource, path: &Path| {
-            // A missing interpreter breaks an active virtual environment.
-            if matches!(source, PythonSource::ActiveEnvironment)
-                && uv_fs::is_virtualenv_executable(path)
-            {
-                true
-            } else {
-                trace!("Skipping missing interpreter at `{}`", path.display());
-                false
-            }
-        };
         match self {
             // When querying the Python interpreter fails, we will only raise errors that demonstrate that something is broken
             // If the Python interpreter returned a bad response, we'll continue searching for one that works
@@ -871,8 +860,23 @@ impl Error {
                     );
                     false
                 }
-                InterpreterError::NotFound(path) => missing_is_critical(source, path),
-                InterpreterError::BrokenLink(link) => missing_is_critical(source, link.path()),
+                // A missing interpreter breaks an active virtual environment.
+                InterpreterError::NotFound(path)
+                    if matches!(source, PythonSource::ActiveEnvironment)
+                        && uv_fs::is_virtualenv_executable(path) =>
+                {
+                    true
+                }
+                InterpreterError::BrokenLink(link)
+                    if matches!(source, PythonSource::ActiveEnvironment)
+                        && link.is_virtualenv() =>
+                {
+                    true
+                }
+                InterpreterError::NotFound(_) | InterpreterError::BrokenLink(_) => {
+                    trace!("Skipping missing interpreter from {source}: {err}");
+                    false
+                }
             },
             Self::VirtualEnv(VirtualEnvError::MissingPyVenvCfg(path)) => {
                 trace!("Skipping broken virtualenv at `{}`", path.display());
@@ -1745,6 +1749,34 @@ mod tests {
         PythonExecutableGroup, PythonPreference, PythonSource, QueryStrategy,
         python_installations_from_executables, sort_installations_by_key,
     };
+
+    #[cfg(unix)]
+    #[test]
+    fn broken_active_link_uses_environment_at_detection() -> anyhow::Result<()> {
+        let cache = Cache::temp()?;
+        let dir = tempfile::tempdir()?;
+        let bin = dir.path().join("bin");
+        fs_err::create_dir(&bin)?;
+        let python = bin.join("python");
+        fs_err::os::unix::fs::symlink("missing", &python)?;
+        let query = || {
+            super::python_installation_from_executable(
+                PythonSource::ActiveEnvironment,
+                python.clone(),
+                &cache,
+            )
+            .unwrap_err()
+        };
+
+        let config = dir.path().join("pyvenv.cfg");
+        let outside = query();
+        fs_err::write(&config, "")?;
+        assert!(!outside.is_critical());
+        let inside = query();
+        fs_err::remove_file(config)?;
+        assert!(inside.is_critical());
+        Ok(())
+    }
 
     // Testing this at a higher level would necessitate relying on filesystem ordering.
     #[test]

@@ -1191,9 +1191,9 @@ impl BrokenLink {
         }
     }
 
-    /// The interpreter path where the broken link was detected.
-    pub fn path(&self) -> &Path {
-        &self.path
+    /// Whether the interpreter belonged to a virtual environment when the broken link was detected.
+    pub fn is_virtualenv(&self) -> bool {
+        self.venv
     }
 
     /// Return the path of the broken link and its target if known.
@@ -1230,7 +1230,7 @@ impl Display for BrokenLink {
 
 impl uv_errors::Hinted for BrokenLink {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        if self.venv {
+        if self.is_virtualenv() {
             uv_errors::Hints::from(format!(
                 "Consider recreating the environment (e.g., with `{}`)",
                 "uv venv".green()
