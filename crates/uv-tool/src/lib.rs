@@ -297,7 +297,7 @@ impl InstalledTools {
             Err(uv_python_interpreter::PythonEnvironmentError::Query(
                 uv_python_interpreter::InterpreterError::BrokenLink(link),
             )) => {
-                let (path, target) = link.into_paths()?;
+                let (path, target) = link.into_paths();
                 if let Some(target_path) = target {
                     warn!(
                         "Ignoring existing virtual environment linked to non-existent Python interpreter: `{}` -> `{}`",

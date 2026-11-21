@@ -1126,7 +1126,7 @@ pub struct BrokenLink {
 
 #[derive(Debug)]
 enum BrokenLinkKind {
-    Symlink,
+    Symlink(Option<PathBuf>),
     Trampoline(Option<PathBuf>),
 }
 
@@ -1139,21 +1139,19 @@ impl BrokenLink {
         }
     }
 
-    /// Return the path of the link and its target, reading the target of a symlink.
-    /// The `pyvenv.cfg` heuristic identifies broken trampolines without an exact target.
-    pub fn into_paths(self) -> io::Result<(PathBuf, Option<PathBuf>)> {
+    /// Return the path of the broken link and its target if known.
+    pub fn into_paths(self) -> (PathBuf, Option<PathBuf>) {
         let target = match self.kind {
-            BrokenLinkKind::Symlink => Some(fs::read_link(&self.path)?),
-            BrokenLinkKind::Trampoline(target) => target,
+            BrokenLinkKind::Symlink(target) | BrokenLinkKind::Trampoline(target) => target,
         };
-        Ok((self.path, target))
+        (self.path, target)
     }
 }
 
 impl Display for BrokenLink {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
-            BrokenLinkKind::Symlink => write!(
+            BrokenLinkKind::Symlink(_) => write!(
                 f,
                 "Broken symlink at `{}`, was the underlying Python interpreter removed?",
                 self.path.user_display()
@@ -1588,7 +1586,10 @@ impl InterpreterInfo {
                     .symlink_metadata()
                     .is_ok_and(|metadata| metadata.is_symlink())
                 {
-                    Error::BrokenLink(BrokenLink::new(executable, BrokenLinkKind::Symlink))
+                    Error::BrokenLink(BrokenLink::new(
+                        executable,
+                        BrokenLinkKind::Symlink(fs::read_link(&absolute).ok()),
+                    ))
                 } else {
                     Error::NotFound(executable.to_path_buf())
                 }
