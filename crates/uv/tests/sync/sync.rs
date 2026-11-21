@@ -7771,6 +7771,45 @@ fn no_install_package() -> Result<()> {
     Ok(())
 }
 
+/// Platform filtering can leave an excluded package without a locked distribution.
+#[test]
+fn no_install_package_without_artifact() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    let (filename, wheel) = WheelBuilder::new(&"demo".parse()?, &"1.0".parse()?)
+        .tag("py3-none-win_amd64")
+        .requires(&["child".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"child".parse()?, &"1.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo; sys_platform == 'linux'"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+    "#})?;
+
+    context.lock().assert().success();
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--python-platform", "linux", "--no-install-package", "demo"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==1.0
+    ");
+    Ok(())
+}
+
 /// Ensure that `--no-build` allows first-party projects and that `--no-install-project` still
 /// skips them.
 #[test]

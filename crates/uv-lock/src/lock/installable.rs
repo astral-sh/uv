@@ -27,6 +27,14 @@ use crate::lock::{
 };
 use crate::{Lock, LockError};
 
+/// Keep the package identity for tracing dependencies through an excluded node.
+fn excluded_node(package: &Package) -> Node {
+    Node::Excluded {
+        name: package.name().clone(),
+        version: package.version().cloned(),
+    }
+}
+
 fn newly_activated_extras<'lock>(
     dep: &'lock Dependency,
     activated_extras: &[(&'lock PackageName, &'lock ExtraName)],
@@ -191,38 +199,7 @@ pub trait Installable<'lock> {
             dist: Arc::new(dist),
             version,
         };
-        Ok(Node::Dist {
-            dist,
-            hashes,
-            install: true,
-        })
-    }
-
-    /// Create a non-installable [`Node`] from a [`Package`].
-    fn non_installable_node(
-        &self,
-        package: &Package,
-        tags: &Tags,
-        marker_env: &ResolverMarkerEnvironment,
-    ) -> Result<Node, LockError> {
-        let HashedDist { dist, .. } = package.to_dist(
-            self.install_path(),
-            TagPolicy::Preferred(tags),
-            &BuildOptions::default(),
-            marker_env,
-            FirstParty::No,
-        )?;
-        let version = package.version().cloned();
-        let dist = ResolvedDist::Installable {
-            dist: Arc::new(dist),
-            version,
-        };
-        let hashes = package.hashes();
-        Ok(Node::Dist {
-            dist,
-            hashes,
-            install: false,
-        })
+        Ok(Node::Dist { dist, hashes })
     }
 
     /// Convert a lockfile entry to a graph [`Node`].
@@ -241,7 +218,7 @@ pub trait Installable<'lock> {
         ) {
             self.installable_node(package, tags, marker_env, build_options)
         } else {
-            self.non_installable_node(package, tags, marker_env)
+            Ok(excluded_node(package))
         }
     }
 }
@@ -349,7 +326,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 if root_kind == InstallableRootKind::Production && groups.prod() {
                     self.package_to_node(dist, tags, build_options, install_options, marker_env)?
                 } else {
-                    self.non_installable_node(dist, tags, marker_env)?
+                    excluded_node(dist)
                 },
             );
             inverse[package_index.0] = Some(index);
@@ -430,7 +407,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         // member. If it was omitted due to, e.g., `--only-dev`, but is itself
                         // referenced as a development dependency, then we need to re-enable it.
                         let node = &mut petgraph[index];
-                        if !groups.prod() || matches!(node, Node::Dist { install: false, .. }) {
+                        if !groups.prod() || matches!(node, Node::Excluded { .. }) {
                             *node = self.package_to_node(
                                 dep_dist,
                                 tags,
@@ -515,7 +492,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                                 marker_env,
                             )?
                         } else {
-                            self.non_installable_node(dist, tags, marker_env)?
+                            excluded_node(dist)
                         });
                         inverse[package_index.0] = Some(index);
                         index
@@ -792,7 +769,7 @@ trait InstallableExt<'lock>: Installable<'lock> {
                         index
                     }
                     Some(index) => {
-                        if matches!(&petgraph[index], Node::Dist { install: false, .. }) {
+                        if matches!(&petgraph[index], Node::Excluded { .. }) {
                             petgraph[index] = self.package_to_node(
                                 dep_dist,
                                 tags,
@@ -1470,12 +1447,15 @@ provides-extras = ["cli"]
             .node_weights()
             .map(|node| match node {
                 Node::Root => "root".to_string(),
-                Node::Dist {
-                    dist,
-                    hashes,
-                    install,
-                } => format!(
-                    "{}=={} (install: {install}, hashes: {})",
+                Node::Excluded { name, version } => format!(
+                    "{name}=={} (install: false)",
+                    version
+                        .as_ref()
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| "<dynamic>".to_string())
+                ),
+                Node::Dist { dist, hashes } => format!(
+                    "{}=={} (install: true, hashes: {})",
                     dist.name(),
                     dist.version()
                         .map(ToString::to_string)

@@ -113,34 +113,34 @@ impl DerivationChain {
             if !seen.insert(node) {
                 continue;
             }
-            match &resolution.graph()[node] {
+            let (name, version) = match &resolution.graph()[node] {
                 Node::Root => {
                     path.reverse();
                     path.pop();
                     return Some(Self::from_iter(path));
                 }
-                Node::Dist { dist, .. } => {
-                    for edge in resolution.graph().edges_directed(node, Direction::Incoming) {
-                        let mut path = path.clone();
-                        path.push(DerivationStep::new(
-                            dist.name().clone(),
-                            extra.clone(),
-                            group.clone(),
-                            dist.version().cloned(),
-                            Ranges::empty(),
-                        ));
-                        let target = edge.source();
-                        let extra = match edge.weight() {
-                            Edge::Optional(extra) => Some(extra.clone()),
-                            _ => None,
-                        };
-                        let group = match edge.weight() {
-                            Edge::Dev(group) => Some(group.clone()),
-                            _ => None,
-                        };
-                        queue.push_back((target, extra, group, path));
-                    }
-                }
+                Node::Dist { dist, .. } => (dist.name(), dist.version()),
+                Node::Excluded { name, version } => (name, version.as_ref()),
+            };
+            for edge in resolution.graph().edges_directed(node, Direction::Incoming) {
+                let mut path = path.clone();
+                path.push(DerivationStep::new(
+                    name.clone(),
+                    extra.clone(),
+                    group.clone(),
+                    version.cloned(),
+                    Ranges::empty(),
+                ));
+                let target = edge.source();
+                let extra = match edge.weight() {
+                    Edge::Optional(extra) => Some(extra.clone()),
+                    _ => None,
+                };
+                let group = match edge.weight() {
+                    Edge::Dev(group) => Some(group.clone()),
+                    _ => None,
+                };
+                queue.push_back((target, extra, group, path));
             }
         }
 

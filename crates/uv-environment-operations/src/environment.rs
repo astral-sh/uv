@@ -195,12 +195,8 @@ impl CachedEnvironment {
                 .graph()
                 .node_weights()
                 .filter_map(|node| match node {
-                    Node::Dist {
-                        dist,
-                        hashes,
-                        install: true,
-                    } => Some((dist, hashes)),
-                    Node::Dist { install: false, .. } | Node::Root => None,
+                    Node::Dist { dist, hashes } => Some((dist, hashes)),
+                    Node::Excluded { .. } | Node::Root => None,
                 })
                 .map(|(dist, hashes)| {
                     Ok(CachedEnvironmentDist {

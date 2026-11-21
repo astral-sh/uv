@@ -1302,11 +1302,7 @@ impl<'lock> PylockToml {
                     dist: Arc::new(built_dist),
                     version: package.version,
                 };
-                Node::Dist {
-                    dist,
-                    hashes,
-                    install: true,
-                }
+                Node::Dist { dist, hashes }
             } else if let Some(sdist) = package.sdist.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::from(sdist.hashes.clone());
                 let sdist = Dist::Source(SourceDist::Registry(sdist.to_sdist(
@@ -1319,11 +1315,7 @@ impl<'lock> PylockToml {
                     dist: Arc::new(sdist),
                     version: package.version,
                 };
-                Node::Dist {
-                    dist,
-                    hashes,
-                    install: true,
-                }
+                Node::Dist { dist, hashes }
             } else if let Some(sdist) = package.directory.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
                 let sdist = Dist::Source(SourceDist::Directory(
@@ -1333,11 +1325,7 @@ impl<'lock> PylockToml {
                     dist: Arc::new(sdist),
                     version: package.version,
                 };
-                Node::Dist {
-                    dist,
-                    hashes,
-                    install: true,
-                }
+                Node::Dist { dist, hashes }
             } else if let Some(sdist) = package.vcs.as_ref().filter(|_| !no_build) {
                 let hashes = HashDigests::empty();
                 let sdist = Dist::Source(SourceDist::GitDirectory(
@@ -1347,11 +1335,7 @@ impl<'lock> PylockToml {
                     dist: Arc::new(sdist),
                     version: package.version,
                 };
-                Node::Dist {
-                    dist,
-                    hashes,
-                    install: true,
-                }
+                Node::Dist { dist, hashes }
             } else if let Some(dist) = package
                 .archive
                 .as_ref()
@@ -1363,11 +1347,7 @@ impl<'lock> PylockToml {
                     dist: Arc::new(dist),
                     version: package.version,
                 };
-                Node::Dist {
-                    dist,
-                    hashes,
-                    install: true,
-                }
+                Node::Dist { dist, hashes }
             } else {
                 return match (no_binary, no_build) {
                     (true, true) => {
