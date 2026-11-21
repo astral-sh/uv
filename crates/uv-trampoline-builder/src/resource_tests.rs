@@ -983,7 +983,14 @@ fn long_stored_paths_can_be_rewritten() -> Result<()> {
     )?;
     // Joining a relative target to a verbatim launcher path collapses the
     // redundant components before the trampoline asks Windows to open it.
-    Command::new(fs_err::canonicalize(path.path())?)
+    // Python can pass the verbatim path to `CreateProcessW` as supplied.
+    // `std::process::Command` strips its prefix for short executable paths.
+    Command::new(&replacement)
+        .args([
+            "-c",
+            "import subprocess, sys; subprocess.run([sys.argv[1]], executable=sys.argv[1], check=True)",
+        ])
+        .arg(fs_err::canonicalize(path.path())?)
         .assert()
         .success()
         .stdout("long path\r\n");
