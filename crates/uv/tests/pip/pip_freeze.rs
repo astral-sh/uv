@@ -170,7 +170,7 @@ fn freeze_direct_archive_hashes() -> Result<()> {
         Version: 1.0.0
     "})?;
     project.child("direct_url.json").write_str(
-        r#"{"url":"https://user:password@example.com/project-1.0.0.tar.gz?X-Amz-Signature=aws-signature&sig=azure-signature","subdirectory":"src","archive_info":{"hashes":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}"#,
+        r#"{"url":"https://user:password@example.com/project-1.0.0.tar.gz?X-Goog-Signature=google-signature&X-Amz-Signature=aws-signature&sig=azure-signature","subdirectory":"src","archive_info":{"hashes":{"sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}"#,
     )?;
 
     let legacy = site_packages.child("legacy-1.0.0.dist-info");
@@ -181,14 +181,14 @@ fn freeze_direct_archive_hashes() -> Result<()> {
         Version: 1.0.0
     "})?;
     legacy.child("direct_url.json").write_str(
-        r#"{"url":"https://user@example.com/legacy-1.0.0.tar.gz?sig=legacy-signature","archive_info":{"hash":"sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}"#,
+        r#"{"url":"https://user@example.com/legacy-1.0.0.tar.gz?Signature=legacy-signature","archive_info":{"hash":"sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}"#,
     )?;
 
     uv_snapshot!(context.pip_freeze(), @"
     exit_code: 0 (success)
     ----- stdout -----
-    legacy @ https://example.com/legacy-1.0.0.tar.gz?sig=legacy-signature#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-    project @ https://example.com/project-1.0.0.tar.gz?X-Amz-Signature=aws-signature&sig=azure-signature#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    legacy @ https://example.com/legacy-1.0.0.tar.gz?Signature=legacy-signature#sha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    project @ https://example.com/project-1.0.0.tar.gz?X-Goog-Signature=google-signature&X-Amz-Signature=aws-signature&sig=azure-signature#subdirectory=src&sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     ");
 
     Ok(())
