@@ -1010,8 +1010,9 @@ impl<'a> ExecutableTarget<'a> {
     fn for_cache(&self, executable: &Path) -> Result<Option<CacheTarget<'_>>, Error> {
         // A script runs its embedded payload. Even if it forwards a probe to
         // Python, its stored interpreter path cannot identify the result.
-        if matches!(self.launcher, Some((LauncherKind::Script, _))) {
-            return Ok(None);
+        match self.launcher {
+            Some((LauncherKind::Script, _)) => return Ok(None),
+            Some((LauncherKind::Python, _)) | None => {}
         }
         let Some(canonical) = self.cache_input(executable, self.canonicalize())? else {
             return Ok(None);
