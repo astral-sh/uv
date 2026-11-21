@@ -119,10 +119,10 @@ impl Interpreter {
     pub fn clear_cache(executable: impl AsRef<Path>, cache: &Cache) -> Result<(), Error> {
         let executable = executable.as_ref();
         let absolute = std::path::absolute(executable)?;
-        let Some((target, canonical)) = ExecutableTarget::for_cache(&absolute, executable)? else {
+        let Some(resolved) = CacheTarget::resolve(&absolute, executable)? else {
             return Ok(());
         };
-        let cache_entry = target.cache_entry(&canonical, cache);
+        let cache_entry = resolved.cache_entry(cache);
 
         match fs::remove_file(cache_entry.path()) {
             Ok(()) => Ok(()),
@@ -909,14 +909,6 @@ struct ExecutableTarget<'a> {
     trampoline_target: Option<PathBuf>,
 }
 
-/// The launcher's target and the timestamps of the links used to resolve it.
-#[cfg(windows)]
-#[derive(PartialEq, Eq)]
-struct LinkSnapshot {
-    target: PathBuf,
-    ancestor_timestamps: Vec<(u64, u64)>,
-}
-
 impl<'a> ExecutableTarget<'a> {
     fn identify(path: &'a Path) -> Option<Self> {
         debug_assert!(
@@ -942,68 +934,6 @@ impl<'a> ExecutableTarget<'a> {
             None if cfg!(windows) => Ok(self.absolute.to_path_buf()),
             None => fs_err::canonicalize(self.absolute),
         }
-    }
-
-    /// Resolve the target and canonical path used to key an interpreter cache entry.
-    fn for_cache(absolute: &'a Path, executable: &Path) -> Result<Option<(Self, PathBuf)>, Error> {
-        let Some(target) = Self::identify(absolute) else {
-            // A venv launcher reports itself as `sys.executable`. Its timestamp
-            // cannot invalidate metadata when the selected interpreter changes.
-            return Ok(None);
-        };
-        let Some(canonical) = target.cache_input(executable, target.canonicalize())? else {
-            return Ok(None);
-        };
-        Ok(Some((target, canonical)))
-    }
-
-    fn is_launcher(&self) -> bool {
-        self.trampoline_target.is_some()
-    }
-
-    /// Return the cache entry for an interpreter's absolute and canonical executable paths.
-    fn cache_entry(&self, canonical: &Path, cache: &Cache) -> CacheEntry {
-        // We use the absolute path for the cache entry to avoid cache collisions for relative
-        // paths. But we don't want to query the executable with symbolic links resolved because
-        // that can change reported values, e.g., `sys.executable`. We include the canonical
-        // path in the cache entry as well, otherwise we can have cache collisions if an
-        // absolute path refers to different interpreters with matching ctimes, e.g., if you
-        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
-        // modified at the same time.
-        //
-        // Launcher overrides can also change the reported executable and virtual environment
-        // without changing either executable path.
-        let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
-        let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
-        let key = (
-            self.absolute,
-            canonical,
-            &python_executable,
-            &pyvenv_launcher,
-        );
-        // Only reuse Windows launcher entries from probes that verified the
-        // reported base executable against the target.
-        let digest = if self.is_launcher() {
-            cache_digest(&("verified-launcher", key))
-        } else {
-            cache_digest(&key)
-        };
-
-        cache.entry(
-            CacheBucket::Interpreter,
-            // Shard interpreter metadata by host architecture, operating system, and version, to
-            // invalidate the cache (e.g.) on OS upgrades.
-            cache_digest(&(
-                ARCH,
-                uv_platform::OsType::from_env()
-                    .map(|os_type| os_type.to_string())
-                    .unwrap_or_default(),
-                uv_platform::OsRelease::from_env()
-                    .map(|os_release| os_release.to_string())
-                    .unwrap_or_default(),
-            )),
-            format!("{digest}.msgpack"),
-        )
     }
 
     fn cache_input<T>(&self, executable: &Path, input: io::Result<T>) -> Result<Option<T>, Error> {
@@ -1049,16 +979,201 @@ impl<'a> ExecutableTarget<'a> {
         }
         Err(Error::NotFound(executable.to_path_buf()))
     }
+}
 
+/// The executable and its resolved path when querying the interpreter cache.
+struct CacheTarget<'a> {
+    target: ExecutableTarget<'a>,
+    canonical: PathBuf,
+}
+
+impl<'a> CacheTarget<'a> {
+    /// Resolve the target and canonical path used to key an interpreter cache entry.
+    fn resolve(absolute: &'a Path, executable: &Path) -> Result<Option<Self>, Error> {
+        let Some(target) = ExecutableTarget::identify(absolute) else {
+            // A venv launcher reports itself as `sys.executable`. Its timestamp
+            // cannot invalidate metadata when the selected interpreter changes.
+            return Ok(None);
+        };
+        let Some(canonical) = target.cache_input(executable, target.canonicalize())? else {
+            return Ok(None);
+        };
+        Ok(Some(Self { target, canonical }))
+    }
+
+    fn is_launcher(&self) -> bool {
+        self.target.trampoline_target.is_some()
+    }
+
+    /// Return the cache entry for an interpreter's absolute and canonical executable paths.
+    fn cache_entry(&self, cache: &Cache) -> CacheEntry {
+        // We use the absolute path for the cache entry to avoid cache collisions for relative
+        // paths. But we don't want to query the executable with symbolic links resolved because
+        // that can change reported values, e.g., `sys.executable`. We include the canonical
+        // path in the cache entry as well, otherwise we can have cache collisions if an
+        // absolute path refers to different interpreters with matching ctimes, e.g., if you
+        // have a `.venv/bin/python` pointing to both Python 3.12 and Python 3.13 that were
+        // modified at the same time.
+        //
+        // Launcher overrides can also change the reported executable and virtual environment
+        // without changing either executable path.
+        let python_executable = env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from);
+        let pyvenv_launcher = env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from);
+        let key = (
+            self.target.absolute,
+            self.canonical.as_path(),
+            &python_executable,
+            &pyvenv_launcher,
+        );
+        // Only reuse Windows launcher entries from probes that verified the
+        // reported base executable against the target.
+        let digest = if self.is_launcher() {
+            cache_digest(&("verified-launcher", key))
+        } else {
+            cache_digest(&key)
+        };
+
+        cache.entry(
+            CacheBucket::Interpreter,
+            // Shard interpreter metadata by host architecture, operating system, and version, to
+            // invalidate the cache (e.g.) on OS upgrades.
+            cache_digest(&(
+                ARCH,
+                uv_platform::OsType::from_env()
+                    .map(|os_type| os_type.to_string())
+                    .unwrap_or_default(),
+                uv_platform::OsRelease::from_env()
+                    .map(|os_release| os_release.to_string())
+                    .unwrap_or_default(),
+            )),
+            format!("{digest}.msgpack"),
+        )
+    }
+
+    #[cfg(windows)]
+    fn snapshot_links(&self) -> Option<LinkSnapshot> {
+        LinkSnapshot::capture(self.target.trampoline_target.as_deref()?, &self.canonical)
+    }
+
+    /// Check that the launcher still resolves to the interpreter that answered the probe.
+    #[cfg(windows)]
+    fn launcher_matches_probe(&self, base: Option<&Path>, links: Option<&LinkSnapshot>) -> bool {
+        let Some(base) = base else {
+            return false;
+        };
+        if !base.is_absolute() || !is_same_file(base, &self.canonical).unwrap_or(false) {
+            return false;
+        }
+        // A managed junction can redirect the launcher during the probe.
+        let Ok(Some(current)) = Self::resolve(self.target.absolute, self.target.absolute) else {
+            return false;
+        };
+        if !current.is_launcher() || current.canonical != self.canonical {
+            return false;
+        }
+        let Ok(base) = std::path::absolute(dunce::simplified(base)) else {
+            return false;
+        };
+        if base == self.canonical {
+            return true;
+        }
+        // A shim may have run Python through a separate junction that now
+        // points back to the shim. Only trust the alias tracked from the launcher.
+        links.is_some_and(|links| {
+            links.target == base && current.snapshot_links().as_ref() == Some(links)
+        })
+    }
+
+    /// Determine whether the probe result can be cached and record any discovered file inputs.
+    fn determine_cacheability(
+        &self,
+        executable: &Path,
+        #[cfg(windows)] links: Option<&LinkSnapshot>,
+        wire: &InterpreterInfoWire,
+        probe_start: Option<Timestamp>,
+        file_timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
+    ) -> bool {
+        // Shims such as pyenv can redirect to a different interpreter without changing the shim.
+        if !is_same_file(executable, &wire.metadata.sys_executable).unwrap_or(false) {
+            return false;
+        }
+
+        #[cfg(windows)]
+        if self.is_launcher()
+            && !self.launcher_matches_probe(wire.metadata.sys_base_executable.as_deref(), links)
+        {
+            return false;
+        }
+
+        let Ok(current) = self.file_timestamps(&wire.file_inputs) else {
+            return false;
+        };
+
+        if wire.file_inputs.is_empty() {
+            return current == *file_timestamps;
+        }
+        let Some(probe_start) = probe_start else {
+            return false;
+        };
+
+        // A discovered file could have been replaced between the probe and this snapshot.
+        // Require the known inputs to match and all timestamps to predate the probe.
+        let known_inputs_unchanged = file_timestamps
+            .iter()
+            .all(|(path, timestamp)| current.get(path) == Some(timestamp));
+        if !known_inputs_unchanged
+            || current
+                .values()
+                .flatten()
+                .any(|timestamp| *timestamp >= probe_start)
+        {
+            return false;
+        }
+
+        *file_timestamps = current;
+        true
+    }
+
+    /// The paths that went into the interpreter discovery and when they last changed.
+    fn file_timestamps(
+        &self,
+        file_inputs: &BTreeSet<PathBuf>,
+    ) -> Result<HashMap<PathBuf, Option<Timestamp>>, io::Error> {
+        let mut file_timestamps = HashMap::new();
+        record_file_timestamps(self.target.absolute, &mut file_timestamps)?;
+        if !file_timestamps.contains_key(&self.canonical) {
+            // On Windows the canonical path can come from a trampoline executable.
+            record_file_timestamps(&self.canonical, &mut file_timestamps)?;
+        }
+        for path in file_inputs {
+            record_file_timestamps(path, &mut file_timestamps)?;
+        }
+        // Python's `platform.mac_ver()` reads the product version from this plist. The cache
+        // key tracks the Darwin kernel release, which can stay the same when the plist changes.
+        #[cfg(target_os = "macos")]
+        record_file_timestamps(Path::new(SYSTEM_VERSION_PLIST), &mut file_timestamps)?;
+        record_pyvenv_cfg_timestamps(self.target.absolute, &mut file_timestamps)?;
+        Ok(file_timestamps)
+    }
+}
+
+/// The launcher's target and the timestamps of the links used to resolve it.
+#[cfg(windows)]
+#[derive(PartialEq, Eq)]
+struct LinkSnapshot {
+    target: PathBuf,
+    ancestor_timestamps: Vec<(u64, u64)>,
+}
+
+#[cfg(windows)]
+impl LinkSnapshot {
     /// Snapshot the part of a launcher's path that differs from its resolved target.
     /// Replacing a junction changes its containing directory even if the original
     /// junction is subsequently moved back into place.
-    #[cfg(windows)]
-    fn snapshot_links(&self, canonical: &Path) -> Option<LinkSnapshot> {
+    fn capture(stored: &Path, canonical: &Path) -> Option<Self> {
         use std::os::windows::fs::MetadataExt;
 
-        let stored = self.trampoline_target.as_deref()?;
-        let mut snapshot = LinkSnapshot {
+        let mut snapshot = Self {
             target: std::path::absolute(dunce::simplified(stored)).ok()?,
             ancestor_timestamps: Vec::new(),
         };
@@ -1668,28 +1783,26 @@ impl InterpreterInfo {
         let absolute = std::path::absolute(executable)?;
 
         let uncached = |(wire, _)| Self::from_probe(executable, wire, HashMap::new());
-        let Some((target, canonical)) = ExecutableTarget::for_cache(&absolute, executable)? else {
+        let Some(resolved) = CacheTarget::resolve(&absolute, executable)? else {
             return uncached(probe()?);
         };
-        let cache_entry = target.cache_entry(&canonical, cache);
+        let cache_entry = resolved.cache_entry(cache);
         if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
             return Ok(info);
         }
 
-        let inputs = Self::cache_file_timestamps(&absolute, &canonical, &BTreeSet::new());
-        let Some(mut file_timestamps) = target.cache_input(executable, inputs)? else {
+        let inputs = resolved.file_timestamps(&BTreeSet::new());
+        let Some(mut file_timestamps) = resolved.target.cache_input(executable, inputs)? else {
             return uncached(probe()?);
         };
 
         #[cfg(windows)]
-        let links = target.snapshot_links(&canonical);
+        let links = resolved.snapshot_links();
 
         let (wire, probe_start) = probe()?;
 
-        let cacheable = Self::determine_cacheability(
+        let cacheable = resolved.determine_cacheability(
             executable,
-            &target,
-            &canonical,
             #[cfg(windows)]
             links.as_ref(),
             &wire,
@@ -1747,111 +1860,6 @@ impl InterpreterInfo {
             metadata: wire.metadata,
             file_timestamps,
         })
-    }
-
-    /// Determine whether the probe result can be cached and record any discovered file inputs.
-    fn determine_cacheability(
-        executable: &Path,
-        target: &ExecutableTarget<'_>,
-        canonical: &Path,
-        #[cfg(windows)] links: Option<&LinkSnapshot>,
-        wire: &InterpreterInfoWire,
-        probe_start: Option<Timestamp>,
-        file_timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
-    ) -> bool {
-        // Shims such as pyenv can redirect to a different interpreter without changing the shim.
-        if !is_same_file(executable, &wire.metadata.sys_executable).unwrap_or(false) {
-            return false;
-        }
-
-        // A managed junction can redirect the launcher during the probe.
-        // A shim at the target path can start an entirely different interpreter.
-        #[cfg(windows)]
-        if target.is_launcher() {
-            let Some(base) = wire.metadata.sys_base_executable.as_deref() else {
-                return false;
-            };
-            if !base.is_absolute() || !is_same_file(base, canonical).unwrap_or(false) {
-                return false;
-            }
-            let Some(current_target) = ExecutableTarget::identify(target.absolute) else {
-                return false;
-            };
-            if !current_target
-                .canonicalize()
-                .is_ok_and(|current| current == canonical)
-            {
-                return false;
-            }
-            // A shim may have run Python through a separate junction that now
-            // points back to the shim. Only trust the alias we tracked from the launcher.
-            let Ok(base) = std::path::absolute(dunce::simplified(base)) else {
-                return false;
-            };
-            if base != canonical {
-                let Some(links) = links else {
-                    return false;
-                };
-                if links.target != base
-                    || current_target.snapshot_links(canonical).as_ref() != Some(links)
-                {
-                    return false;
-                }
-            }
-        }
-
-        let Ok(current) =
-            Self::cache_file_timestamps(target.absolute, canonical, &wire.file_inputs)
-        else {
-            return false;
-        };
-
-        if wire.file_inputs.is_empty() {
-            return current == *file_timestamps;
-        }
-        let Some(probe_start) = probe_start else {
-            return false;
-        };
-
-        // A discovered file could have been replaced between the probe and this snapshot.
-        // Require the known inputs to match and all timestamps to predate the probe.
-        let known_inputs_unchanged = file_timestamps
-            .iter()
-            .all(|(path, timestamp)| current.get(path) == Some(timestamp));
-        if !known_inputs_unchanged
-            || current
-                .values()
-                .flatten()
-                .any(|timestamp| *timestamp >= probe_start)
-        {
-            return false;
-        }
-
-        *file_timestamps = current;
-        true
-    }
-
-    /// The paths that went into the interpreter discovery and when they last changed.
-    fn cache_file_timestamps(
-        absolute: &Path,
-        canonical: &Path,
-        file_inputs: &BTreeSet<PathBuf>,
-    ) -> Result<HashMap<PathBuf, Option<Timestamp>>, io::Error> {
-        let mut file_timestamps = HashMap::new();
-        record_file_timestamps(absolute, &mut file_timestamps)?;
-        if !file_timestamps.contains_key(canonical) {
-            // On Windows the canonical path can come from a trampoline executable.
-            record_file_timestamps(canonical, &mut file_timestamps)?;
-        }
-        for path in file_inputs {
-            record_file_timestamps(path, &mut file_timestamps)?;
-        }
-        // Python's `platform.mac_ver()` reads the product version from this plist. The cache
-        // key tracks the Darwin kernel release, which can stay the same when the plist changes.
-        #[cfg(target_os = "macos")]
-        record_file_timestamps(Path::new(SYSTEM_VERSION_PLIST), &mut file_timestamps)?;
-        record_pyvenv_cfg_timestamps(absolute, &mut file_timestamps)?;
-        Ok(file_timestamps)
     }
 }
 
@@ -2042,11 +2050,11 @@ mod tests {
     use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
     use crate::Interpreter;
-    #[cfg(windows)]
-    use crate::interpreter::canonicalize_executable;
     use crate::interpreter::{
-        Error, ExecutableTarget, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire,
+        CacheTarget, Error, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire,
     };
+    #[cfg(windows)]
+    use crate::interpreter::{ExecutableTarget, LinkSnapshot, canonicalize_executable};
 
     fn mocked_interpreter_response(executable: &Path) -> Result<InterpreterInfoWire> {
         let InterpreterInfoResult::Success(mut response) = serde_json::from_str(indoc! {r##"
@@ -2125,13 +2133,7 @@ mod tests {
         // link whose timestamps would track the mapping (e.g., a subst drive).
         let alias = dir.path().join("alias.exe");
         fs::hard_link(&base, &alias)?;
-        let proxy = dir.path().join("proxy.exe");
-        fs::write(
-            &proxy,
-            windows_python_launcher(&alias, WindowMode::Console)?,
-        )?;
-        let target = ExecutableTarget::identify(&proxy).expect("valid proxy");
-        assert!(target.snapshot_links(&canonical).is_none());
+        assert!(LinkSnapshot::capture(&alias, &canonical).is_none());
         Ok(())
     }
 
@@ -2163,9 +2165,8 @@ mod tests {
             windows_python_launcher(&target, WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let (identified, canonical) =
-            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
-        let entry = identified.cache_entry(&canonical, &cache);
+        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        let entry = resolved.cache_entry(&cache);
         // Ensure the directory update is observable even within a single clock tick.
         fs::OpenOptions::new()
             .access_mode(FILE_WRITE_ATTRIBUTES.0)
@@ -2189,7 +2190,7 @@ mod tests {
             Ok(result)
         })?;
         assert_eq!(info.metadata.sys_base_prefix, dunce::canonicalize(&second)?);
-        assert_eq!(canonicalize_executable(&proxy)?, canonical);
+        assert_eq!(canonicalize_executable(&proxy)?, resolved.canonical);
         assert!(!entry.path().exists());
 
         InterpreterInfo::query_cached(&proxy, &cache, probe)?;
@@ -2216,11 +2217,13 @@ mod tests {
             windows_python_launcher(link.join("python.exe"), WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let (identified, canonical) =
-            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
-        assert_eq!(canonical, dunce::canonicalize(first.join("python.exe"))?);
+        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        assert_eq!(
+            resolved.canonical,
+            dunce::canonicalize(first.join("python.exe"))?
+        );
         let mut response = mocked_interpreter_response(&proxy)?;
-        response.metadata.sys_base_executable = Some(canonical.clone());
+        response.metadata.sys_base_executable = Some(resolved.canonical.clone());
         InterpreterInfo::query_cached(&proxy, &cache, || {
             // A minor-version update can move the junction while both the
             // proxy and the interpreter that answered the probe stay intact.
@@ -2232,7 +2235,7 @@ mod tests {
             canonicalize_executable(&proxy)?,
             dunce::canonicalize(second.join("python.exe"))?
         );
-        let entry = identified.cache_entry(&canonical, &cache);
+        let entry = resolved.cache_entry(&cache);
         assert!(!entry.path().exists());
         Ok(())
     }
@@ -2259,9 +2262,8 @@ mod tests {
         let alias = dir.path().join("alias");
         uv_fs::create_symlink(&installation, &alias)?;
         let reported = alias.join("python.exe");
-        let (identified, canonical) =
-            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
-        assert_ne!(dunce::canonicalize(&reported)?, canonical);
+        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        assert_ne!(dunce::canonicalize(&reported)?, resolved.canonical);
         let cache = Cache::temp()?.init().await?;
         let mut response = mocked_interpreter_response(&proxy)?;
         response.metadata.sys_base_executable = Some(reported.clone());
@@ -2271,8 +2273,8 @@ mod tests {
             uv_fs::replace_symlink(&shim, &alias)?;
             Ok((response, None))
         })?;
-        assert_eq!(dunce::canonicalize(&reported)?, canonical);
-        assert!(!identified.cache_entry(&canonical, &cache).path().exists());
+        assert_eq!(dunce::canonicalize(&reported)?, resolved.canonical);
+        assert!(!resolved.cache_entry(&cache).path().exists());
         Ok(())
     }
 
@@ -2299,9 +2301,8 @@ mod tests {
             windows_python_launcher("base.exe", WindowMode::Console)?,
         )?;
         let cache = Cache::temp()?.init().await?;
-        let (identified, canonical) =
-            ExecutableTarget::for_cache(&proxy, &proxy)?.expect("cache target");
-        let entry = identified.cache_entry(&canonical, &cache);
+        let resolved = CacheTarget::resolve(&proxy, &proxy)?.expect("cache target");
+        let entry = resolved.cache_entry(&cache);
         let mut response = mocked_interpreter_response(&proxy)?;
         response.metadata.sys_base_executable = Some(base.clone());
         let info = InterpreterInfo::query_cached(&proxy, &cache, || Ok((response, None)))?;
@@ -2311,7 +2312,7 @@ mod tests {
         // can remain fresh after the final interpreter changes.
         let digest = cache_digest(&(
             proxy.as_path(),
-            canonical.as_path(),
+            resolved.canonical.as_path(),
             env::var_os(EnvVars::PYTHONEXECUTABLE).map(PathBuf::from),
             env::var_os(EnvVars::PYVENV_LAUNCHER).map(PathBuf::from),
         ));
@@ -2499,11 +2500,14 @@ mod tests {
 
     #[cfg(windows)]
     fn proxy_only_entry(proxy: &Path, cache: &Cache) -> uv_cache::CacheEntry {
-        ExecutableTarget {
-            absolute: proxy,
-            trampoline_target: None,
+        CacheTarget {
+            target: ExecutableTarget {
+                absolute: proxy,
+                trampoline_target: None,
+            },
+            canonical: proxy.to_path_buf(),
         }
-        .cache_entry(proxy, cache)
+        .cache_entry(cache)
     }
 
     #[cfg(windows)]
@@ -2557,13 +2561,12 @@ mod tests {
         );
 
         let absolute = std::path::absolute(&mocked_interpreter)?;
-        let (identified, canonical) =
-            ExecutableTarget::for_cache(&absolute, &absolute)?.expect("cache target");
-        let cache_entry = identified.cache_entry(&canonical, &cache);
+        let resolved = CacheTarget::resolve(&absolute, &absolute)?.expect("cache target");
+        let cache_entry = resolved.cache_entry(&cache);
         let mut cached: InterpreterInfo = rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(
-            cached.file_timestamps.get(&canonical),
-            Some(&Some(Timestamp::from_path(&canonical)?))
+            cached.file_timestamps.get(&resolved.canonical),
+            Some(&Some(Timestamp::from_path(&resolved.canonical)?))
         );
 
         fs::write(&mocked_interpreter, b"updated")?;
@@ -2578,7 +2581,7 @@ mod tests {
 
         // Back-to-back writes can share a Unix `ctime`. Store a well-formed entry with a
         // different timestamp to exercise stale-cache rejection deterministically.
-        let modified = Timestamp::from_path(&canonical)?;
+        let modified = Timestamp::from_path(&resolved.canonical)?;
         let stale = if modified == Timestamp::from(UNIX_EPOCH) {
             Timestamp::from(UNIX_EPOCH + Duration::from_secs(1))
         } else {
@@ -2586,7 +2589,7 @@ mod tests {
         };
         cached
             .file_timestamps
-            .insert(canonical.clone(), Some(stale));
+            .insert(resolved.canonical.clone(), Some(stale));
         fs::write(cache_entry.path(), rmp_serde::to_vec(&cached)?)?;
 
         let interpreter =
@@ -2596,8 +2599,8 @@ mod tests {
             updated_version
         );
         assert_eq!(
-            interpreter.file_timestamps.get(&canonical),
-            Some(&Some(Timestamp::from_path(&canonical)?))
+            interpreter.file_timestamps.get(&resolved.canonical),
+            Some(&Some(Timestamp::from_path(&resolved.canonical)?))
         );
 
         let interpreter =
