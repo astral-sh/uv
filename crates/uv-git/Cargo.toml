@@ -39,3 +39,4 @@ which = { workspace = true }
 
 [dev-dependencies]
 indoc = { workspace = true }
+tempfile = { workspace = true }
