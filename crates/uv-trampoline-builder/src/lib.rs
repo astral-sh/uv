@@ -572,7 +572,10 @@ if __name__ == "__main__":
                     $ErrorActionPreference = 'Stop'
                     Import-Module Microsoft.PowerShell.Security
                     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::CreateFromPemFile('{}', '{}')
-                    Set-AuthenticodeSignature -FilePath '{}' -Certificate $cert;
+                    $signature = Set-AuthenticodeSignature -FilePath '{}' -Certificate $cert
+                    if ($signature.SignerCertificate.Thumbprint -ne $cert.Thumbprint) {{
+                        throw $signature.StatusMessage
+                    }}
                     ",
                     public_cert.display().to_string().replace('\'', "''"),
                     private_key.display().to_string().replace('\'', "''"),
