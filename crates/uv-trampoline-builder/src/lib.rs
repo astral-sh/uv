@@ -115,7 +115,7 @@ impl Launcher {
     pub fn write_to_file(&self, file: &mut File) -> Result<(), Error> {
         use std::io::Write;
 
-        let launcher_bin = get_launcher_bin(self.window_mode == WindowMode::Windowed)?;
+        let launcher_bin = get_launcher_bin(self.window_mode)?;
 
         let kind_value = [self.kind.to_resource_value()];
         let mut resources: Vec<(&str, &[u8])> = vec![
@@ -229,38 +229,19 @@ pub enum Error {
     PeWrite(#[from] editpe::ImageWriteError),
 }
 
-#[allow(clippy::unnecessary_wraps, unused_variables)]
 #[cfg(windows)]
-fn get_launcher_bin(gui: bool) -> Result<&'static [u8], Error> {
-    Ok(match std::env::consts::ARCH {
-        #[cfg(all(windows, target_arch = "x86"))]
-        "x86" => {
-            if gui {
-                LAUNCHER_I686_GUI
-            } else {
-                LAUNCHER_I686_CONSOLE
-            }
-        }
-        #[cfg(all(windows, target_arch = "x86_64"))]
-        "x86_64" => {
-            if gui {
-                LAUNCHER_X86_64_GUI
-            } else {
-                LAUNCHER_X86_64_CONSOLE
-            }
-        }
-        #[cfg(all(windows, target_arch = "aarch64"))]
-        "aarch64" => {
-            if gui {
-                LAUNCHER_AARCH64_GUI
-            } else {
-                LAUNCHER_AARCH64_CONSOLE
-            }
-        }
-        #[cfg(windows)]
-        arch => {
-            return Err(Error::UnsupportedWindowsArch(arch));
-        }
+fn get_launcher_bin(mode: WindowMode) -> Result<&'static [u8], Error> {
+    const TEMPLATES: Option<(&[u8], &[u8])> = cfg_select! {
+        target_arch = "x86" => Some((LAUNCHER_I686_CONSOLE, LAUNCHER_I686_GUI)),
+        target_arch = "x86_64" => Some((LAUNCHER_X86_64_CONSOLE, LAUNCHER_X86_64_GUI)),
+        target_arch = "aarch64" => Some((LAUNCHER_AARCH64_CONSOLE, LAUNCHER_AARCH64_GUI)),
+        _ => None,
+    };
+    let (console, windowed) =
+        TEMPLATES.ok_or(Error::UnsupportedWindowsArch(std::env::consts::ARCH))?;
+    Ok(match mode {
+        WindowMode::Console => console,
+        WindowMode::Windowed => windowed,
     })
 }
 
@@ -359,7 +340,12 @@ pub fn windows_script_launcher(
     use futures_lite::future::block_on;
     use futures_lite::io::Cursor;
 
-    let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+    let window_mode = if is_gui {
+        WindowMode::Windowed
+    } else {
+        WindowMode::Console
+    };
+    let launcher_bin = get_launcher_bin(window_mode)?;
     let python_path = encode_python_path(&python_executable)?;
 
     // Store the launcher script without compression.
@@ -404,7 +390,7 @@ pub fn windows_python_launcher(
     python_executable: impl AsRef<Path>,
     window_mode: WindowMode,
 ) -> Result<Vec<u8>, Error> {
-    let launcher_bin: &[u8] = get_launcher_bin(matches!(window_mode, WindowMode::Windowed))?;
+    let launcher_bin = get_launcher_bin(window_mode)?;
 
     let python_path = encode_python_path(&python_executable)?;
 
@@ -617,7 +603,7 @@ if __name__ == "__main__":
         let launcher_path = temp_dir.child("launcher.console.exe");
 
         let launcher = super::write_resources(
-            super::get_launcher_bin(false)?,
+            super::get_launcher_bin(WindowMode::Console)?,
             &[
                 (super::RESOURCE_TRAMPOLINE_KIND, &[]),
                 (super::RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),

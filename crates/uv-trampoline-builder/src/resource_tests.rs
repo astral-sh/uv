@@ -357,7 +357,7 @@ fn truncated_kind_resource_is_rejected() -> Result<()> {
     let path = temp_dir.child("launcher.exe");
     let kind = b"\x02truncated";
     let mut launcher = write_resources(
-        get_launcher_bin(false)?,
+        get_launcher_bin(WindowMode::Console)?,
         &[
             (RESOURCE_TRAMPOLINE_KIND, kind),
             (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
@@ -387,7 +387,7 @@ fn relocated_resource_directory() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
     let mut launcher = write_resources(
-        get_launcher_bin(false)?,
+        get_launcher_bin(WindowMode::Console)?,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[1]),
             (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
@@ -457,7 +457,7 @@ fn deeply_nested_unrelated_resource() -> Result<()> {
     // Reserve space for a chain of single-entry tables and a final empty table.
     let depth = 16_384;
     let mut launcher = write_resources(
-        get_launcher_bin(false)?,
+        get_launcher_bin(WindowMode::Console)?,
         &[("PADDING", &vec![0; depth * 24 + 16])],
     )?;
     let offset = resource_file_offset(&PE::parse(&launcher)?)?;
@@ -535,7 +535,7 @@ fn nul_after_resource_name_precludes_launcher_identification() -> Result<()> {
     // The middle name in the sorted table shares the complete lookup key.
     let image = |other: &str| {
         write_resources(
-            get_launcher_bin(false)?,
+            get_launcher_bin(WindowMode::Console)?,
             &[
                 (RESOURCE_PYTHON_PATH, b"python.exe"),
                 (other, b"other.exe"),
@@ -588,7 +588,7 @@ fn ambiguous_rcdata_id_precludes_launcher_identification() -> Result<()> {
 fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
-    fs_err::write(path.path(), get_launcher_bin(false)?)?;
+    fs_err::write(path.path(), get_launcher_bin(WindowMode::Console)?)?;
     update_native_resources(
         path.path(),
         0x0409,
@@ -648,8 +648,8 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
 fn resources_match_native_windows_updates() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 
-    for is_gui in [false, true] {
-        let launcher = get_launcher_bin(is_gui)?;
+    for mode in [WindowMode::Console, WindowMode::Windowed] {
+        let launcher = get_launcher_bin(mode)?;
         let header = PE::parse(launcher)?
             .header
             .optional_header
@@ -685,8 +685,8 @@ fn resources_match_native_windows_updates() -> Result<()> {
         sizes.dedup();
 
         for size in sizes {
-            let native_path = temp_dir.child(format!("native-{is_gui}-{size}.exe"));
-            let edited_path = temp_dir.child(format!("edited-{is_gui}-{size}.exe"));
+            let native_path = temp_dir.child(format!("native-{mode:?}-{size}.exe"));
+            let edited_path = temp_dir.child(format!("edited-{mode:?}-{size}.exe"));
             let payload = vec![0x5a; size];
             let resources: &[(&str, &[u8])] = &[
                 (RESOURCE_TRAMPOLINE_KIND, &[1]),
@@ -760,7 +760,7 @@ fn missing_script_resource_is_rejected() -> Result<()> {
     fs_err::write(
         path.path(),
         write_resources(
-            get_launcher_bin(false)?,
+            get_launcher_bin(WindowMode::Console)?,
             &[
                 (RESOURCE_TRAMPOLINE_KIND, &[1]),
                 (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
@@ -776,7 +776,7 @@ fn missing_script_resource_is_rejected() -> Result<()> {
 fn multiple_script_payloads_are_rejected() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
-    fs_err::write(path.path(), get_launcher_bin(false)?)?;
+    fs_err::write(path.path(), get_launcher_bin(WindowMode::Console)?)?;
     update_native_resources(
         path.path(),
         0x0409,
@@ -803,7 +803,7 @@ fn duplicate_script_names_are_rejected() -> Result<()> {
     let path = temp_dir.child("launcher.exe");
     let other = "UV_SCRIPT_DATB";
     let mut launcher = write_resources(
-        get_launcher_bin(false)?,
+        get_launcher_bin(WindowMode::Console)?,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[1]),
             (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
@@ -831,7 +831,7 @@ fn python_proxy_keeps_its_optional_payload() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
     let bytes = write_resources(
-        get_launcher_bin(false)?,
+        get_launcher_bin(WindowMode::Console)?,
         &[
             (RESOURCE_TRAMPOLINE_KIND, &[2]),
             (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
@@ -858,7 +858,7 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
     fs_err::write(
         path.path(),
         write_resources(
-            get_launcher_bin(false)?,
+            get_launcher_bin(WindowMode::Console)?,
             &[
                 (RESOURCE_TRAMPOLINE_KIND, &[2]),
                 (RESOURCE_PYTHON_PATH, &[]),
@@ -903,7 +903,7 @@ fn nul_in_target_is_rejected() -> Result<()> {
     fs_err::write(
         path.path(),
         write_resources(
-            get_launcher_bin(false)?,
+            get_launcher_bin(WindowMode::Console)?,
             &[
                 (RESOURCE_TRAMPOLINE_KIND, &[2]),
                 (RESOURCE_PYTHON_PATH, python.as_bytes()),
@@ -952,7 +952,7 @@ fn interpreter_lookup_limits_path_allocation() -> Result<()> {
     fs_err::write(
         path.path(),
         write_resources(
-            get_launcher_bin(false)?,
+            get_launcher_bin(WindowMode::Console)?,
             &[
                 (RESOURCE_TRAMPOLINE_KIND, &[2]),
                 (RESOURCE_PYTHON_PATH, &payload),
@@ -1048,7 +1048,7 @@ fn python_proxy_target_is_independent_of_script_languages() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
     let python = "C:/Python312/python.exe";
-    fs_err::write(path.path(), get_launcher_bin(false)?)?;
+    fs_err::write(path.path(), get_launcher_bin(WindowMode::Console)?)?;
     update_native_resources(
         path.path(),
         0x0407,
@@ -1079,7 +1079,7 @@ fn empty_script_resource_is_preserved() -> Result<()> {
     ];
     fs_err::write(
         path.path(),
-        write_resources(get_launcher_bin(false)?, resources)?,
+        write_resources(get_launcher_bin(WindowMode::Console)?, resources)?,
     )?;
 
     let launcher = Launcher::try_from_path(path.path())?
