@@ -8679,8 +8679,8 @@ fn overlapping_resolution_markers() -> Result<()> {
         resolution-markers = [
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'",
-            "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
-            "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
+            "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
+            "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
             "sys_platform == 'linux' and extra != 'extra-14-ads-mega-model-cpu' and extra != 'extra-14-ads-mega-model-cu118'",
@@ -8704,9 +8704,9 @@ fn overlapping_resolution_markers() -> Result<()> {
 
         [package.optional-dependencies]
         cpu = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-14-ads-mega-model-cpu') or (extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118')" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' or sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' or extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-14-ads-mega-model-cpu' or sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-14-ads-mega-model-cpu' or extra == 'extra-14-ads-mega-model-cpu' and extra == 'extra-14-ads-mega-model-cu118'" },
         ]
         cu118 = [
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" } },
@@ -9153,15 +9153,15 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "2.2.2"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
-            "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
+            "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'",
         ]
         dependencies = [
-            { name = "filelock", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-            { name = "fsspec", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-            { name = "jinja2", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-            { name = "networkx", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-            { name = "sympy", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-            { name = "typing-extensions", marker = "platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "filelock", marker = "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "fsspec", marker = "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "jinja2", marker = "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "networkx", marker = "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "sympy", marker = "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
+            { name = "typing-extensions", marker = "implementation_name == 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.2.2-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3a2c075218081ef9c7bf8c55c706f236daebb753da41de498aca7163257380bd", upload-time = "2025-01-29T22:50:59.083Z" },
@@ -9211,16 +9211,16 @@ fn overlapping_resolution_markers() -> Result<()> {
         version = "2.2.2+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
-            "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'",
+            "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'",
             "sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
-            { name = "fsspec", marker = "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
-            { name = "jinja2", marker = "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
-            { name = "networkx", marker = "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
-            { name = "sympy", marker = "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
-            { name = "typing-extensions", marker = "(platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "filelock", marker = "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "fsspec", marker = "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "jinja2", marker = "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "networkx", marker = "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "sympy", marker = "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "typing-extensions", marker = "(implementation_name != 'cpython' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.2.2%2Bcpu-cp310-cp310-linux_x86_64.whl", hash = "sha256:02c4fac3c964e73f5f49003e0060c697f73b67c10cc23f51c592facb29e1bd53", upload-time = "2025-01-29T22:50:59.083Z" },
