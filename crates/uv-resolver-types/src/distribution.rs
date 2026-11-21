@@ -8,6 +8,7 @@ use uv_distribution_types::{
 };
 use uv_normalize::{ExtraName, GroupName, PackageName};
 use uv_pep440::Version;
+use uv_pep508::MarkerTree;
 use uv_pypi_types::HashDigests;
 
 use crate::{MetadataResponse, UniversalMarker};
@@ -74,6 +75,7 @@ pub struct AnnotatedDist {
     /// resolution, this marker corresponds to the disjunction of all paths to
     /// this distribution in the resolution graph.
     pub marker: UniversalMarker,
+    pub selection_marker: Option<MarkerTree>,
 }
 
 impl AnnotatedDist {
