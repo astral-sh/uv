@@ -1185,19 +1185,37 @@ mod tests {
                     windows_python_launcher(target, WindowMode::Console)?,
                 )?;
                 for operation in [Install, Uninstall] {
-                    let owner = ManagedPythonInstallation::find_bin_link(
-                        &proxy,
-                        std::iter::once(&self.installation),
-                        operation,
-                    );
                     assert_eq!(
-                        owner.is_some(),
+                        self.owns(&proxy, operation),
                         expected.contains(&operation),
                         "{operation:?}: {target}"
                     );
                 }
                 Ok(())
             }
+
+            fn owns(&self, path: &Path, operation: BinLinkOperation) -> bool {
+                ManagedPythonInstallation::find_bin_link(
+                    path,
+                    std::iter::once(&self.installation),
+                    operation,
+                )
+                .is_some()
+            }
+        }
+
+        #[test]
+        fn script_targeting_managed_python_is_not_a_bin_link() -> anyhow::Result<()> {
+            use uv_trampoline_builder::windows_script_launcher;
+
+            let fixture = Fixture::new(STANDARD)?;
+            let target = fixture.installation.path().join("python.exe");
+            fs_err::write(&target, [])?;
+            let script = fixture.dir.path().join(r"bin\python.exe");
+            fs_err::write(&script, windows_script_launcher("pass", false, &target)?)?;
+            assert!(!fixture.owns(&script, Install));
+            assert!(!fixture.owns(&script, Uninstall));
+            Ok(())
         }
 
         #[test]
