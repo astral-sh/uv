@@ -12,6 +12,10 @@ use windows::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
 use windows::Win32::System::WindowsProgramming::{SCS_32BIT_BINARY, SCS_64BIT_BINARY};
 
 /// The filesystem view of a Windows executable.
+///
+/// uv supports x86, x64 and ARM64 on Windows. Of these, only x86 uses a
+/// redirected directory on a 64-bit system. Supporting `win-arm32` would
+/// require distinguishing its `SysArm32` view from x86's `SysWOW64`.
 #[derive(Debug, Clone, Copy)]
 pub enum FileSystemView {
     Bit32,
