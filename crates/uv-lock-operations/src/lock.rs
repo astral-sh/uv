@@ -17,7 +17,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
-use uv_lock::{GroupMetadata, Lock, ResolverManifest};
+use uv_lock::{GroupMetadata, Lock, LockSatisfactionError, ResolverManifest};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, SupportedEnvironments};
@@ -840,6 +840,21 @@ async fn do_lock(
     };
 
     match existing_lock {
+        // A known-invalid selection can be reported in locked mode without resolving again.
+        Some(ValidatedLock::Preferable(_, LockMismatchReason::Satisfaction(mismatch)))
+            if let LockMode::Locked(_, source) = mode
+                && matches!(
+                    *mismatch,
+                    LockSatisfactionError::MismatchedDependencyVersion(..)
+                        | LockSatisfactionError::ConflictingDependencySelections(..)
+                ) =>
+        {
+            Err(LockError::LockDependencyMismatch(
+                target.lock_filename(),
+                source,
+                mismatch,
+            ))
+        }
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.

@@ -125,6 +125,10 @@ pub enum LockError {
         #[source] Option<Box<LockMismatchReason>>,
     ),
 
+    /// The locked resolution is invalid before attempting a fresh resolve.
+    #[error("The lockfile at `{0}` needs to be updated, but `{1}` was provided.")]
+    LockDependencyMismatch(PathBuf, LockedSource, #[source] Box<LockSatisfactionError>),
+
     #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
     )]
@@ -251,6 +255,7 @@ impl From<LockError> for UvError {
     fn from(error: LockError) -> Self {
         match error {
             error @ (LockError::LockMismatch(..)
+            | LockError::LockDependencyMismatch(..)
             | LockError::LockFormat(..)
             | LockError::MissingLockfile(..)
             | LockError::LockWorkspaceMismatch(..)) => Self::user(error),
@@ -289,7 +294,9 @@ impl From<LockError> for UvError {
 impl Hinted for LockError {
     fn hints(&self) -> Hints<'_> {
         match self {
-            Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
+            Self::LockMismatch(..)
+            | Self::LockDependencyMismatch(..)
+            | Self::LockWorkspaceMismatch(..) => {
                 Hints::from("To update the lockfile, run `uv lock`.")
             }
             Self::LockFormat(..) => Hints::from(
