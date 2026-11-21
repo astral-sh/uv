@@ -55,6 +55,11 @@ pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>
             return Ok(None);
         };
         target = parent.join(target);
+        // A drive-relative target such as C:python.exe depends on the
+        // working directory for that drive even after the join.
+        if target.is_relative() {
+            return Ok(None);
+        }
     }
     Ok(Some((kind, target)))
 }
