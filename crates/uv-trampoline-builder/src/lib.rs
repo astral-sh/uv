@@ -327,6 +327,7 @@ pub fn windows_script_launcher(
     use futures_lite::io::Cursor;
 
     let launcher_bin: &[u8] = get_launcher_bin(is_gui)?;
+    let python_path = encode_python_path(&python_executable)?;
 
     // Store the launcher script without compression.
     // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
@@ -335,8 +336,6 @@ pub fn windows_script_launcher(
     let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
     block_on(archive.write_entry_whole(entry, launcher_python_script.as_bytes()))?;
     let payload = block_on(archive.close())?.into_inner();
-
-    let python_path = encode_python_path(&python_executable)?;
 
     let resources: &[(&str, &[u8])] = &[
         (
