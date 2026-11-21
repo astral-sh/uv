@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader, Read, Seek, SeekFrom, Take};
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use editpe::constants::{
     IMAGE_SUBSYSTEM_WINDOWS_GUI, PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE,
@@ -82,7 +82,10 @@ fn integer_id(entry: ResourceDirectoryEntry) -> Result<u16, ReadError> {
     u16::try_from(entry.name_offset_or_integer_id).map_err(|_| Inconclusive)
 }
 
-pub(super) fn read_stored_target(file: File) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+pub(super) fn read_target(
+    file: File,
+    launcher: &Path,
+) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
     // Bound allocation when inspecting arbitrary executables for discovery or ownership.
     // Each of the 32,767 UTF-16 units in an extended-length path takes at most three
     // UTF-8 bytes. A script's stored path can be longer before canonicalization, and
@@ -94,8 +97,22 @@ pub(super) fn read_stored_target(file: File) -> Result<Option<(LauncherKind, Pat
     if file.python_path.end - file.python_path.start > MAX_LOOKUP_PATH_BYTES {
         return Err(Error::PathResourceTooLarge);
     }
-    let path = file.resources.read_path(file.python_path)?;
-    Ok(Some((file.kind, PathBuf::from(path))))
+    let mut target = PathBuf::from(file.resources.read_path(file.python_path)?);
+    if target.is_relative() {
+        // The trampoline joins the stored path to the parent of current_exe().
+        let executable = std::path::absolute(launcher)?;
+        let parent = executable.parent().ok_or(Error::UnprocessableMetadata)?;
+        target = parent.join(target);
+        // A drive-relative target such as C:python.exe depends on the
+        // working directory for that drive even after the join.
+        if target.is_relative() {
+            return Err(Error::UnprocessableMetadata);
+        }
+    }
+    if file.resources.cross_bitness && uv_fs::may_be_redirected_by_wow64(&target)? {
+        return Err(Error::UnprocessableMetadata);
+    }
+    Ok(Some((file.kind, target)))
 }
 
 pub(super) fn read_launcher(file: File) -> Result<Option<Launcher>, Error> {
@@ -138,6 +155,7 @@ type ImageFile = Take<BufReader<File>>;
 struct Resources {
     file: ImageFile,
     file_size: u64,
+    cross_bitness: bool,
     window_mode: WindowMode,
     sections: Vec<SectionHeader>,
     directory: ImageDataDirectory,
@@ -469,6 +487,7 @@ fn read_headers(file: File) -> Result<Option<Resources>, ReadError> {
     Ok(Some(Resources {
         file,
         file_size,
+        cross_bitness: (standard.magic == PE_32_MAGIC) != cfg!(target_pointer_width = "32"),
         window_mode,
         sections,
         directory,

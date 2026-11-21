@@ -733,7 +733,7 @@ fn header_read_failure_reports_target_lookup_error() -> Result<()> {
     use fs_err::os::windows::fs::OpenOptionsExt;
     use windows::Win32::Storage::FileSystem::FILE_READ_ATTRIBUTES;
 
-    use super::resource_reader::{read_launcher, read_stored_target};
+    use super::resource_reader::{read_launcher, read_target};
 
     let dir = assert_fs::TempDir::new()?;
     let path = dir.child("proxy.exe");
@@ -746,7 +746,7 @@ fn header_read_failure_reports_target_lookup_error() -> Result<()> {
         .open(path.path())?;
     assert_eq!(file.metadata()?.len(), image.len() as u64);
     assert!(matches!(
-        read_stored_target(file.try_clone()?),
+        read_target(file.try_clone()?, path.path()),
         Err(super::Error::Io(err)) if err.kind() == std::io::ErrorKind::PermissionDenied
     ));
     assert!(read_launcher(file)?.is_none());
@@ -853,6 +853,44 @@ fn python_proxy_keeps_its_neutral_payload() -> Result<()> {
     assert_eq!(
         launcher.script_data.as_deref(),
         Some(b"neutral payload".as_slice())
+    );
+    Ok(())
+}
+
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn wow64_proxy_target_depends_on_the_launchers_view() -> Result<()> {
+    // A 32-bit process sees System32 via the Sysnative alias. A 64-bit
+    // process cannot resolve that alias and might diagnose a broken proxy.
+    let dir = assert_fs::TempDir::new()?;
+    let proxy = dir.child("proxy.exe");
+    let windows = std::env::var_os("SystemRoot").context("Missing Windows directory")?;
+    let redirected = Path::new(&windows).join(r"Sysnative\python.exe");
+    let write_proxy = |target: &Path| -> Result<()> {
+        let bytes = write_resources(
+            include_bytes!("../trampolines/uv-trampoline-i686-console.exe"),
+            &[
+                (RESOURCE_TRAMPOLINE_KIND, &[2]),
+                (
+                    RESOURCE_PYTHON_PATH,
+                    target.to_str().context("Invalid path")?.as_bytes(),
+                ),
+            ],
+        )?;
+        fs_err::write(proxy.path(), bytes)?;
+        Ok(())
+    };
+    write_proxy(&redirected)?;
+    assert!(matches!(
+        super::read_launcher_target(proxy.path()),
+        Err(super::Error::UnprocessableMetadata)
+    ));
+
+    let ordinary = dir.path().join(r"Sysnative\python.exe");
+    write_proxy(&ordinary)?;
+    assert_eq!(
+        super::read_launcher_target(proxy.path())?,
+        Some((LauncherKind::Python, ordinary))
     );
     Ok(())
 }

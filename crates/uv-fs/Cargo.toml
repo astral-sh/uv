@@ -51,7 +51,7 @@ backon = { workspace = true }
 junction = { workspace = true }
 uv-windows = { workspace = true }
 self-replace = { workspace = true }
-windows = { workspace = true }
+windows = { workspace = true, features = ["Win32_System_SystemInformation"] }
 
 [features]
 default = []

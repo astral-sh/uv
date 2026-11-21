@@ -57,7 +57,7 @@ const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 /// Return `Ok(None)` if the file has no launcher kind resource. Return an error
 /// if the resource lookup is inconclusive or the interpreter cannot be resolved
 /// to a single absolute path. Windows may select a target based on the user's
-/// language or working directory.
+/// language, working directory or process architecture.
 #[cfg(windows)]
 pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
     let file = match File::open(path) {
@@ -65,21 +65,7 @@ pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(err) => return Err(err.into()),
     };
-    let Some((kind, mut target)) = resource_reader::read_stored_target(file)? else {
-        return Ok(None);
-    };
-    if target.is_relative() {
-        // The trampoline joins the stored path to the parent of current_exe().
-        let executable = std::path::absolute(path)?;
-        let parent = executable.parent().ok_or(Error::UnprocessableMetadata)?;
-        target = parent.join(target);
-        // A drive-relative target such as C:python.exe depends on the
-        // working directory for that drive even after the join.
-        if target.is_relative() {
-            return Err(Error::UnprocessableMetadata);
-        }
-    }
-    Ok(Some((kind, target)))
+    resource_reader::read_target(file, path)
 }
 
 /// Returns `Ok(None)` on platforms without Windows trampolines.

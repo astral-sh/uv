@@ -438,6 +438,48 @@ pub fn try_relative_to_if(
     }
 }
 
+/// Whether 32-bit and 64-bit processes may see different files at this path.
+///
+/// See the [WOW64 file system redirector](https://learn.microsoft.com/en-us/windows/win32/winprog64/file-system-redirector).
+#[cfg(windows)]
+pub fn may_be_redirected_by_wow64(path: &Path) -> std::io::Result<bool> {
+    use std::io;
+    use std::os::windows::ffi::OsStringExt;
+    use windows::Win32::Foundation::MAX_PATH;
+    use windows::Win32::System::SystemInformation::GetSystemWindowsDirectoryW;
+
+    let mut buffer = [0; MAX_PATH as usize];
+    // SAFETY: The binding supplies the capacity of this writable slice to Windows.
+    #[expect(unsafe_code)]
+    let len = unsafe { GetSystemWindowsDirectoryW(Some(&mut buffer)) } as usize;
+    if len == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if len >= buffer.len() {
+        // A larger return value is the required capacity.
+        return Ok(true);
+    }
+    let windows = PathBuf::from(OsString::from_wide(&buffer[..len]));
+    if !windows.is_absolute() {
+        return Ok(true);
+    }
+    let path = std::path::absolute(path)?;
+    for ancestor in path.ancestors() {
+        let Some(name) = ancestor.file_name() else {
+            continue;
+        };
+        if ["System32", "Sysnative", "LastGood", "regedit.exe"]
+            .iter()
+            .any(|location| name.eq_ignore_ascii_case(location))
+            && let Some(parent) = ancestor.parent()
+            && same_file::is_same_file(parent, &windows)?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Convert a [`Path`] to a Windows `verbatim` path (prefixed with `\\?\`) when possible to bypass
 /// Win32 path normalization such as [`MAX_PATH`] and removed trailing characters (dot, space).
 /// Other characters as defined by [`Path.GetInvalidFileNameChars`] are still prohibited. This
