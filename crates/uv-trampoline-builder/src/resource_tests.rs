@@ -114,6 +114,56 @@ fn assert_pe_layout(original: &[u8], output: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// Check that the Windows loader sees the exact resources written to the test launcher.
+fn assert_native_resources(path: &Path, resources: &[(&str, &[u8])]) -> Result<()> {
+    use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+    use windows::Win32::System::LibraryLoader::{
+        FindResourceW, LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW, LoadResource, LockResource,
+        SizeofResource,
+    };
+    use windows::Win32::System::Threading::GetCurrentProcess;
+    use windows::core::{HSTRING, Owned};
+
+    // SAFETY: The data-file handle is owned here and stays live through all lookups.
+    // ReadProcessMemory checks the source pages and fills a buffer of the expected size.
+    #[allow(unsafe_code)]
+    unsafe {
+        let module = Owned::new(LoadLibraryExW(
+            &HSTRING::from(path),
+            None,
+            LOAD_LIBRARY_AS_DATAFILE,
+        )?);
+        for &(name, expected) in resources {
+            let resource = FindResourceW(
+                Some(*module),
+                &HSTRING::from(name),
+                PCWSTR(RT_RCDATA as usize as *const u16),
+            );
+            anyhow::ensure!(
+                !resource.is_invalid(),
+                "Missing {name} in {}",
+                path.display()
+            );
+            assert_eq!(
+                SizeofResource(Some(*module), resource) as usize,
+                expected.len(),
+                "{name}"
+            );
+            let data = LockResource(LoadResource(Some(*module), resource)?);
+            let mut actual = vec![0u8; expected.len()];
+            ReadProcessMemory(
+                GetCurrentProcess(),
+                data,
+                actual.as_mut_ptr().cast(),
+                actual.len(),
+                None,
+            )?;
+            anyhow::ensure!(actual == expected, "Invalid {name} in {}", path.display());
+        }
+    }
+    Ok(())
+}
+
 fn assert_other_resources_unchanged(
     original: &[u8],
     output: &[u8],
@@ -612,6 +662,7 @@ fn resources_match_native_windows_updates() -> Result<()> {
             let edited = write_resources(launcher, resources)?;
             fs_err::write(edited_path.path(), &edited)?;
 
+            assert_native_resources(edited_path.path(), resources)?;
             assert_pe_layout(launcher, &native)?;
             assert_pe_layout(launcher, &edited)?;
             assert_other_resources_unchanged(
