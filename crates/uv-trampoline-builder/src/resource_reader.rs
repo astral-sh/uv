@@ -7,7 +7,7 @@
 use std::cmp::Ordering;
 use std::io::{self, BufReader, Read, Seek, SeekFrom, Take};
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use editpe::constants::{
     IMAGE_SUBSYSTEM_WINDOWS_GUI, PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE,
@@ -82,10 +82,7 @@ fn integer_id(entry: ResourceDirectoryEntry) -> Result<u16, ReadError> {
     u16::try_from(entry.name_offset_or_integer_id).map_err(|_| Inconclusive)
 }
 
-pub(super) fn read_target(
-    file: File,
-    launcher: &Path,
-) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+pub(super) fn read_target(file: File) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
     // Bound allocation when inspecting arbitrary executables for discovery or ownership.
     // Each of the 32,767 UTF-16 units in an extended-length path takes at most three
     // UTF-8 bytes. A script's stored path can be longer before canonicalization, and
@@ -100,6 +97,7 @@ pub(super) fn read_target(
     let mut target = PathBuf::from(file.resources.read_path(file.python_path)?);
     if target.is_relative() {
         // The trampoline joins the stored path to the parent of current_exe().
+        let launcher = file.resources.file.get_ref().get_ref().path();
         let executable = std::path::absolute(launcher)?;
         let parent = executable.parent().ok_or(Error::UnprocessableMetadata)?;
         target = parent.join(target);

@@ -65,7 +65,7 @@ pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(err) => return Err(err.into()),
     };
-    resource_reader::read_target(file, path)
+    resource_reader::read_target(file)
 }
 
 /// Returns `Ok(None)` on platforms without Windows trampolines.

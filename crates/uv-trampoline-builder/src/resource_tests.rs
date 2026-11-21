@@ -746,7 +746,7 @@ fn header_read_failure_reports_target_lookup_error() -> Result<()> {
         .open(path.path())?;
     assert_eq!(file.metadata()?.len(), image.len() as u64);
     assert!(matches!(
-        read_target(file.try_clone()?, path.path()),
+        read_target(file.try_clone()?),
         Err(super::Error::Io(err)) if err.kind() == std::io::ErrorKind::PermissionDenied
     ));
     assert!(read_launcher(file)?.is_none());
