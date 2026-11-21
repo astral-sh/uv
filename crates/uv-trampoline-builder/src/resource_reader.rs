@@ -20,6 +20,7 @@ use editpe::types::{
 use fs_err::File;
 use zerocopy::FromBytes;
 
+use self::ReadError::Inconclusive;
 use super::{
     Error, Launcher, LauncherKind, RESOURCE_PYTHON_PATH, RESOURCE_SCRIPT_DATA,
     RESOURCE_TRAMPOLINE_KIND, RT_RCDATA, WindowMode,
@@ -44,9 +45,31 @@ enum Key<'a> {
     Name(&'a str),
 }
 
-enum Lookup<T> {
-    Found(T),
-    Missing,
+// Rewriting skips failed lookups but surfaces errors reading a located payload.
+// Target identification needs the underlying I/O error at either stage.
+enum ReadError {
+    Inconclusive,
+    Lookup(io::Error),
+    Payload(Error),
+}
+
+impl From<io::Error> for ReadError {
+    fn from(err: io::Error) -> Self {
+        match err.kind() {
+            io::ErrorKind::UnexpectedEof => Self::Inconclusive,
+            _ => Self::Lookup(err),
+        }
+    }
+}
+
+impl From<ReadError> for Error {
+    fn from(err: ReadError) -> Self {
+        match err {
+            ReadError::Inconclusive => Self::UnprocessableMetadata,
+            ReadError::Lookup(err) => Self::Io(err),
+            ReadError::Payload(err) => err,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -56,13 +79,10 @@ enum Languages {
 }
 
 pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    let Some((mut resources, tables)) = Resources::open_launcher(path)? else {
+    let Some(launcher) = LauncherFile::open(path)? else {
         return Ok(None);
     };
-    let (kind, target) = resources
-        .target(tables)?
-        .ok_or(Error::UnprocessableMetadata)?;
-    let mut target = PathBuf::from(target);
+    let mut target = PathBuf::from(launcher.python_path);
     if target.is_relative() {
         // The trampoline joins the stored path to the parent of current_exe().
         let executable = std::path::absolute(path)?;
@@ -74,29 +94,37 @@ pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>
             return Err(Error::UnprocessableMetadata);
         }
     }
-    Ok(Some((kind, target)))
+    Ok(Some((launcher.kind, target)))
 }
 
 pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
-    let Ok(Some((mut resources, tables))) = Resources::open_launcher(path) else {
+    match read_for_rewrite(path) {
+        Ok(launcher) => Ok(launcher),
+        Err(ReadError::Lookup(_) | Inconclusive) => Ok(None),
+        Err(ReadError::Payload(err)) => Err(err),
+    }
+}
+
+fn read_for_rewrite(path: &Path) -> Result<Option<Launcher>, ReadError> {
+    let Some(mut file) = LauncherFile::open(path)? else {
         return Ok(None);
     };
-    let Some((kind, python_path)) = resources.target(tables)? else {
-        return Ok(None);
-    };
-    let languages = match kind {
+    let policy = match file.kind {
         LauncherKind::Script => Languages::Single,
         LauncherKind::Python => Languages::PreferNeutral,
     };
-    let script_data = match resources.locate(tables.rcdata, RESOURCE_SCRIPT_DATA, languages) {
-        Some(Lookup::Missing) if kind == LauncherKind::Python => None,
-        Some(Lookup::Missing) | None => return Ok(None),
-        Some(Lookup::Found(range)) => Some(resources.read(range)?),
+    let range = file
+        .resources
+        .locate(file.rcdata, RESOURCE_SCRIPT_DATA, policy)?;
+    let script_data = match range {
+        Some(range) => Some(file.resources.read(range).map_err(ReadError::Payload)?),
+        None if file.kind == LauncherKind::Python => None,
+        None => return Err(Inconclusive),
     };
     Ok(Some(Launcher {
-        kind,
-        window_mode: resources.window_mode,
-        python_path,
+        kind: file.kind,
+        window_mode: file.resources.window_mode,
+        python_path: file.python_path,
         script_data,
     }))
 }
@@ -113,68 +141,51 @@ struct Resources {
     directory: ImageDataDirectory,
 }
 
-#[derive(Clone, Copy)]
-struct LauncherTables {
+struct LauncherFile {
+    resources: Resources,
     rcdata: u32,
-    kind_languages: u32,
+    kind: LauncherKind,
+    python_path: String,
 }
 
-impl Resources {
-    fn open_launcher(path: &Path) -> Result<Option<(Self, LauncherTables)>, Error> {
+impl LauncherFile {
+    fn open(path: &Path) -> Result<Option<Self>, ReadError> {
         let file = match File::open(path) {
             Ok(file) => file,
             Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(err) => return Err(err.into()),
+            Err(err) => return Err(ReadError::Lookup(err)),
         };
-        let file_size = file.metadata()?.len();
-        match Self::find_launcher(file, file_size) {
-            Some(Lookup::Found(launcher)) => Ok(Some(launcher)),
-            Some(Lookup::Missing) => Ok(None),
-            None => Err(Error::UnprocessableMetadata),
-        }
-    }
-
-    /// Find the kind resource's language directory. Return `None` when the
-    /// file can't establish whether the loader can find the resource.
-    fn find_launcher(file: File, file_size: u64) -> Option<Lookup<(Self, LauncherTables)>> {
-        if file_size < u64::from(PE_PTR_OFFSET) + 4 {
-            return Some(Lookup::Missing);
-        }
-        let mut file = BufReader::new(file).take(file_size);
-        if u16::read_from_io(&mut file).ok()? != PE_DOS_MAGIC {
-            return Some(Lookup::Missing);
-        }
-        file.seek(SeekFrom::Start(PE_PTR_OFFSET.into())).ok()?;
-        let pe_offset = u32::read_from_io(&mut file).ok()?;
-        file.seek(SeekFrom::Start(pe_offset.into())).ok()?;
-        if u32::read_from_io(&mut file).ok()? != PE_NT_SIGNATURE {
-            return Some(Lookup::Missing);
-        }
-        let Lookup::Found(mut resources) = read_headers(file, file_size)? else {
-            return Some(Lookup::Missing);
+        let Some(mut resources) = read_headers(file)? else {
+            return Ok(None);
         };
         // With MUI configuration, `FindResourceW` can obtain the entire RCDATA
         // tree from a language-specific sidecar.
-        if let Lookup::Found(_) = resources.subdirectory(0, Key::Name("MUI"))? {
-            return None;
+        if resources.subdirectory(0, Key::Name("MUI"))?.is_some() {
+            return Err(Inconclusive);
         }
-        let Lookup::Found(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
-            return Some(Lookup::Missing);
+        let Some(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
+            return Ok(None);
         };
-        let Lookup::Found(kind_languages) =
-            resources.subdirectory(rcdata, Key::Name(RESOURCE_TRAMPOLINE_KIND))?
+        let Some(range) =
+            resources.locate(rcdata, RESOURCE_TRAMPOLINE_KIND, Languages::PreferNeutral)?
         else {
-            return Some(Lookup::Missing);
+            return Ok(None);
         };
-        Some(Lookup::Found((
+        let kind = resources.read_kind(range).map_err(ReadError::Payload)?;
+        let range = resources
+            .locate(rcdata, RESOURCE_PYTHON_PATH, Languages::PreferNeutral)?
+            .ok_or(Inconclusive)?;
+        let python_path = resources.read_path(range)?;
+        Ok(Some(Self {
             resources,
-            LauncherTables {
-                rcdata,
-                kind_languages,
-            },
-        )))
+            rcdata,
+            kind,
+            python_path,
+        }))
     }
+}
 
+impl Resources {
     /// Locate a file-backed range by its relative virtual address (RVA).
     fn offset(&self, rva: u32, size: u32) -> Option<u64> {
         let section = self
@@ -201,42 +212,50 @@ impl Resources {
         self.offset(rva, size)
     }
 
-    fn seek_directory(&mut self, pos: u32, size: u32) -> Option<()> {
-        let offset = self.directory_offset(pos, size)?;
-        self.file.seek(SeekFrom::Start(offset)).ok()?;
-        Some(())
+    fn seek_directory(&mut self, pos: u32, size: u32) -> Result<(), ReadError> {
+        let offset = self.directory_offset(pos, size).ok_or(Inconclusive)?;
+        self.file.seek(SeekFrom::Start(offset))?;
+        Ok(())
     }
 
-    fn read_entry<T: FromBytes>(&mut self, pos: u32) -> Option<T> {
+    fn read_entry<T: FromBytes>(&mut self, pos: u32) -> Result<T, ReadError> {
         self.seek_directory(pos, pe_size::<T>())?;
-        T::read_from_io(&mut self.file).ok()
+        Ok(T::read_from_io(&mut self.file)?)
     }
 
-    fn compare_entry(&mut self, table: u32, index: u32, key: Key<'_>) -> Option<(Ordering, u32)> {
-        let pos = table.checked_add(TABLE_SIZE + ENTRY_SIZE * index)?;
+    fn compare_entry(
+        &mut self,
+        table: u32,
+        index: u32,
+        key: Key<'_>,
+    ) -> Result<(Ordering, u32), ReadError> {
+        let pos = table
+            .checked_add(TABLE_SIZE + ENTRY_SIZE * index)
+            .ok_or(Inconclusive)?;
         let entry: ResourceDirectoryEntry = self.read_entry(pos)?;
         let order = match key {
             Key::Id(id) => entry.name_offset_or_integer_id.cmp(&id),
             Key::Name(name) => self.compare_name(entry.name_offset_or_integer_id, name)?,
         };
-        Some((order, entry.data_entry_or_subdirectory_offset))
+        Ok((order, entry.data_entry_or_subdirectory_offset))
     }
 
-    fn compare_name(&mut self, offset: u32, name: &str) -> Option<Ordering> {
-        let pos = offset.checked_sub(DIRECTORY_FLAG)?;
+    fn compare_name(&mut self, offset: u32, name: &str) -> Result<Ordering, ReadError> {
+        let pos = offset.checked_sub(DIRECTORY_FLAG).ok_or(Inconclusive)?;
         let length = self.read_entry::<u16>(pos)?;
-        self.directory_offset(pos, 2 + u32::from(length) * 2)?;
+        self.directory_offset(pos, 2 + u32::from(length) * 2)
+            .ok_or(Inconclusive)?;
         for expected in name.encode_utf16().take(usize::from(length)) {
-            let order = u16::read_from_io(&mut self.file).ok()?.cmp(&expected);
+            let order = u16::read_from_io(&mut self.file)?.cmp(&expected);
             if order != Ordering::Equal {
-                return Some(order);
+                return Ok(order);
             }
         }
-        Some(usize::from(length).cmp(&name.encode_utf16().count()))
+        Ok(usize::from(length).cmp(&name.encode_utf16().count()))
     }
 
-    /// Search the sorted names or IDs. Return `None` if the directory cannot be searched.
-    fn subdirectory(&mut self, table: u32, key: Key<'_>) -> Option<Lookup<u32>> {
+    /// Search the sorted names or IDs.
+    fn subdirectory(&mut self, table: u32, key: Key<'_>) -> Result<Option<u32>, ReadError> {
         let header: ResourceDirectoryTable = self.read_entry(table)?;
         let names = u32::from(header.number_of_name_entries);
         let mut range = match key {
@@ -253,149 +272,172 @@ impl Resources {
                     if mid > range.start
                         && self.compare_entry(table, mid - 1, key)?.0 != Ordering::Less
                     {
-                        return None;
+                        return Err(Inconclusive);
                     }
                     if mid + 1 < range.end
                         && self.compare_entry(table, mid + 1, key)?.0 != Ordering::Greater
                     {
-                        return None;
+                        return Err(Inconclusive);
                     }
-                    let offset = offset.checked_sub(DIRECTORY_FLAG)?;
-                    return Some(Lookup::Found(offset));
+                    let offset = offset.checked_sub(DIRECTORY_FLAG).ok_or(Inconclusive)?;
+                    return Ok(Some(offset));
                 }
                 Ordering::Less => range.start = mid + 1,
                 Ordering::Greater => range.end = mid,
             }
         }
-        Some(Lookup::Missing)
+        Ok(None)
     }
 
-    fn locate(&mut self, rcdata: u32, name: &str, policy: Languages) -> Option<Lookup<Range<u64>>> {
-        let Lookup::Found(languages) = self.subdirectory(rcdata, Key::Name(name))? else {
-            return Some(Lookup::Missing);
+    fn locate(
+        &mut self,
+        rcdata: u32,
+        name: &str,
+        policy: Languages,
+    ) -> Result<Option<Range<u64>>, ReadError> {
+        let Some(languages) = self.subdirectory(rcdata, Key::Name(name))? else {
+            return Ok(None);
         };
-        self.locate_language(languages, policy).map(Lookup::Found)
+        self.locate_language(languages, policy).map(Some)
     }
 
-    fn locate_language(&mut self, languages: u32, policy: Languages) -> Option<Range<u64>> {
+    fn locate_language(
+        &mut self,
+        languages: u32,
+        policy: Languages,
+    ) -> Result<Range<u64>, ReadError> {
         let header: ResourceDirectoryTable = self.read_entry(languages)?;
         if header.number_of_name_entries != 0 || header.number_of_id_entries == 0 {
-            return None;
+            return Err(Inconclusive);
         }
         let count = u32::from(header.number_of_id_entries);
         if matches!(policy, Languages::Single) && count > 1 {
-            return None;
+            return Err(Inconclusive);
         }
         self.seek_directory(languages + TABLE_SIZE, ENTRY_SIZE * count)?;
-        let entry = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
-        let mut language = u16::try_from(entry.name_offset_or_integer_id).ok()?;
+        let entry = ResourceDirectoryEntry::read_from_io(&mut self.file)?;
+        let mut language =
+            u16::try_from(entry.name_offset_or_integer_id).map_err(|_| Inconclusive)?;
         // uv writes neutral resources. With several localized variants and no neutral
         // entry, the target selected by FindResourceW depends on the user's language.
         // Uninstall needs an unambiguous target to establish ownership of the link.
         if language != 0 && count > 1 {
-            return None;
+            return Err(Inconclusive);
         }
         // The loader searches sorted IDs. In particular, duplicate neutral IDs
         // can make it select a different entry from the first.
         for _ in 1..count {
-            let other = ResourceDirectoryEntry::read_from_io(&mut self.file).ok()?;
-            let next = u16::try_from(other.name_offset_or_integer_id).ok()?;
+            let other = ResourceDirectoryEntry::read_from_io(&mut self.file)?;
+            let next = u16::try_from(other.name_offset_or_integer_id).map_err(|_| Inconclusive)?;
             if next <= language {
-                return None;
+                return Err(Inconclusive);
             }
             language = next;
         }
         let pos = entry.data_entry_or_subdirectory_offset;
         if pos & DIRECTORY_FLAG != 0 {
-            return None;
+            return Err(Inconclusive);
         }
         let data: ResourceDataEntry = self.read_entry(pos)?;
         let offset = if data.size == 0 {
             0
         } else {
-            self.offset(data.data_rva, data.size)?
+            self.offset(data.data_rva, data.size).ok_or(Inconclusive)?
         };
-        Some(offset..offset + u64::from(data.size))
+        Ok(offset..offset + u64::from(data.size))
     }
 
-    fn target(&mut self, tables: LauncherTables) -> Result<Option<(LauncherKind, String)>, Error> {
-        let Some(payload) = self.locate_language(tables.kind_languages, Languages::PreferNeutral)
-        else {
-            return Ok(None);
-        };
-        if payload.is_empty() {
+    fn read_kind(&mut self, range: Range<u64>) -> Result<LauncherKind, Error> {
+        if range.is_empty() {
             return Err(Error::UnprocessableMetadata);
         }
-        self.file.seek(SeekFrom::Start(payload.start))?;
+        self.file.seek(SeekFrom::Start(range.start))?;
         let value = u8::read_from_io(&mut self.file)?;
-        let kind = LauncherKind::from_resource_value(value).ok_or(Error::UnprocessableMetadata)?;
-        let Some(Lookup::Found(path)) = self.locate(
-            tables.rcdata,
-            RESOURCE_PYTHON_PATH,
-            Languages::PreferNeutral,
-        ) else {
-            return Ok(None);
-        };
-        let length = path.end - path.start;
-        if length == 0 || length > super::MAX_PYTHON_PATH_BYTES as u64 {
-            return Ok(None);
-        }
-        let path = String::from_utf8(self.read(path)?)
-            .map_err(|err| Error::InvalidPath(err.utf8_error()))?;
-        Ok(Some((kind, path)))
+        LauncherKind::from_resource_value(value).ok_or(Error::UnprocessableMetadata)
     }
 
-    fn read(&mut self, range: Range<u64>) -> io::Result<Vec<u8>> {
+    fn read_path(&mut self, range: Range<u64>) -> Result<String, ReadError> {
+        let length = range.end - range.start;
+        if length == 0 || length > super::MAX_PYTHON_PATH_BYTES as u64 {
+            return Err(Inconclusive);
+        }
+        let bytes = self.read(range).map_err(ReadError::Payload)?;
+        String::from_utf8(bytes)
+            .map_err(|err| ReadError::Payload(Error::InvalidPath(err.utf8_error())))
+    }
+
+    fn read(&mut self, range: Range<u64>) -> Result<Vec<u8>, Error> {
         self.file.seek(SeekFrom::Start(range.start))?;
         let mut data = (&mut self.file).take(range.end - range.start);
         let mut bytes = Vec::new();
         data.read_to_end(&mut bytes)?;
         if data.limit() > 0 {
-            return Err(io::ErrorKind::UnexpectedEof.into());
+            return Err(Error::Io(io::ErrorKind::UnexpectedEof.into()));
         }
         Ok(bytes)
     }
 }
 
 /// Read the resource data directory and the sections used to resolve its addresses.
-fn read_headers(mut file: ImageFile, file_size: u64) -> Option<Lookup<Resources>> {
-    let coff = CoffHeader::read_from_io(&mut file).ok()?;
+fn read_headers(file: File) -> Result<Option<Resources>, ReadError> {
+    let file_size = file.metadata()?.len();
+    if file_size < u64::from(PE_PTR_OFFSET) + 4 {
+        return Ok(None);
+    }
+    let mut file = BufReader::new(file).take(file_size);
+    if u16::read_from_io(&mut file)? != PE_DOS_MAGIC {
+        return Ok(None);
+    }
+    file.seek(SeekFrom::Start(PE_PTR_OFFSET.into()))?;
+    let pe_offset = u64::from(u32::read_from_io(&mut file)?);
+    if pe_offset > file_size {
+        return Err(Inconclusive);
+    }
+    file.seek(SeekFrom::Start(pe_offset))?;
+    if u32::read_from_io(&mut file)? != PE_NT_SIGNATURE {
+        return Ok(None);
+    }
+    let coff = CoffHeader::read_from_io(&mut file)?;
     // The Windows loader supports up to 96 sections.
     if coff.number_of_sections > 96 {
-        return None;
+        return Err(Inconclusive);
     }
-    let mut header = (&mut file).take(coff.size_of_optional_header.into());
-    let standard = StandardHeader::read_from_io(&mut header).ok()?;
+    let optional_size = u64::from(coff.size_of_optional_header);
+    if optional_size > file.limit() {
+        return Err(Inconclusive);
+    }
+    let mut header = (&mut file).take(optional_size);
+    let standard = StandardHeader::read_from_io(&mut header)?;
     let windows = match standard.magic {
         PE_32_MAGIC => {
-            u32::read_from_io(&mut header).ok()?; // BaseOfData in PE32
-            GenericWindowsHeader::WindowsHeader32(WindowsHeader::read_from_io(&mut header).ok()?)
+            u32::read_from_io(&mut header)?; // BaseOfData in PE32
+            GenericWindowsHeader::WindowsHeader32(WindowsHeader::read_from_io(&mut header)?)
         }
         PE_64_MAGIC => {
-            GenericWindowsHeader::WindowsHeader64(WindowsHeader::read_from_io(&mut header).ok()?)
+            GenericWindowsHeader::WindowsHeader64(WindowsHeader::read_from_io(&mut header)?)
         }
-        _ => return None,
+        _ => return Err(Inconclusive),
     };
     // The resource directory follows the export and import directories.
     if windows.number_of_rva_and_sizes() < 3 {
-        return Some(Lookup::Missing);
+        return Ok(None);
     }
-    let [_, _, directory] = <[ImageDataDirectory; 3]>::read_from_io(&mut header).ok()?;
+    let [_, _, directory] = <[ImageDataDirectory; 3]>::read_from_io(&mut header)?;
     if directory.virtual_address == 0 {
-        return Some(Lookup::Missing);
+        return Ok(None);
     }
     if directory.size == 0 {
-        return None;
+        return Err(Inconclusive);
     }
-    header.seek(SeekFrom::End(0)).ok()?;
+    header.seek(SeekFrom::End(0))?;
     let mut sections = Vec::with_capacity(usize::from(coff.number_of_sections));
     let mut previous_end = windows.size_of_headers();
     let alignment = windows.section_alignment();
     if !alignment.is_power_of_two() {
-        return None;
+        return Err(Inconclusive);
     }
     for _ in 0..coff.number_of_sections {
-        let mut section = SectionHeader::read_from_io(&mut file).ok()?;
+        let mut section = SectionHeader::read_from_io(&mut file)?;
         // Windows maps the raw data when the section has no explicit virtual size.
         if section.virtual_size == 0 {
             section.virtual_size = section.size_of_raw_data;
@@ -408,11 +450,14 @@ fn read_headers(mut file: ImageFile, file_size: u64) -> Option<Lookup<Resources>
                 && section.size_of_raw_data > 0
                 && section.pointer_to_raw_data != section.virtual_address)
         {
-            return None;
+            return Err(Inconclusive);
         }
-        previous_end = section.virtual_address.checked_add(section.virtual_size)?;
+        previous_end = section
+            .virtual_address
+            .checked_add(section.virtual_size)
+            .ok_or(Inconclusive)?;
         if previous_end > windows.size_of_image() {
-            return None;
+            return Err(Inconclusive);
         }
         sections.push(section);
     }
@@ -422,7 +467,7 @@ fn read_headers(mut file: ImageFile, file_size: u64) -> Option<Lookup<Resources>
     } else {
         WindowMode::Console
     };
-    Some(Lookup::Found(Resources {
+    Ok(Some(Resources {
         file,
         file_size,
         window_mode,

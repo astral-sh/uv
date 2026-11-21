@@ -584,6 +584,27 @@ fn resources_match_native_windows_updates() -> Result<()> {
 }
 
 #[test]
+fn locked_launcher_reports_read_error_for_target_lookup() -> Result<()> {
+    let dir = assert_fs::TempDir::new()?;
+    let path = dir.child("proxy.exe");
+    fs_err::write(
+        path.path(),
+        windows_python_launcher("python.exe", WindowMode::Console)?,
+    )?;
+    let file = File::open(path.path())?;
+    file.lock()?;
+    // Windows allows another handle to open the file but rejects reads of
+    // the locked range, including the DOS header.
+    File::open(path.path())?;
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::Io(_))
+    ));
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn missing_script_resource_is_rejected() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
