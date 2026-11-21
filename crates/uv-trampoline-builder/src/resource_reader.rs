@@ -53,7 +53,9 @@ enum Languages {
 }
 
 pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    let Some((mut resources, kind_languages)) = Resources::open_launcher(path) else {
+    let Lookup::Found((mut resources, kind_languages)) =
+        Resources::open_launcher(path).ok_or(Error::UnprocessableMetadata)?
+    else {
         return Ok(None);
     };
     let (kind, target) = resources
@@ -75,7 +77,8 @@ pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>
 }
 
 pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
-    let Some((mut resources, kind_languages)) = Resources::open_launcher(path) else {
+    let Some(Lookup::Found((mut resources, kind_languages))) = Resources::open_launcher(path)
+    else {
         return Ok(None);
     };
     let Some((kind, python_path)) = resources.target(kind_languages)? else {
@@ -110,24 +113,31 @@ struct Resources {
 }
 
 impl Resources {
-    /// Identify the launcher by its kind resource and return its language directory.
-    fn open_launcher(path: &Path) -> Option<(Self, u32)> {
-        let file = File::open(path).ok()?;
+    /// Find the kind resource's language directory. Return `None` when the
+    /// file can't establish whether the loader can find the resource.
+    fn open_launcher(path: &Path) -> Option<Lookup<(Self, u32)>> {
+        let file = match File::open(path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Some(Lookup::Missing),
+            Err(_) => return None,
+        };
         let file_size = file.metadata().ok()?.len();
         if file_size < u64::from(PE_PTR_OFFSET) + 4 {
-            return None;
+            return Some(Lookup::Missing);
         }
         let mut file = BufReader::new(file).take(file_size);
         if u16::read_from_io(&mut file).ok()? != PE_DOS_MAGIC {
-            return None;
+            return Some(Lookup::Missing);
         }
         file.seek(SeekFrom::Start(PE_PTR_OFFSET.into())).ok()?;
         let pe_offset = u32::read_from_io(&mut file).ok()?;
         file.seek(SeekFrom::Start(pe_offset.into())).ok()?;
         if u32::read_from_io(&mut file).ok()? != PE_NT_SIGNATURE {
-            return None;
+            return Some(Lookup::Missing);
         }
-        let (directory, sections) = read_headers(&mut file)?;
+        let Lookup::Found((directory, sections)) = read_headers(&mut file)? else {
+            return Some(Lookup::Missing);
+        };
         let mut resources = Self {
             file,
             file_size,
@@ -135,16 +145,21 @@ impl Resources {
             directory,
             rcdata: 0,
         };
-        let Lookup::Found(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
+        // With MUI configuration, `FindResourceW` can obtain the entire RCDATA
+        // tree from a language-specific sidecar.
+        if let Lookup::Found(_) = resources.subdirectory(0, Key::Name("MUI"))? {
             return None;
+        }
+        let Lookup::Found(rcdata) = resources.subdirectory(0, Key::Id(RT_RCDATA))? else {
+            return Some(Lookup::Missing);
         };
         resources.rcdata = rcdata;
         let Lookup::Found(kind_languages) =
             resources.subdirectory(rcdata, Key::Name(RESOURCE_TRAMPOLINE_KIND))?
         else {
-            return None;
+            return Some(Lookup::Missing);
         };
-        Some((resources, kind_languages))
+        Some(Lookup::Found((resources, kind_languages)))
     }
 
     /// Locate a file-backed range by its relative virtual address (RVA).
@@ -291,14 +306,6 @@ impl Resources {
     }
 
     fn target(&mut self, kind_languages: u32) -> Result<Option<(LauncherKind, String)>, Error> {
-        // With MUI configuration, FindResourceW can obtain a different target from
-        // a language-specific sidecar. Only infer ownership from a standalone image.
-        if !matches!(
-            self.subdirectory(0, Key::Name("MUI")),
-            Some(Lookup::Missing)
-        ) {
-            return Ok(None);
-        }
         let Some(payload) = self.locate_language(kind_languages, Languages::PreferNeutral) else {
             return Ok(None);
         };
@@ -334,7 +341,7 @@ impl Resources {
 }
 
 /// Read the resource data directory and the sections used to resolve its addresses.
-fn read_headers(file: &mut ImageFile) -> Option<(ImageDataDirectory, Vec<SectionHeader>)> {
+fn read_headers(file: &mut ImageFile) -> Option<Lookup<(ImageDataDirectory, Vec<SectionHeader>)>> {
     let coff = CoffHeader::read_from_io(&mut *file).ok()?;
     // The Windows loader supports up to 96 sections.
     if coff.number_of_sections > 96 {
@@ -354,10 +361,13 @@ fn read_headers(file: &mut ImageFile) -> Option<(ImageDataDirectory, Vec<Section
     };
     // The resource directory follows the export and import directories.
     if windows.number_of_rva_and_sizes() < 3 {
-        return None;
+        return Some(Lookup::Missing);
     }
     let [_, _, directory] = <[ImageDataDirectory; 3]>::read_from_io(&mut header).ok()?;
-    if directory.virtual_address == 0 || directory.size == 0 {
+    if directory.virtual_address == 0 {
+        return Some(Lookup::Missing);
+    }
+    if directory.size == 0 {
         return None;
     }
     header.seek(SeekFrom::End(0)).ok()?;
@@ -389,5 +399,5 @@ fn read_headers(file: &mut ImageFile) -> Option<(ImageDataDirectory, Vec<Section
         }
         sections.push(section);
     }
-    Some((directory, sections))
+    Some(Lookup::Found((directory, sections)))
 }

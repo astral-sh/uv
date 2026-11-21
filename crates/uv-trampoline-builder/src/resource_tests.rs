@@ -378,7 +378,7 @@ fn deeply_nested_unrelated_resource() -> Result<()> {
     Ok(())
 }
 
-/// MUI configuration permits the loader to obtain the Python path from a sidecar.
+/// MUI configuration permits the loader to obtain any launcher resource from a sidecar.
 #[test]
 fn mui_configuration_precludes_launcher_identification() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -393,14 +393,21 @@ fn mui_configuration_precludes_launcher_identification() -> Result<()> {
         ResourceEntryName::from_string("MUI"),
         ResourceEntry::Table(ResourceTable::default()),
     );
-    image.set_resource_directory(resources)?;
-    fs_err::write(path.path(), image.data())?;
-
-    assert!(matches!(
-        super::read_launcher_target(path.path()),
-        Err(super::Error::UnprocessableMetadata)
-    ));
-    assert!(Launcher::try_from_path(path.path())?.is_none());
+    // All of the launcher's RCDATA can live in the language-specific file.
+    let mut sidecar_only = resources.clone();
+    sidecar_only
+        .root_mut()
+        .remove(ResourceEntryName::ID(RT_RCDATA))
+        .context("Missing RCDATA")?;
+    for directory in [resources, sidecar_only] {
+        image.set_resource_directory(directory)?;
+        fs_err::write(path.path(), image.data())?;
+        assert!(matches!(
+            super::read_launcher_target(path.path()),
+            Err(super::Error::UnprocessableMetadata)
+        ));
+        assert!(Launcher::try_from_path(path.path())?.is_none());
+    }
     Ok(())
 }
 
