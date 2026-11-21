@@ -30,6 +30,7 @@ use crate::script::{EntryPoints, Script};
 use crate::{Error, Layout};
 
 const SHELL_SHEBANG: &str = "#!/bin/sh\n";
+const ENTRY_POINT_PREFIX: &str = "# -*- coding: utf-8 -*-\nimport sys\n";
 
 /// A Python source encoding declaration, as defined by <https://peps.python.org/pep-0263/#defining-the-encoding>.
 static SCRIPT_ENCODING: LazyLock<dense::DFA<Vec<u32>>> = LazyLock::new(|| {
@@ -78,9 +79,7 @@ fn get_script_launcher(entry_point: &Script, shebang: &str) -> String {
 
     format!(
         r#"{shebang}
-# -*- coding: utf-8 -*-
-import sys
-from {module} import {import_name}
+{ENTRY_POINT_PREFIX}from {module} import {import_name}
 if __name__ == "__main__":
     if sys.argv[0].endswith("-script.pyw"):
         sys.argv[0] = sys.argv[0][:-11]
@@ -154,6 +153,47 @@ fn format_shell_shebang(executable: &str, relocatable: bool) -> String {
         ""
     };
     format!("{SHELL_SHEBANG}'''exec' {prefix}{executable} \"$0\" \"$@\"\n' '''")
+}
+
+/// Quote an overlay interpreter whose path would be truncated in a direct shebang.
+fn overlay_shell_shebang(executable: &Path) -> Option<String> {
+    if !executable.as_os_str().as_encoded_bytes().contains(&b' ') {
+        return None;
+    }
+    // Python parses the command as a string literal, including escapes like `\x`.
+    let launcher = if executable.to_str().is_some_and(|path| !path.contains('\\')) {
+        format_shebang(executable, "posix", false)
+    } else {
+        format_shell_shebang(&quote_executable_for_encoded_script(executable), false)
+    };
+    // The trailing comma makes this a tuple expression, so the shell command
+    // doesn't become the script's module docstring.
+    Some(format!("{launcher},\n"))
+}
+
+/// Rewrite a recognized Python launcher to use the interpreter in a temporary Unix environment.
+pub fn rewrite_posix_script(script: &str, previous: &Path, executable: &Path) -> Option<String> {
+    static RELOCATABLE: LazyLock<String> =
+        LazyLock::new(|| format!("{}\n", format_shebang("python", "posix", true)));
+    let strip = |path: &Path| {
+        script
+            .strip_prefix(&format!("#!{}\n", path.display()))
+            // A nested `uv run --with` can copy a launcher from the outer overlay.
+            .or_else(|| script.strip_prefix(&overlay_shell_shebang(path)?))
+    };
+    let body = script
+        .strip_prefix(RELOCATABLE.as_str())
+        .or_else(|| strip(previous))
+        // An environment selected via `python3` may have scripts installed via `python`.
+        .or_else(|| strip(Path::new(previous.to_str()?.strip_suffix('3')?)))?;
+    // A shell prologue adds a Python statement. The entry point's initial import
+    // guarantees there's no module docstring or future import to displace.
+    if body.starts_with(ENTRY_POINT_PREFIX)
+        && let Some(shebang) = overlay_shell_shebang(executable)
+    {
+        return Some(format!("{shebang}{body}"));
+    }
+    Some(format!("#!{}\n{body}", executable.display()))
 }
 
 /// Quote a shell executable so its path cannot become Python syntax after source decoding.

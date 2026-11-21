@@ -40,6 +40,8 @@ use uv_environment_operations::{
 use uv_fs::which::is_executable;
 use uv_fs::{PythonExt, Simplified, create_symlink};
 use uv_install_operations::loggers::{DefaultInstallLogger, SummaryInstallLogger};
+#[cfg(unix)]
+use uv_install_wheel::rewrite_posix_script;
 use uv_installer::{InstallationStrategy, SatisfiesResult, SitePackages};
 use uv_lock::{Installable, Lock};
 use uv_lock_operations::{LockError, LockMode, LockOperation, LockTarget};
@@ -2010,23 +2012,7 @@ fn copy_entrypoint(
         Err(err) => return Err(err.into()),
     }
 
-    let Some(contents) = contents
-        // Check for a relative path or relocatable shebang
-        .strip_prefix(
-            r#"#!/bin/sh
-'''exec' "$(dirname -- "$(realpath -- "$0")")"/'python' "$0" "$@"
-' '''
-"#,
-        )
-        // Or, an absolute path shebang
-        .or_else(|| contents.strip_prefix(&format!("#!{}\n", previous_executable.display())))
-        // If the previous executable ends with `python3`, check for a shebang with `python` too
-        .or_else(|| {
-            previous_executable
-                .to_str()
-                .and_then(|path| path.strip_suffix("3"))
-                .and_then(|path| contents.strip_prefix(&format!("#!{path}\n")))
-        })
+    let Some(contents) = rewrite_posix_script(&contents, previous_executable, python_executable)
     else {
         // If it's not a Python shebang, we'll skip it
         trace!(
@@ -2036,7 +2022,6 @@ fn copy_entrypoint(
         return Ok(());
     };
 
-    let contents = format!("#!{}\n{}", python_executable.display(), contents);
     let mode = fs_err::metadata(source)?.permissions().mode();
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
