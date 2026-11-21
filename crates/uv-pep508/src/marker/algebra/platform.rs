@@ -10,8 +10,10 @@ use arcstr::literal;
 use rustc_hash::FxHashMap;
 
 use super::{InternerGuard, Node, NodeId, Variable};
-use crate::MarkerValueString::{OsName, PlatformSystem, SysPlatform};
-use crate::marker::lowering::CanonicalMarkerValueString;
+use crate::MarkerValueString::{
+    ImplementationName, OsName, PlatformPythonImplementation, PlatformSystem, SysPlatform,
+};
+use crate::marker::lowering::CanonicalMarkerValueString as Key;
 use crate::{MarkerExpression, MarkerOperator};
 
 #[derive(Default)]
@@ -23,40 +25,46 @@ pub(super) struct Cache {
 }
 
 // Bit zero in a NodeId is reserved for complemented edges.
-const PLATFORM_KEY: usize = 1 << 1;
-const MIXED_KEYS: usize = 1 << 2;
-
-fn is_platform_key(var: &Variable) -> bool {
-    matches!(
-        var,
-        Variable::String(
-            CanonicalMarkerValueString::OsName
-                | CanonicalMarkerValueString::SysPlatform
-                | CanonicalMarkerValueString::PlatformSystem
-        )
-    )
-}
+const OS_KEY: usize = 1 << 1;
+const IMPLEMENTATION_KEY: usize = 1 << 2;
+const MIXED_KEYS: usize = OS_KEY | IMPLEMENTATION_KEY;
+pub(super) const FLAGS: usize = MIXED_KEYS;
 
 impl NodeId {
     fn tests_platform_key(self) -> bool {
-        self.0 & PLATFORM_KEY != 0
+        self.0 & FLAGS != 0
     }
 
     fn mixes_platform_keys(self) -> bool {
-        self.0 & MIXED_KEYS != 0
+        self.0 & FLAGS == MIXED_KEYS
     }
 }
 
-/// The platform keys come first in decision order. A second key on the same path
-/// must therefore occur in an immediate child.
+/// Record the first group of related keys, or `MIXED_KEYS` if a path tests
+/// two keys from the same group. Each group is contiguous in decision order,
+/// so only the first group can interact with an ancestor.
 pub(super) fn node_flags(node: &Node) -> usize {
-    if !is_platform_key(&node.var) {
+    let Variable::String(key) = &node.var else {
         return 0;
-    }
-    if node.children.nodes().any(NodeId::tests_platform_key) {
-        PLATFORM_KEY | MIXED_KEYS
+    };
+    let group = match key {
+        Key::OsName | Key::SysPlatform | Key::PlatformSystem => OS_KEY,
+        Key::ImplementationName | Key::PlatformPythonImplementation => IMPLEMENTATION_KEY,
+        // This key comes between the groups, so propagate its children's flags.
+        Key::PlatformMachine => {
+            return node
+                .children
+                .nodes()
+                .fold(0, |flags, child| flags | child.0)
+                & FLAGS;
+        }
+        Key::PlatformRelease | Key::PlatformVersion => return 0,
+    };
+    // A child flagged as mixed already has both bits set.
+    if node.children.nodes().any(|child| child.0 & group != 0) {
+        MIXED_KEYS
     } else {
-        PLATFORM_KEY
+        group
     }
 }
 
@@ -69,8 +77,7 @@ impl InternerGuard<'_> {
             "`is_disjoint_nontrivial` requires non-trivial disjointness"
         );
 
-        // Both operands can name an incompatible pair only if both start with
-        // a key in the platform exclusion table.
+        // The first groups can differ while the trees share a later group.
         if xi.tests_platform_key() && yi.tests_platform_key() {
             let intersection = self.and_nontrivial(xi, yi);
             return self.canonicalize(intersection).is_false();
@@ -116,10 +123,10 @@ impl InternerGuard<'_> {
     }
 
     /// Extend a marker from the compatible platforms to the whole decision domain.
-    /// Each exclusion names a pair of nonempty strings. The first range of a platform
-    /// key therefore allows every assignment to the remaining keys that any other
-    /// range allows. Use its child as the default wherever another range cannot
-    /// distinguish its own child from that default on compatible platforms.
+    /// The first range of each key permits every assignment to the remaining keys
+    /// that any other range permits, unless an earlier key already determines this
+    /// key's value. Use the first range's child as the default wherever another
+    /// range agrees with it on all compatible platforms.
     fn platform_cofactor(
         &mut self,
         value: NodeId,
@@ -131,15 +138,24 @@ impl InternerGuard<'_> {
         }
         // Each recursion visits a reachable domain. Excluded edges take the default branch below.
         debug_assert!(!domain.is_false());
-        let node = self.shared.node(value);
-        if !is_platform_key(&node.var) {
+        if !value.tests_platform_key() {
             return value;
         }
+        let node = self.shared.node(value);
         if let Some(&result) = cache.get(&(value, domain)) {
             return result;
         }
         let platform = self.shared.node(domain);
         let default_domain = platform.children.nodes().next().unwrap().negate(domain);
+        if default_domain.is_false() {
+            // A known implementation name fixes the final key to a single value.
+            // Restricting the tree to that value eliminates the decision entirely.
+            debug_assert_eq!(
+                platform.var,
+                Variable::String(Key::PlatformPythonImplementation)
+            );
+            return self.restrict_cached(value, domain, cache);
+        }
         let result = match node.var.cmp(&platform.var) {
             Ordering::Less => {
                 let children = node
@@ -219,6 +235,20 @@ impl InternerGuard<'_> {
             (os_name_nt, sys_platform_ios),
             (os_name_posix, sys_platform_win32),
         ];
+
+        // A known `sys.implementation.name` determines `platform.python_implementation()`.
+        // The converse is ambiguous. For example, Pyston also reports `CPython`.
+        for (name, implementation) in [
+            (literal!("cpython"), literal!("CPython")),
+            (literal!("pypy"), literal!("PyPy")),
+            (literal!("graalpy"), literal!("GraalVM")),
+            (literal!("pyston"), literal!("CPython")),
+        ] {
+            pairs.push((
+                equals(ImplementationName, name),
+                equals(PlatformPythonImplementation, implementation).not(),
+            ));
+        }
 
         // Pairs of `platform_system` and `sys_platform` that are known to be incompatible.
         //
