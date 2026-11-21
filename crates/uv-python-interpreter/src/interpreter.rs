@@ -1414,6 +1414,10 @@ impl InterpreterInfo {
         } else {
             None
         };
+        trace!(
+            "Querying interpreter executable at `{}`",
+            interpreter.display()
+        );
         let output = command.output().map_err(|err| {
             match err.kind() {
                 io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
@@ -1652,10 +1656,6 @@ impl InterpreterInfo {
         #[cfg(windows)]
         let links = target.snapshot_links(&canonical);
 
-        trace!(
-            "Querying interpreter executable at `{}`",
-            executable.display()
-        );
         let (wire, probe_start) = probe()?;
 
         let cacheable = Self::determine_cacheability(
