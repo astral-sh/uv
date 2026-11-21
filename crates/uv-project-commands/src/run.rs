@@ -2073,8 +2073,7 @@ fn copy_entrypoint(
         Err(err) => return Err(CopyEntrypointError::Trampoline(err)),
     };
 
-    let is_gui = launcher.python_path().ends_with("pythonw.exe");
-    let launcher = if is_gui {
+    let launcher = if launcher.python_path().ends_with("pythonw.exe") {
         launcher.with_python_path(python_executable.with_file_name("pythonw.exe"))?
     } else {
         launcher.with_python_path(python_executable)?
@@ -2083,7 +2082,7 @@ fn copy_entrypoint(
         .create_new(true)
         .write(true)
         .open(target)?;
-    launcher.write_to_file(&mut file, is_gui)?;
+    launcher.write_to_file(&mut file)?;
 
     trace!("Updated entrypoint at `{}`", target.user_display());
 

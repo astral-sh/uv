@@ -849,6 +849,36 @@ fn empty_script_resource_is_preserved() -> Result<()> {
 }
 
 #[test]
+fn rewriting_preserves_the_window_mode() -> Result<()> {
+    use editpe::constants::{IMAGE_SUBSYSTEM_WINDOWS_CUI, IMAGE_SUBSYSTEM_WINDOWS_GUI};
+
+    let dir = assert_fs::TempDir::new()?;
+    let source = dir.child("source.exe");
+    let destination = dir.child("destination.exe");
+    for (is_gui, name, expected) in [
+        (true, "python.exe", IMAGE_SUBSYSTEM_WINDOWS_GUI),
+        (false, "pythonw.exe", IMAGE_SUBSYSTEM_WINDOWS_CUI),
+    ] {
+        fs_err::write(
+            source.path(),
+            windows_script_launcher("pass", is_gui, name)?,
+        )?;
+        let launcher =
+            Launcher::try_from_path(source.path())?.context("Missing script launcher")?;
+        launcher
+            .with_python_path(dir.path().join(name))?
+            .write_to_file(&mut File::create(destination.path())?)?;
+        let bytes = fs_err::read(destination.path())?;
+        let header = PE::parse(&bytes)?
+            .header
+            .optional_header
+            .context("Missing PE optional header")?;
+        assert_eq!(header.windows_fields.subsystem, expected);
+    }
+    Ok(())
+}
+
+#[test]
 fn large_script_survives_launcher_rewrites() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let original_path = temp_dir.child("original.exe");
@@ -875,7 +905,7 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
     {
         let launcher = launcher.with_python_path(&python)?;
         let mut file = File::create(rewritten_path.path())?;
-        launcher.write_to_file(&mut file, false)?;
+        launcher.write_to_file(&mut file)?;
     }
     let launcher = Launcher::try_from_path(rewritten_path.path())?
         .context("Rewritten launcher was not recognized")?;
@@ -886,7 +916,7 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
     );
     {
         let mut file = File::create(repeated_path.path())?;
-        launcher.write_to_file(&mut file, false)?;
+        launcher.write_to_file(&mut file)?;
     }
 
     for path in [rewritten_path.path(), repeated_path.path()] {

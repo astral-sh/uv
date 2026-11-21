@@ -9,7 +9,10 @@ use std::io::{self, BufReader, Read, Seek, SeekFrom, Take};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use editpe::constants::{PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE, PE_PTR_OFFSET};
+use editpe::constants::{
+    IMAGE_SUBSYSTEM_WINDOWS_GUI, PE_32_MAGIC, PE_64_MAGIC, PE_DOS_MAGIC, PE_NT_SIGNATURE,
+    PE_PTR_OFFSET,
+};
 use editpe::types::{
     CoffHeader, GenericWindowsHeader, ImageDataDirectory, ResourceDataEntry,
     ResourceDirectoryEntry, ResourceDirectoryTable, SectionHeader, StandardHeader, WindowsHeader,
@@ -19,7 +22,7 @@ use zerocopy::FromBytes;
 
 use super::{
     Error, Launcher, LauncherKind, RESOURCE_PYTHON_PATH, RESOURCE_SCRIPT_DATA,
-    RESOURCE_TRAMPOLINE_KIND, RT_RCDATA,
+    RESOURCE_TRAMPOLINE_KIND, RT_RCDATA, WindowMode,
 };
 
 // The high bit distinguishes a string from an integer ID and a subdirectory from a leaf.
@@ -92,6 +95,7 @@ pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
     };
     Ok(Some(Launcher {
         kind,
+        window_mode: resources.window_mode,
         python_path,
         script_data,
     }))
@@ -104,6 +108,7 @@ type ImageFile = Take<BufReader<File>>;
 struct Resources {
     file: ImageFile,
     file_size: u64,
+    window_mode: WindowMode,
     sections: Vec<SectionHeader>,
     directory: ImageDataDirectory,
     rcdata: u32,
@@ -140,15 +145,8 @@ impl Resources {
         if u32::read_from_io(&mut file).ok()? != PE_NT_SIGNATURE {
             return Some(Lookup::Missing);
         }
-        let Lookup::Found((directory, sections)) = read_headers(&mut file)? else {
+        let Lookup::Found(mut resources) = read_headers(file, file_size)? else {
             return Some(Lookup::Missing);
-        };
-        let mut resources = Self {
-            file,
-            file_size,
-            sections,
-            directory,
-            rcdata: 0,
         };
         // With MUI configuration, `FindResourceW` can obtain the entire RCDATA
         // tree from a language-specific sidecar.
@@ -346,13 +344,13 @@ impl Resources {
 }
 
 /// Read the resource data directory and the sections used to resolve its addresses.
-fn read_headers(file: &mut ImageFile) -> Option<Lookup<(ImageDataDirectory, Vec<SectionHeader>)>> {
-    let coff = CoffHeader::read_from_io(&mut *file).ok()?;
+fn read_headers(mut file: ImageFile, file_size: u64) -> Option<Lookup<Resources>> {
+    let coff = CoffHeader::read_from_io(&mut file).ok()?;
     // The Windows loader supports up to 96 sections.
     if coff.number_of_sections > 96 {
         return None;
     }
-    let mut header = (&mut *file).take(coff.size_of_optional_header.into());
+    let mut header = (&mut file).take(coff.size_of_optional_header.into());
     let standard = StandardHeader::read_from_io(&mut header).ok()?;
     let windows = match standard.magic {
         PE_32_MAGIC => {
@@ -383,7 +381,7 @@ fn read_headers(file: &mut ImageFile) -> Option<Lookup<(ImageDataDirectory, Vec<
         return None;
     }
     for _ in 0..coff.number_of_sections {
-        let mut section = SectionHeader::read_from_io(&mut *file).ok()?;
+        let mut section = SectionHeader::read_from_io(&mut file).ok()?;
         // Windows maps the raw data when the section has no explicit virtual size.
         if section.virtual_size == 0 {
             section.virtual_size = section.size_of_raw_data;
@@ -404,5 +402,18 @@ fn read_headers(file: &mut ImageFile) -> Option<Lookup<(ImageDataDirectory, Vec<
         }
         sections.push(section);
     }
-    Some(Lookup::Found((directory, sections)))
+    // The GUI template can target `python.exe` when `pythonw.exe` is unavailable.
+    let window_mode = if windows.subsystem() == IMAGE_SUBSYSTEM_WINDOWS_GUI {
+        WindowMode::Windowed
+    } else {
+        WindowMode::Console
+    };
+    Some(Lookup::Found(Resources {
+        file,
+        file_size,
+        window_mode,
+        sections,
+        directory,
+        rcdata: 0,
+    }))
 }

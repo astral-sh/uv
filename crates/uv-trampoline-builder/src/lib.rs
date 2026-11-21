@@ -78,6 +78,7 @@ pub fn read_launcher_target(_path: &Path) -> Result<Option<(LauncherKind, PathBu
 #[derive(Debug)]
 pub struct Launcher {
     kind: LauncherKind,
+    window_mode: WindowMode,
     python_path: String,
     script_data: Option<Vec<u8>>,
 }
@@ -94,10 +95,10 @@ impl Launcher {
     }
 
     /// Write this trampoline launcher to a file.
-    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
+    pub fn write_to_file(self, file: &mut File) -> Result<(), Error> {
         use std::io::Write;
 
-        let launcher_bin = get_launcher_bin(is_gui)?;
+        let launcher_bin = get_launcher_bin(self.window_mode == WindowMode::Windowed)?;
 
         let kind_value = [self.kind.to_resource_value()];
         let mut resources: Vec<(&str, &[u8])> = vec![
