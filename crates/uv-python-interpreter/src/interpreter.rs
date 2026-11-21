@@ -2027,6 +2027,8 @@ mod tests {
     use uv_cache_info::Timestamp;
     use uv_pep440::Version;
     use uv_platform_tags::CpuInfo;
+    #[cfg(windows)]
+    use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
     use crate::Interpreter;
     use crate::interpreter::{
@@ -2102,8 +2104,6 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn link_snapshot_requires_reaching_the_canonical_path() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let base = dir.path().join("python.exe");
         fs::write(&base, [])?;
@@ -2126,7 +2126,6 @@ mod tests {
     #[tokio::test]
     async fn launcher_junction_restored_after_probe() -> Result<()> {
         use fs_err::os::windows::fs::OpenOptionsExt;
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
         use windows::Win32::Storage::FileSystem::{
             FILE_FLAG_BACKUP_SEMANTICS, FILE_WRITE_ATTRIBUTES,
         };
@@ -2188,8 +2187,6 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn launcher_junction_moves_during_probe() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
         let first = dir.path().join("first");
@@ -2232,8 +2229,6 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn launcher_probe_reports_a_separate_junction() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
         let shim = dir.path().join("shim");
@@ -2277,7 +2272,6 @@ mod tests {
 
         use uv_cache_key::cache_digest;
         use uv_static::EnvVars;
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
 
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
@@ -2326,8 +2320,6 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn direct_launcher_cache_tracks_target() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
         let target = dir.path().join("base.exe");
@@ -2363,8 +2355,6 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn existing_target_can_be_probed_when_normalized_path_is_unavailable() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
         fs::write(dir.path().join("base.exe"), [])?;
@@ -2383,8 +2373,6 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn missing_target_diagnostic_checks_current_launcher() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
         let first = dir.path().join("first.exe");
@@ -2417,8 +2405,6 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn junction_loop_bypasses_cache() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let scripts = dir.path().join("Scripts");
         fs::create_dir(&scripts)?;
@@ -2475,8 +2461,6 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn unresolved_launcher_bypasses_cache() -> Result<()> {
-        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
-
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
         // The target depends on the current directory for the drive. A venv probe reports
