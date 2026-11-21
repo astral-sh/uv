@@ -11,6 +11,7 @@ use thiserror::Error;
 use tracing::instrument;
 
 use uv_configuration::NoSources;
+use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_pep440::VersionSpecifiers;
 use uv_pypi_types::VerbatimParsedUrl;
@@ -191,7 +192,9 @@ impl Pep723Script {
         let metadata = Pep723Metadata::from_str(&metadata)?;
 
         Ok(Some(Self {
-            path: std::path::absolute(file)?,
+            // Resolve symlinks so that a script invoked through a symlink uses the lockfile stored
+            // alongside the script it points to.
+            path: file.as_ref().simple_canonicalize()?,
             metadata,
             prelude,
             postlude,
