@@ -178,6 +178,28 @@ fn resource_file_offset(image: &PE<'_>) -> Result<usize> {
     .context("Missing resource file offset")
 }
 
+fn resource_section<'a>(
+    image: &'a PE<'_>,
+) -> Result<(&'a goblin::pe::section_table::SectionTable, usize)> {
+    use editpe::types::{CoffHeader, SectionHeader};
+
+    let resource_offset = resource_file_offset(image)?;
+    let (index, section) = image
+        .sections
+        .iter()
+        .enumerate()
+        .find(|(_, section)| section.pointer_to_raw_data as usize == resource_offset)
+        .context("Missing resource section")?;
+    let table = image.header.dos_header.pe_pointer as usize
+        + 4
+        + size_of::<CoffHeader>()
+        + usize::from(image.header.coff_header.size_of_optional_header);
+    let virtual_size_offset = table
+        + index * size_of::<SectionHeader>()
+        + std::mem::offset_of!(SectionHeader, virtual_size);
+    Ok((section, virtual_size_offset))
+}
+
 fn named_resource(launcher: &[u8], key: &str) -> Result<(usize, DirectoryEntry)> {
     use goblin::pe::resource::ImageResourceDirectory;
 
@@ -226,14 +248,6 @@ fn oversized_resource_is_rejected() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("launcher.exe");
     let mut launcher = windows_python_launcher("python.exe", WindowMode::Console)?;
-    fs_err::write(path.path(), &launcher)?;
-    assert_eq!(
-        Launcher::try_from_path(path.path())?
-            .context("Missing launcher metadata")?
-            .kind,
-        LauncherKind::Python,
-    );
-
     let (resource_offset, name) = named_resource(&launcher, RESOURCE_TRAMPOLINE_KIND)?;
     let language = name
         .next_depth(&launcher[resource_offset..])?
@@ -249,23 +263,36 @@ fn oversized_resource_is_rejected() -> Result<()> {
         u32::from_le_bytes(launcher[size_offset..size_offset + 4].try_into()?),
         1,
     );
-    // The kind is decoded from its first byte. Extend its range one byte
-    // past the section while keeping the entire range in the file.
     let image = PE::parse(&launcher)?;
-    let section = image
-        .sections
-        .iter()
-        .find(|section| section.pointer_to_raw_data as usize == resource_offset)
-        .context("Missing resource section")?;
+    let (section, virtual_size_offset) = resource_section(&image)?;
     let rva = u32::from_le_bytes(launcher[entry_offset..size_offset].try_into()?);
     let delta = rva - section.virtual_address;
-    let size = section.size_of_raw_data - delta + 1;
+    let raw_size = section.size_of_raw_data;
     launcher.push(0);
-    assert!(resource_offset + usize::try_from(delta + size)? <= launcher.len());
-    launcher[size_offset..size_offset + 4].copy_from_slice(&size.to_le_bytes());
-    fs_err::write(path.path(), &launcher)?;
+    assert!(resource_offset + usize::try_from(raw_size)? < launcher.len());
 
-    assert!(Launcher::try_from_path(path.path())?.is_none());
+    // Give each section bound a turn as the smaller one. The kind is decoded
+    // from its first byte, so its payload can fill the rest of the section.
+    for virtual_size in [raw_size + 1, raw_size - 1] {
+        launcher[virtual_size_offset..virtual_size_offset + 4]
+            .copy_from_slice(&virtual_size.to_le_bytes());
+        let size = raw_size.min(virtual_size) - delta;
+        launcher[size_offset..size_offset + 4].copy_from_slice(&size.to_le_bytes());
+        fs_err::write(path.path(), &launcher)?;
+        assert_eq!(
+            Launcher::try_from_path(path.path())?
+                .context("Missing launcher metadata at section boundary")?
+                .kind,
+            LauncherKind::Python,
+        );
+
+        launcher[size_offset..size_offset + 4].copy_from_slice(&(size + 1).to_le_bytes());
+        fs_err::write(path.path(), &launcher)?;
+        assert!(
+            Launcher::try_from_path(path.path())?.is_none(),
+            "{virtual_size}"
+        );
+    }
     Ok(())
 }
 
@@ -350,16 +377,7 @@ fn resource_section_with_zero_virtual_size() -> Result<()> {
     let python = which::which("python")?;
     let mut launcher = windows_python_launcher(&python, WindowMode::Console)?;
     let image = PE::parse(&launcher)?;
-    let resource_offset = resource_file_offset(&image)?;
-    let index = image
-        .sections
-        .iter()
-        .position(|section| section.pointer_to_raw_data as usize == resource_offset)
-        .context("Missing resource section")?;
-    let table = image.header.dos_header.pe_pointer as usize
-        + 24
-        + usize::from(image.header.coff_header.size_of_optional_header);
-    let virtual_size = table + 40 * index + 8;
+    let (_, virtual_size) = resource_section(&image)?;
     launcher[virtual_size..virtual_size + 4].fill(0);
     fs_err::write(path.path(), launcher)?;
 
