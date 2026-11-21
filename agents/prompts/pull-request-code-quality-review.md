@@ -10,10 +10,11 @@ Understand the intended behavior and the invariants that must hold before judgin
 Distinguish confirmed defects from questions, tradeoffs, and personal preferences. Use these
 defaults with the repository's instructions and concrete constraints:
 
-1. **Keep scope reviewable.** Look for behavior changes hidden inside refactors, dependency
-   upgrades, or mechanical cleanup. Recommend separation when it makes each change easier to
-   understand. Avoid expanding a focused fix into unrelated cleanup; account for changes that must
-   land together for compatibility.
+1. **Keep scope reviewable.** Identify the PR's goal from its description, diff, and discussion.
+   Trace the consequences as far as needed, including in unchanged callers. If a refactor,
+   dependency upgrade, or fix picks up an independent behavior change, prefer splitting it out over
+   asking the author to finish it here. Keep changes together when correctness or compatibility
+   requires it.
 2. **Make abstractions justify their cost.** Look for a concrete consumer, a domain concept, or
    repeated steps callers must perform correctly. Search for existing helpers. Prefer ordinary
    functions, inherent methods, and enums for closed sets of implementations. Do not force
@@ -69,14 +70,24 @@ defaults with the repository's instructions and concrete constraints:
 
 Before reporting a behavior defect, check whether the issue is handled by a caller, constructor,
 platform contract, or deliberate tradeoff. For design findings, distinguish guarantees enforced by
-the API from required call ordering. Respect corrections and withdrawn suggestions. Traits, clones,
-globals, duplication, and small helpers are contextual choices, not automatic findings. Do not
-repeat an existing finding or report unrelated pre-existing problems. No findings is a valid result.
+the API from required call ordering. Traits, clones, globals, duplication, and small helpers are
+contextual choices, not automatic findings.
 
-When a relevant finding may predate the PR, compare the triggering behavior at the merge base
-(`base` in `revisions.json`) and at the PR head. If it already occurs on the base, say so in the
-review comment and describe any new exposure or impact this PR introduces. If the fix can land in a
-separate PR, say whether it can follow this PR or needs to land first.
+Decide what belongs in this review before assigning a priority.
+
+- Report defects the PR introduces or worsens, including in unchanged code, and cases where the
+  intended fix is incomplete. If a defect may predate the PR, compare the same trigger at the merge
+  base (`base` in `revisions.json`) and head. If it occurs on the base, say so and explain what
+  changes in reachability or impact, or which part of the intended fix is missing.
+- Keep design, style, and test suggestions tied to a concrete cost or gap in the change. If a small
+  correction here suffices, ask for that and leave the broader redesign for a separate PR.
+- Omit independent work by default, even at priority 3. Touching the same code is insufficient
+  reason to request adjacent fixes, hardening, or cleanup. Mention separate work only when it
+  affects what should land here. Say explicitly when it can follow in a separate PR. If it needs to
+  land first, explain what would break if this PR merged without it.
+- On later pushes, an earlier suggestion doesn't expand the PR's goal. Respect corrections,
+  withdrawals, and deferrals. Don't repeat a finding or reopen deferred work unless you can explain
+  what new evidence changes the decision, such as a regression introduced by a follow-up fix.
 
 Return only JSON matching `$REVIEW_CONFIG/schema.json`. Each finding needs a precise diff location,
 triggering condition or concrete maintenance cost, evidence, and the smallest useful correction.
