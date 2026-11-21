@@ -1591,14 +1591,15 @@ impl InterpreterInfo {
             return false;
         }
 
-        // When a venv launcher targets another proxy, the two tracked paths
-        // omit the interpreter that supplied the metadata.
+        // A managed junction can redirect the launcher during the probe, and a
+        // nested proxy can hide the interpreter that supplied the metadata.
         #[cfg(windows)]
         if absolute != canonical
-            && !matches!(
-                uv_trampoline_builder::read_launcher_target(canonical),
-                Ok(None)
-            )
+            && (!matches!(cache_target(absolute), Ok(Some(current)) if current == canonical)
+                || !matches!(
+                    uv_trampoline_builder::read_launcher_target(canonical),
+                    Ok(None)
+                ))
         {
             return false;
         }
@@ -1910,6 +1911,44 @@ mod tests {
         };
         response.metadata.sys_executable = executable.to_path_buf();
         Ok(*response)
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn launcher_target_changes_during_probe() -> Result<()> {
+        use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+
+        let dir = tempdir()?;
+        let proxy = dir.path().join("python.exe");
+        let first = dir.path().join("first.exe");
+        let second = dir.path().join("second.exe");
+        fs::write(&first, [])?;
+        fs::write(&second, [])?;
+        fs::write(
+            &proxy,
+            windows_python_launcher(&first, WindowMode::Console)?,
+        )?;
+        let replacement = windows_python_launcher(&second, WindowMode::Console)?;
+        let modified = fs::metadata(&proxy)?.modified()?;
+        let cache = Cache::temp()?.init().await?;
+        let canonical = canonicalize_executable(&proxy)?;
+        let response = mocked_interpreter_response(&proxy)?;
+        InterpreterInfo::query_cached(&proxy, &cache, || {
+            // As when a minor-version junction moves, change the resolved target
+            // while leaving both the proxy and original target timestamps intact.
+            fs::write(&proxy, &replacement)?;
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&proxy)?
+                .set_modified(modified)?;
+            assert_eq!(fs::metadata(&proxy)?.modified()?, modified);
+            assert_ne!(canonicalize_executable(&proxy)?, canonical);
+            Ok((response, None))
+        })?;
+
+        let entry = InterpreterInfo::cache_entry(&proxy, &canonical, &cache);
+        assert!(!entry.path().exists());
+        Ok(())
     }
 
     fn unexpected_probe() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error> {
