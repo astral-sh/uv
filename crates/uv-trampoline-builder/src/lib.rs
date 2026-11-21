@@ -6,6 +6,7 @@ use std::str::Utf8Error;
 use editpe::{
     Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
 };
+#[cfg(windows)]
 use fs_err::File;
 use thiserror::Error;
 
@@ -52,6 +53,19 @@ const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH";
 #[cfg(windows)]
 const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 
+/// Read the launcher kind and interpreter path without inspecting the script payload.
+#[cfg(windows)]
+pub fn read_launcher_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+    resource_reader::read_target(path)
+}
+
+/// Returns `Ok(None)` on platforms without Windows trampolines.
+#[cfg(not(windows))]
+pub fn read_launcher_target(_path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+    Ok(None)
+}
+
+#[cfg(windows)]
 #[derive(Debug)]
 pub struct Launcher {
     kind: LauncherKind,
@@ -59,53 +73,18 @@ pub struct Launcher {
     script_data: Option<Vec<u8>>,
 }
 
+#[cfg(windows)]
 impl Launcher {
-    /// The kind of trampoline described by the launcher resources.
-    pub fn kind(&self) -> LauncherKind {
-        self.kind
-    }
-
-    /// Read the launcher kind and interpreter path without inspecting the script payload.
-    #[cfg(windows)]
-    pub fn try_read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-        resource_reader::read_target(path)
-    }
-
-    /// Returns `Ok(None)` on platforms without Windows trampolines.
-    #[cfg(not(windows))]
-    pub fn try_read_target(_path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-        Ok(None)
-    }
-
-    /// Attempt to read [`Launcher`] metadata from a trampoline executable file.
+    /// Read a trampoline executable for rewriting.
+    /// Use [`read_launcher_target`] to identify its interpreter independently of rewrite eligibility.
     ///
-    /// On Unix, this always returns [`None`]. Trampolines are a Windows-specific feature and cannot
-    /// be read on other platforms.
-    #[cfg(not(windows))]
-    pub fn try_from_path(_path: &Path) -> Result<Option<Self>, Error> {
-        Ok(None)
-    }
-
-    /// Read [`Launcher`] metadata from a trampoline executable file.
-    ///
-    /// Returns `Ok(None)` if the file is not a trampoline executable.
+    /// Returns `Ok(None)` if the file cannot be identified as a rewritable trampoline.
     /// Returns `Err` if reading or decoding a located launcher payload fails.
-    #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
         resource_reader::read_launcher(path)
     }
 
     /// Write this trampoline launcher to a file.
-    ///
-    /// On Unix, this always returns [`Error::NotWindows`]. Trampolines are a Windows-specific
-    /// feature and cannot be written on other platforms.
-    #[cfg(not(windows))]
-    pub fn write_to_file(self, _file: &mut File, _is_gui: bool) -> Result<(), Error> {
-        Err(Error::NotWindows)
-    }
-
-    /// Write this trampoline launcher to a file.
-    #[cfg(windows)]
     pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
         use std::io::Write;
         use uv_fs::Simplified;

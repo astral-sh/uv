@@ -39,7 +39,7 @@ use uv_python_types::{
 };
 use uv_settings::PythonInstallMirrors;
 use uv_shell::Shell;
-use uv_trampoline_builder::{Launcher, LauncherKind};
+use uv_trampoline_builder::{LauncherKind, read_launcher_target};
 use uv_warnings::warn_user;
 
 use crate::{ChangeEvent, ChangeEventKind};
@@ -1348,7 +1348,7 @@ fn find_matching_bin_link<'a>(
 
         installations.find(|installation| installation.executable(false) == target)
     } else if cfg!(windows) {
-        let Ok(Some((LauncherKind::Python, target))) = Launcher::try_read_target(path) else {
+        let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
             return None;
         };
         let target = dunce::canonicalize(target).ok()?;

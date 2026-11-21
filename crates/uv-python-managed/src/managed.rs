@@ -27,7 +27,9 @@ use uv_platform::{LibcDetectionError, Platform};
 use uv_pypi_types::Digest;
 use uv_state::{StateBucket, StateStore};
 use uv_static::EnvVars;
-use uv_trampoline_builder::{Launcher, LauncherKind, WindowMode, windows_python_launcher};
+use uv_trampoline_builder::{
+    LauncherKind, WindowMode, read_launcher_target, windows_python_launcher,
+};
 
 use crate::downloads::{Error as DownloadError, ManagedPythonDownload};
 use crate::macos_dylib;
@@ -638,7 +640,7 @@ impl ManagedPythonInstallation {
         if cfg!(unix) {
             same_file::is_same_file(path, self.executable(false)).unwrap_or_default()
         } else if cfg!(windows) {
-            let Ok(Some((LauncherKind::Python, target))) = Launcher::try_read_target(path) else {
+            let Ok(Some((LauncherKind::Python, target))) = read_launcher_target(path) else {
                 return false;
             };
             // We canonicalize the target path of the launcher in case it includes a minor version

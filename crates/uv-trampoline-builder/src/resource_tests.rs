@@ -647,7 +647,7 @@ fn python_proxy_target_is_independent_of_script_languages() -> Result<()> {
         &[(RESOURCE_SCRIPT_DATA, b"unused")],
     )?;
     assert_eq!(
-        Launcher::try_read_target(path.path())?,
+        super::read_launcher_target(path.path())?,
         Some((LauncherKind::Python, python.into()))
     );
     assert!(Launcher::try_from_path(path.path())?.is_none());

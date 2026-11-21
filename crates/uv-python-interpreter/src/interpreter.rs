@@ -903,7 +903,7 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
 
     #[cfg(windows)]
     {
-        if let Ok(Some((_, target))) = uv_trampoline_builder::Launcher::try_read_target(path) {
+        if let Ok(Some((_, target))) = uv_trampoline_builder::read_launcher_target(path) {
             Ok(dunce::canonicalize(target)?)
         } else {
             Ok(path.to_path_buf())
