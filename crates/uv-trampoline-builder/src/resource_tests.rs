@@ -191,6 +191,16 @@ fn path_resource(launcher: &[u8]) -> Result<(usize, DirectoryEntry)> {
     let name = rcdata
         .next_depth(&launcher[offset..])?
         .context("Missing named resource")?;
+    assert!(name.name_is_string());
+    let start = offset + usize::try_from(name.name_offset())?;
+    let ResourceEntryName::Name(expected) = ResourceEntryName::from_string(RESOURCE_PYTHON_PATH)
+    else {
+        unreachable!();
+    };
+    assert!(
+        launcher[start..].starts_with(&expected),
+        "Expected {RESOURCE_PYTHON_PATH}"
+    );
     Ok((offset, name))
 }
 
