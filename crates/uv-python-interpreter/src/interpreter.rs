@@ -954,21 +954,21 @@ impl<'a> ExecutableTarget<'a> {
     /// Replacing a junction changes its containing directory even if the original
     /// junction is subsequently moved back into place.
     #[cfg(windows)]
-    fn link_timestamps(&self, canonical: &Path) -> io::Result<Vec<(u64, u64)>> {
+    fn link_timestamps(&self, canonical: &Path) -> Option<Vec<(u64, u64)>> {
         use std::os::windows::fs::MetadataExt;
 
         let Self::Trampoline(target) = self else {
-            return Ok(Vec::new());
+            return Some(Vec::new());
         };
-        let mut target = std::path::absolute(target)?;
+        let mut target = std::path::absolute(dunce::simplified(target)).ok()?;
         let mut times = Vec::new();
         for _ in 0..=40 {
             if target == canonical {
-                return Ok(times);
+                return Some(times);
             }
             let mut redirect = None;
             for path in target.ancestors() {
-                let metadata = fs::symlink_metadata(path)?;
+                let metadata = fs::symlink_metadata(path).ok()?;
                 times.push((metadata.creation_time(), metadata.last_write_time()));
                 if canonical.starts_with(path) {
                     break;
@@ -980,17 +980,22 @@ impl<'a> ExecutableTarget<'a> {
             // Follow the outermost junction first. Its destination may contain
             // another junction with a different containing directory.
             let Some(link) = redirect else {
-                return Ok(times);
+                // A substituted drive can change its mapping without updating
+                // any of these timestamps. Only allow a spelling difference.
+                return target
+                    .as_os_str()
+                    .eq_ignore_ascii_case(canonical.as_os_str())
+                    .then_some(times);
             };
-            let destination = fs::read_link(link)?;
+            let destination = fs::read_link(link).ok()?;
             let mut next = link.with_file_name(dunce::simplified(&destination));
             let suffix = target.strip_prefix(link).expect("link is an ancestor");
             if !suffix.as_os_str().is_empty() {
                 next.push(suffix);
             }
-            target = std::path::absolute(next)?;
+            target = std::path::absolute(next).ok()?;
         }
-        Err(io::Error::other("Too many links in launcher target"))
+        None
     }
 }
 
@@ -1657,10 +1662,10 @@ impl InterpreterInfo {
         #[cfg(windows)]
         let cacheable = cacheable
             && (wire.metadata.sys_base_executable.as_deref() == Some(canonical.as_path())
-                || links.is_ok_and(|before| {
+                || links.is_some_and(|before| {
                     target
                         .link_timestamps(&canonical)
-                        .is_ok_and(|after| before == after)
+                        .is_some_and(|after| before == after)
                 }));
 
         let info = Self::from_probe(executable, wire, file_timestamps)?;
@@ -2051,6 +2056,22 @@ mod tests {
         };
         response.metadata.sys_executable = executable.to_path_buf();
         Ok(*response)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn link_snapshot_requires_reaching_the_canonical_path() -> Result<()> {
+        let dir = tempdir()?;
+        let base = dir.path().join("python.exe");
+        fs::write(&base, [])?;
+        let canonical = dunce::canonicalize(&base)?;
+        // An alternate name can identify the same file without exposing any
+        // link whose timestamps would track the mapping (e.g., a subst drive).
+        let alias = dir.path().join("alias.exe");
+        fs::hard_link(&base, &alias)?;
+        let target = super::ExecutableTarget::Trampoline(alias);
+        assert!(target.link_timestamps(&canonical).is_none());
+        Ok(())
     }
 
     #[cfg(windows)]
