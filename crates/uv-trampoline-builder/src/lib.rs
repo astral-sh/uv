@@ -6,6 +6,8 @@ use std::str::Utf8Error;
 use editpe::{
     Image, ResourceData, ResourceDirectory, ResourceEntry, ResourceEntryName, ResourceTable,
 };
+#[cfg(windows)]
+use fs_err::File;
 use thiserror::Error;
 
 use uv_fs::Simplified;
@@ -83,8 +85,10 @@ impl Launcher {
         resource_reader::read_launcher(path)
     }
 
-    /// Serialize the launcher, declining a layout that changes the visible ZIP.
-    pub fn into_bytes(self, is_gui: bool) -> Result<Option<Vec<u8>>, Error> {
+    /// Write this trampoline launcher to a file.
+    pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
+        use std::io::Write;
+
         let python_path = encode_python_path(&self.python_path)?;
 
         let launcher_bin = get_launcher_bin(is_gui)?;
@@ -99,15 +103,8 @@ impl Launcher {
         }
 
         let output = write_resources(launcher_bin, &resources)?;
-        // Changing the interpreter path changes the padding after the script.
-        if self.kind == LauncherKind::Script
-            && let Some(payload) = self.script_data.as_deref()
-            && resource_reader::visible_archive(payload)
-                != resource_reader::visible_archive(&output)
-        {
-            return Ok(None);
-        }
-        Ok(Some(output))
+        file.write_all(&output)?;
+        Ok(())
     }
 
     #[must_use]

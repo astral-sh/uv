@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use assert_cmd::prelude::OutputAssertExt;
 use assert_fs::prelude::PathChild;
 use editpe::{Image, ResourceEntry, ResourceEntryName, ResourceTable};
+use fs_err::File;
 use goblin::pe::{
     PE, options::ParseOptions, resource::ResourceEntry as DirectoryEntry, utils::find_offset,
 };
@@ -654,8 +655,11 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
         windows_python_launcher("python.exe", WindowMode::Console)?,
     )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
+    let mut file = File::create(path.path())?;
     assert!(matches!(
-        launcher.with_python_path("".into()).into_bytes(false),
+        launcher
+            .with_python_path("".into())
+            .write_to_file(&mut file, false),
         Err(super::Error::EmptyPath)
     ));
     Ok(())
@@ -709,133 +713,6 @@ fn python_proxy_target_is_independent_of_script_languages() -> Result<()> {
     Ok(())
 }
 
-/// Python searches from the end of the file for a ZIP, including the PE overlay.
-#[test]
-fn appended_archive_is_not_rewritten() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let path = temp_dir.child("launcher.exe");
-    let python = which::which("python")?;
-    let mut bytes = windows_script_launcher("print('embedded')", false, &python)?;
-    bytes.extend_from_slice(b"trailing data");
-    fs_err::write(path.path(), &bytes)?;
-    assert!(Launcher::try_from_path(path.path())?.is_some());
-    bytes.extend(script_archive("print('appended')")?);
-    fs_err::write(path.path(), bytes)?;
-    Command::new(path.path())
-        .assert()
-        .success()
-        .stdout("appended\r\n");
-    assert!(Launcher::try_from_path(path.path())?.is_none());
-    Ok(())
-}
-
-#[test]
-fn archive_hidden_by_trailing_data_is_not_rewritten() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let path = temp_dir.child("launcher.exe");
-    let mut bytes = windows_script_launcher("pass", false, "python.exe")?;
-    let end = bytes
-        .windows(4)
-        .rposition(|bytes| bytes == b"PK\x05\x06")
-        .context("Missing ZIP end record")?
-        + 22;
-    for (trailing, visible) in [(65_535, true), (65_536, false), (70_000, false)] {
-        bytes.resize(end + trailing, 0);
-        fs_err::write(path.path(), &bytes)?;
-        assert_eq!(Launcher::try_from_path(path.path())?.is_some(), visible);
-    }
-    Ok(())
-}
-
-#[test]
-fn rewrite_declines_a_zip_hidden_by_section_padding() -> Result<()> {
-    let mut archive = script_archive("pass")?;
-    let end = archive.len();
-    assert_eq!(&archive[end - 22..end - 18], b"PK\x05\x06");
-    archive[end - 2..].copy_from_slice(&u16::MAX.to_le_bytes());
-    archive.resize(end + usize::from(u16::MAX), 0);
-    let launcher = Launcher {
-        kind: LauncherKind::Script,
-        python_path: "python.exe".into(),
-        script_data: Some(archive),
-    };
-    // The payload's end record is exactly at the edge of the search window.
-    // Any bytes following the payload in the new executable will hide it.
-    assert!(launcher.into_bytes(false)?.is_none());
-    Ok(())
-}
-
-#[test]
-fn overlay_shadowing_zip64_record_is_not_rewritten() -> Result<()> {
-    use async_zip::base::write::ZipFileWriter;
-    use async_zip::{Compression, ZipEntryBuilder};
-    use futures_lite::future::block_on;
-    use futures_lite::io::Cursor;
-
-    let mut archive = ZipFileWriter::new(Cursor::new(Vec::new())).force_zip64();
-    let entry = ZipEntryBuilder::new("__main__.py".to_string().into(), Compression::Stored);
-    block_on(archive.write_entry_whole(entry, b"pass"))?;
-    let payload = block_on(archive.close())?.into_inner();
-    assert_eq!(&payload[payload.len() - 98..][..4], b"PK\x06\x06");
-
-    let temp_dir = assert_fs::TempDir::new()?;
-    let path = temp_dir.child("launcher.exe");
-    let mut bytes = write_resources(
-        get_launcher_bin(false)?,
-        &[
-            (RESOURCE_TRAMPOLINE_KIND, &[1]),
-            (RESOURCE_PYTHON_PATH, b"python.exe"),
-            (RESOURCE_SCRIPT_DATA, &payload),
-        ],
-    )?;
-    fs_err::write(path.path(), &bytes)?;
-    assert!(Launcher::try_from_path(path.path())?.is_some());
-    bytes.extend_from_slice(b"PK\x06\x06");
-    fs_err::write(path.path(), bytes)?;
-    assert!(Launcher::try_from_path(path.path())?.is_none());
-    Ok(())
-}
-
-#[test]
-fn truncated_appended_end_record_is_not_rewritten() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let path = temp_dir.child("launcher.exe");
-    let mut bytes = windows_script_launcher("pass", false, "python.exe")?;
-    bytes.extend_from_slice(b"PK\x05\x06");
-    fs_err::write(path.path(), bytes)?;
-    assert!(Launcher::try_from_path(path.path())?.is_none());
-    Ok(())
-}
-
-#[test]
-fn archive_start_before_script_resource_is_not_rewritten() -> Result<()> {
-    let temp_dir = assert_fs::TempDir::new()?;
-    let path = temp_dir.child("launcher.exe");
-    let python = which::which("python")?;
-    let archive = script_archive("print('complete')")?;
-    // The ZIP is contiguous in the executable, but copying UV_SCRIPT_DATA
-    // alone would leave the local file header behind.
-    let bytes = write_resources(
-        get_launcher_bin(false)?,
-        &[
-            (RESOURCE_TRAMPOLINE_KIND, &[1]),
-            (
-                RESOURCE_PYTHON_PATH,
-                python.to_str().context("Invalid Python path")?.as_bytes(),
-            ),
-            ("UV_SCRIPT", &archive[..4]),
-            (RESOURCE_SCRIPT_DATA, &archive[4..]),
-        ],
-    )?;
-    fs_err::write(path.path(), bytes)?;
-    Command::new(path.path())
-        .assert()
-        .success()
-        .stdout("complete\r\n");
-    assert!(Launcher::try_from_path(path.path())?.is_none());
-    Ok(())
-}
-
 #[test]
 fn empty_script_resource_is_preserved() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
@@ -881,11 +758,12 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         .context("Missing original script data")?;
     assert!(script_data.len() > 65_536);
 
-    let bytes = launcher
-        .with_python_path(python.clone())
-        .into_bytes(false)?
-        .context("Could not rewrite launcher")?;
-    fs_err::write(rewritten_path.path(), bytes)?;
+    {
+        let mut file = File::create(rewritten_path.path())?;
+        launcher
+            .with_python_path(python.clone())
+            .write_to_file(&mut file, false)?;
+    }
     let launcher = Launcher::try_from_path(rewritten_path.path())?
         .context("Rewritten launcher was not recognized")?;
     assert_eq!(launcher.python_path, python);
@@ -893,10 +771,10 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
         launcher.script_data.as_deref(),
         Some(script_data.as_slice())
     );
-    let bytes = launcher
-        .into_bytes(false)?
-        .context("Could not rewrite launcher")?;
-    fs_err::write(repeated_path.path(), bytes)?;
+    {
+        let mut file = File::create(repeated_path.path())?;
+        launcher.write_to_file(&mut file, false)?;
+    }
 
     for path in [rewritten_path.path(), repeated_path.path()] {
         Command::new(path)
