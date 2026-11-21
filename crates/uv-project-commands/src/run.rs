@@ -2061,6 +2061,9 @@ fn copy_entrypoint(
 ) -> Result<(), CopyEntrypointError> {
     use uv_trampoline_builder::Launcher;
 
+    if target.exists() {
+        return Ok(());
+    }
     let launcher = match Launcher::try_from_path(source) {
         Ok(Some(launcher)) => launcher,
         Ok(None) => return Ok(()),
@@ -2068,15 +2071,12 @@ fn copy_entrypoint(
         Err(err) => return Err(CopyEntrypointError::Trampoline(err)),
     };
 
-    let is_gui = launcher.python_path.ends_with("pythonw.exe");
-
-    let python_path = if is_gui {
-        python_executable.with_file_name("pythonw.exe")
+    let is_gui = launcher.python_path().ends_with("pythonw.exe");
+    let launcher = if is_gui {
+        launcher.with_python_path(python_executable.with_file_name("pythonw.exe"))?
     } else {
-        python_executable.to_path_buf()
+        launcher.with_python_path(python_executable)?
     };
-
-    let launcher = launcher.with_python_path(python_path);
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
         .write(true)

@@ -75,7 +75,7 @@ pub fn read_launcher_target(_path: &Path) -> Result<Option<(LauncherKind, PathBu
 #[derive(Debug)]
 pub struct Launcher {
     kind: LauncherKind,
-    pub python_path: PathBuf,
+    python_path: String,
     script_data: Option<Vec<u8>>,
 }
 
@@ -94,14 +94,12 @@ impl Launcher {
     pub fn write_to_file(self, file: &mut File, is_gui: bool) -> Result<(), Error> {
         use std::io::Write;
 
-        let python_path = encode_python_path(&self.python_path)?;
-
         let launcher_bin = get_launcher_bin(is_gui)?;
 
         let kind_value = [self.kind.to_resource_value()];
         let mut resources: Vec<(&str, &[u8])> = vec![
             (RESOURCE_TRAMPOLINE_KIND, &kind_value),
-            (RESOURCE_PYTHON_PATH, python_path.as_bytes()),
+            (RESOURCE_PYTHON_PATH, self.python_path.as_bytes()),
         ];
         if let Some(payload) = &self.script_data {
             resources.push((RESOURCE_SCRIPT_DATA, payload));
@@ -112,13 +110,15 @@ impl Launcher {
         Ok(())
     }
 
-    #[must_use]
-    pub fn with_python_path(self, path: PathBuf) -> Self {
-        Self {
-            kind: self.kind,
-            python_path: path,
-            script_data: self.script_data,
-        }
+    /// The interpreter path stored in the launcher.
+    pub fn python_path(&self) -> &Path {
+        Path::new(&self.python_path)
+    }
+
+    /// Encode a replacement path in the launcher's UTF-8 resource.
+    pub fn with_python_path(mut self, path: impl AsRef<Path>) -> Result<Self, Error> {
+        encode_python_path(&path)?.clone_into(&mut self.python_path);
+        Ok(self)
     }
 }
 
@@ -648,7 +648,7 @@ if __name__ == "__main__":
             .expect("The launcher should be valid");
 
         assert_eq!(launcher.kind, LauncherKind::Script);
-        assert_eq!(launcher.python_path, python_executable_path);
+        assert_eq!(launcher.python_path(), python_executable_path);
 
         // Now code-sign the launcher and verify that it still works.
         sign_authenticode(console_bin_path.path());
@@ -700,7 +700,7 @@ if __name__ == "__main__":
             .expect("The launcher should be valid");
 
         assert_eq!(launcher.kind, LauncherKind::Python);
-        assert_eq!(launcher.python_path, python_executable_path);
+        assert_eq!(launcher.python_path(), python_executable_path);
 
         // Now code-sign the launcher and verify that it still works.
         sign_authenticode(console_bin_path.path());

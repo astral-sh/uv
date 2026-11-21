@@ -211,7 +211,7 @@ fn oversized_resource_is_rejected() -> Result<()> {
     assert_eq!(
         Launcher::try_from_path(path.path())?
             .context("Missing launcher metadata")?
-            .python_path,
+            .python_path(),
         Path::new("C:/Python312/python.exe"),
     );
 
@@ -316,7 +316,7 @@ fn relocated_resource_directory() -> Result<()> {
     fs_err::write(path.path(), &launcher)?;
 
     let result = Launcher::try_from_path(path.path())?.context("Missing relocated resources")?;
-    assert_eq!(result.python_path, Path::new("C:/Python312/python.exe"));
+    assert_eq!(result.python_path(), Path::new("C:/Python312/python.exe"));
     assert_eq!(result.script_data.as_deref(), Some(b"payload".as_slice()));
     Ok(())
 }
@@ -347,7 +347,7 @@ fn resource_section_with_zero_virtual_size() -> Result<()> {
         .assert()
         .success();
     let result = Launcher::try_from_path(path.path())?.context("Missing Python launcher")?;
-    assert_eq!(result.python_path, python);
+    assert_eq!(result.python_path(), python);
     Ok(())
 }
 
@@ -415,7 +415,7 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
         ],
     )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing localized launcher")?;
-    assert_eq!(launcher.python_path, Path::new("missing-en.exe"));
+    assert_eq!(launcher.python_path(), Path::new("missing-en.exe"));
 
     update_native_resources(
         path.path(),
@@ -438,7 +438,7 @@ fn localized_launcher_target_must_be_unambiguous() -> Result<()> {
         .assert()
         .success();
     let launcher = Launcher::try_from_path(path.path())?.context("Missing neutral launcher")?;
-    assert_eq!(launcher.python_path, python);
+    assert_eq!(launcher.python_path(), python);
 
     // A binary search can find the second neutral entry when IDs are duplicated.
     let mut neutral = fs_err::read(path.path())?;
@@ -524,7 +524,7 @@ fn resources_match_native_windows_updates() -> Result<()> {
                 .context("editpe-generated launcher was not recognized")?;
             assert_eq!(native.kind, LauncherKind::Script);
             assert_eq!(edited.kind, native.kind);
-            assert_eq!(edited.python_path, native.python_path);
+            assert_eq!(edited.python_path(), native.python_path());
             assert_eq!(native.script_data.as_deref(), Some(payload.as_slice()));
             assert_eq!(edited.script_data.as_deref(), Some(payload.as_slice()));
         }
@@ -657,11 +657,8 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
         windows_python_launcher("python.exe", WindowMode::Console)?,
     )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
-    let mut file = File::create(path.path())?;
     assert!(matches!(
-        launcher
-            .with_python_path("".into())
-            .write_to_file(&mut file, false),
+        launcher.with_python_path(""),
         Err(super::Error::EmptyPath)
     ));
     Ok(())
@@ -689,7 +686,7 @@ fn interpreter_path_resource_size_limit() -> Result<()> {
         windows_python_launcher(&python, WindowMode::Console)?,
     )?;
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
-    assert_eq!(launcher.python_path, Path::new(&python));
+    assert_eq!(launcher.python_path(), Path::new(&python));
 
     python.push('x');
     assert!(matches!(
@@ -725,7 +722,7 @@ fn relative_target_is_resolved_beside_the_launcher() -> Result<()> {
         Some((LauncherKind::Python, temp_dir.path().join(target)))
     );
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
-    assert_eq!(launcher.python_path, target);
+    assert_eq!(launcher.python_path(), target);
     Ok(())
 }
 
@@ -740,7 +737,7 @@ fn drive_relative_target_cannot_establish_ownership() -> Result<()> {
     )?;
     assert!(super::read_launcher_target(path.path())?.is_none());
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
-    assert_eq!(launcher.python_path, target);
+    assert_eq!(launcher.python_path(), target);
     Ok(())
 }
 
@@ -807,7 +804,7 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
     fs_err::write(original_path.path(), &original)?;
     let launcher = Launcher::try_from_path(original_path.path())?
         .context("Original launcher was not recognized")?;
-    assert_eq!(launcher.python_path, original_python);
+    assert_eq!(launcher.python_path(), original_python);
     let script_data = launcher
         .script_data
         .clone()
@@ -815,14 +812,13 @@ fn large_script_survives_launcher_rewrites() -> Result<()> {
     assert!(script_data.len() > 65_536);
 
     {
+        let launcher = launcher.with_python_path(&python)?;
         let mut file = File::create(rewritten_path.path())?;
-        launcher
-            .with_python_path(python.clone())
-            .write_to_file(&mut file, false)?;
+        launcher.write_to_file(&mut file, false)?;
     }
     let launcher = Launcher::try_from_path(rewritten_path.path())?
         .context("Rewritten launcher was not recognized")?;
-    assert_eq!(launcher.python_path, python);
+    assert_eq!(launcher.python_path(), python);
     assert_eq!(
         launcher.script_data.as_deref(),
         Some(script_data.as_slice())

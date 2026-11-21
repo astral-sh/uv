@@ -2188,7 +2188,7 @@ fn launcher_path(path: &Path) -> PathBuf {
     let launcher = uv_trampoline_builder::Launcher::try_from_path(path)
         .unwrap_or_else(|_| panic!("{} should be readable", path.display()))
         .unwrap_or_else(|| panic!("{} should be a valid launcher", path.display()));
-    launcher.python_path
+    launcher.python_path().to_path_buf()
 }
 
 fn canonicalize_link_path(path: &Path) -> String {

@@ -46,9 +46,10 @@ pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>
     let Some(mut resources) = Resources::open(path) else {
         return Ok(None);
     };
-    let Some((kind, mut target)) = resources.target()? else {
+    let Some((kind, target)) = resources.target()? else {
         return Ok(None);
     };
+    let mut target = PathBuf::from(target);
     if target.is_relative() {
         // The trampoline joins the stored path to the parent of current_exe().
         let executable = std::path::absolute(path)?;
@@ -276,7 +277,7 @@ impl Resources {
         Some(Lookup::Found(offset..offset + u64::from(data.size)))
     }
 
-    fn target(&mut self) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
+    fn target(&mut self) -> Result<Option<(LauncherKind, String)>, Error> {
         let Some(Lookup::Found(payload)) =
             self.locate(RESOURCE_TRAMPOLINE_KIND, Languages::PreferNeutral)
         else {
@@ -298,7 +299,7 @@ impl Resources {
         }
         let path = String::from_utf8(self.read(path)?)
             .map_err(|err| Error::InvalidPath(err.utf8_error()))?;
-        Ok(Some((kind, PathBuf::from(path))))
+        Ok(Some((kind, path)))
     }
 
     fn read(&mut self, range: Range<u64>) -> io::Result<Vec<u8>> {
