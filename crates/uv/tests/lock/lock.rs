@@ -2099,6 +2099,155 @@ fn lock_sdist_url() -> Result<()> {
     Ok(())
 }
 
+/// An isolated build can require a locked version outside its runtime dependency marker.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_build_dependency_outside_runtime_platform() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_exclude_newer("2026-01-01T00:00:00Z");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = "==3.12.*"
+        dependencies = ["cffi==2.0.0; sys_platform == 'android'"]
+
+        [build-system]
+        requires = ["setuptools", "cffi==2.0.0"]
+        build-backend = "setuptools.build_meta"
+    "#})?;
+    context.temp_dir.child("project.py").write_str("")?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    // Require a wheel to exercise the digest for the host platform.
+    uv_snapshot!(context.filters(), context.sync().arg("--frozen").arg("--no-build-package").arg("cffi"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + project==0.1.0 (from file://[TEMP_DIR]/)
+    ");
+    Ok(())
+}
+
+/// A re-resolution can move a wheel's digest from the runtime files to the build hashes,
+/// but only an upgrade can replace the digest with a newly advertised one.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_preserve_filtered_hashes() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let project = context.temp_dir.child("pyproject.toml");
+    let unrestricted = indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo"]
+
+        [tool.uv]
+    "#};
+    project.write_str(unrestricted)?;
+    let index = context.temp_dir.child("simple").child("demo");
+    index.create_dir_all()?;
+    let (name, wheel) = WheelBuilder::new(&"demo".parse()?, &"1".parse()?).build();
+    let runtime = format!("#sha256={}", hex::encode(Sha256::digest(&wheel)));
+    fs_err::write(index.child(&name), wheel)?;
+    let publish = |content: &str, runtime: &str| -> Result<String> {
+        let (filename, wheel) = WheelBuilder::new(&"demo".parse()?, &"1".parse()?)
+            .tag("py3-none-manylinux_2_17_s390x")
+            .files(&[("demo.py", content)])
+            .build();
+        let hash = hex::encode(Sha256::digest(&wheel));
+        fs_err::write(index.child(&filename), wheel)?;
+        index.child("index.html").write_str(&formatdoc! {r#"
+            <a data-upload-time="2022-01-01T00:00:00Z" href="{name}{runtime}">{name}</a>
+            <a data-upload-time="2024-01-01T00:00:00Z" href="{filename}#sha256={hash}">{filename}</a>
+        "#})?;
+        Ok(hash)
+    };
+    let original = publish("original", "")?;
+    let lock = || {
+        let mut command = context.lock();
+        command
+            .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+            .arg("--default-index")
+            .arg(context.temp_dir.child("simple").path());
+        command
+    };
+    lock().assert().success();
+    assert!(!context.read("uv.lock").contains("build-hashes"));
+
+    let manifest = format!("{unrestricted}\nenvironments = [\"sys_platform == 'win32'\"]\n");
+    project.write_str(&manifest)?;
+    lock().assert().success();
+    let trusted = context.read("uv.lock");
+    assert!(trusted.contains("build-hashes"));
+    assert!(trusted.contains(&original));
+
+    lock().arg("--refresh").assert().success();
+    assert_eq!(context.read("uv.lock"), trusted);
+
+    // Replacing the only hashed file cannot silently disable verification.
+    publish("updated", "")?;
+    uv_snapshot!(context.filters(), lock().arg("--refresh"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Cannot preserve the locked build hashes for `demo`. Use `--upgrade-package demo` to accept the current files
+    ");
+    assert_eq!(context.read("uv.lock"), trusted);
+
+    // Reject a conflicting explicit build constraint before replacing the lockfile.
+    project.write_str(&formatdoc! {r#"
+        {manifest}
+        build-constraint-dependencies = [{{ requirement = "demo==1", hashes = ["sha256:{original}"] }}]
+    "#})?;
+    uv_snapshot!(context.filters(), lock().args(["--upgrade-package", "demo"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: In `--verify-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: demo-1
+    ");
+    assert_eq!(context.read("uv.lock"), trusted);
+
+    project.write_str(&manifest)?;
+    let replacement = publish("updated", &runtime)?;
+    lock()
+        .args(["--upgrade-package", "demo"])
+        .assert()
+        .success();
+    let upgraded = context.read("uv.lock");
+    assert!(upgraded.contains(&replacement));
+    assert!(!upgraded.contains(&original));
+
+    // Widening the marker cannot promote a replacement file to the runtime wheels.
+    publish("changed", &runtime)?;
+    project.write_str(unrestricted)?;
+    uv_snapshot!(context.filters(), lock().arg("--refresh"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    error: Cannot preserve the locked build hashes for `demo`. Use `--upgrade-package demo` to accept the current files
+    ");
+    assert_eq!(context.read("uv.lock"), upgraded);
+
+    project.write_str(&manifest)?;
+    // Tightening the cutoff removes the later wheel's digest from the build policy.
+    lock()
+        .args(["--exclude-newer", "2023-01-01"])
+        .assert()
+        .success();
+    assert!(!context.read("uv.lock").contains(&replacement));
+    Ok(())
+}
+
 /// Create a deterministic wheel whose module can be imported by a source build backend.
 #[cfg(feature = "test-universal")]
 fn locked_build_dependency_wheel(module: &str) -> Result<Vec<u8>> {
@@ -26066,6 +26215,9 @@ fn lock_constrained_environment() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319, upload-time = "2024-03-15T19:38:24.009Z" },
             { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493, upload-time = "2024-03-15T19:35:41.572Z" },
         ]
+        build-hashes = [
+            "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5",
+        ]
 
         [[package]]
         name = "click"
@@ -26380,6 +26532,9 @@ fn lock_constrained_environment_non_project() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/d9/ed/704731afffe460b8ff0672623b40fce9fe569f2ee617c15857e4d4440a3a/black-24.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4acf672def7eb1725f41f38bf6bf425c8237248bb0804faa3965c036f7672d11", size = 1429987, upload-time = "2024-03-15T19:45:00.637Z" },
             { url = "https://files.pythonhosted.org/packages/a8/05/8dd038e30caadab7120176d4bc109b7ca2f4457f12eef746b0560a583458/black-24.3.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c7ed6668cbbfcd231fa0dc1b137d3e40c04c7f786e626b405c62bcd5db5857e4", size = 1755319, upload-time = "2024-03-15T19:38:24.009Z" },
             { url = "https://files.pythonhosted.org/packages/4d/ea/31770a7e49f3eedfd8cd7b35e78b3a3aaad860400f8673994bc988318135/black-24.3.0-py3-none-any.whl", hash = "sha256:41622020d7120e01d377f74249e677039d20e6344ff5851de8a10f11f513bf93", size = 201493, upload-time = "2024-03-15T19:35:41.572Z" },
+        ]
+        build-hashes = [
+            "sha256:56f52cfbd3dabe2798d76dbdd299faa046a901041faf2cf33288bc4e6dae57b5",
         ]
 
         [[package]]
@@ -33327,6 +33482,16 @@ fn lock_group_include() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/c9/6e/751437067affe7ac0944b1ad4856ec11650da77f0dd8f305fae1117ef7bb/cffi-1.16.0-cp312-cp312-win32.whl", hash = "sha256:b2ca4e77f9f47c55c194982e10f058db063937845bb2b7a86c84a6cfe0aefa8b", size = 173564, upload-time = "2023-09-28T18:01:23.527Z" },
             { url = "https://files.pythonhosted.org/packages/e9/63/e285470a4880a4f36edabe4810057bd4b562c6ddcc165eacf9c3c7210b40/cffi-1.16.0-cp312-cp312-win_amd64.whl", hash = "sha256:68678abf380b42ce21a5f2abde8efee05c114c2fdb2e9eef2efdb0257fba1235", size = 181956, upload-time = "2023-09-28T18:01:24.971Z" },
         ]
+        build-hashes = [
+            "sha256:2d92b25dbf6cae33f65005baf472d2c245c050b1ce709cc4588cdcdd5495b520",
+            "sha256:68e7c44931cc171c54ccb702482e9fc723192e88d25a0e133edd7aff8fcd1f6e",
+            "sha256:88e2b3c14bdb32e440be531ade29d3c50a1a59cd4e51b1dd8b0865c54ea5d2e2",
+            "sha256:abd808f9c129ba2beda4cfc53bde801e5bcf9d6e0f22f095e45327c038bfe68e",
+            "sha256:b7be2d771cdba2942e13215c4e340bfd76398e9227ad10402a8767ab1865d2e6",
+            "sha256:e715596e683d2ce000574bae5d07bd522c781a822866c20495e52520564f0969",
+            "sha256:fa3a0128b152627161ce47201262d3140edb5a5c3da88d73a1b790a959126956",
+            "sha256:fcc8eb6d5902bb1cf6dc4f187ee3ea80a1eba0a89aba40a5cb20a5087d961357",
+        ]
 
         [[package]]
         name = "idna"
@@ -37969,6 +38134,10 @@ fn lock_split_on_windows() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/1c/7e/ce7c66a541a105fa98b41d6405fe84940564695e29fc7dccf6d9e8c5f898/PyQt5_Qt5-5.15.2-py3-none-win32.whl", hash = "sha256:9cc7a768b1921f4b982ebc00a318ccb38578e44e45316c7a4a850e953e1dd327", size = 43447358, upload-time = "2021-03-10T14:01:17.827Z" },
             { url = "https://files.pythonhosted.org/packages/37/97/5d3b222b924fa2ed4c2488925155cd0b03fd5d09ee1cfcf7c553c11c9f66/PyQt5_Qt5-5.15.2-py3-none-win_amd64.whl", hash = "sha256:750b78e4dba6bdf1607febedc08738e318ea09e9b10aea9ff0d73073f11f6962", size = 50075158, upload-time = "2021-03-10T14:05:20.868Z" },
         ]
+        build-hashes = [
+            "sha256:1988f364ec8caf87a6ee5d5a3a5210d57539988bf8e84714c7d60972692e2f4a",
+            "sha256:76980cd3d7ae87e3c7a33bfebfaee84448fd650bad6840471d6cae199b56e154",
+        ]
 
         [[package]]
         name = "pyqt5-qt5"
@@ -38075,6 +38244,12 @@ fn lock_arm() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/4c/0c/9c603826b6465e82591e05ca230dfc13376da512b25ccd0894709b054ed0/numpy-1.26.4-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:ab47dbe5cc8210f55aa58e4805fe224dac469cde56b9f731a4c098b91917159a", size = 13572172, upload-time = "2024-02-05T23:57:21.56Z" },
             { url = "https://files.pythonhosted.org/packages/16/2e/86f24451c2d530c88daf997cb8d6ac622c1d40d19f5a031ed68a4b73a374/numpy-1.26.4-cp312-cp312-win_amd64.whl", hash = "sha256:08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818", size = 15517754, upload-time = "2024-02-05T23:58:36.364Z" },
         ]
+        build-hashes = [
+            "sha256:1dda2e7b4ec9dd512f84935c5f126c8bd8b9f2fc001e9f54af255e8c5f16b0e0",
+            "sha256:50193e430acfc1346175fcbdaa28ffec49947a06918b7b92130744e81e640110",
+            "sha256:675d61ffbfa78604709862923189bad94014bef562cc35cf61d3a07bba02a7ed",
+            "sha256:b3ce300f3644fb06443ee2222c2201dd3a89ea6040541412b8fa189341847218",
+        ]
 
         [[package]]
         name = "project"
@@ -38149,6 +38324,12 @@ fn lock_x86_64() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/76/8c/2ba3902e1a0fc1c74962ea9bb33a534bb05984ad7ff9515bf8d07527cadd/numpy-1.26.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:1dda2e7b4ec9dd512f84935c5f126c8bd8b9f2fc001e9f54af255e8c5f16b0e0", size = 17786643, upload-time = "2024-02-05T23:57:56.585Z" },
             { url = "https://files.pythonhosted.org/packages/16/2e/86f24451c2d530c88daf997cb8d6ac622c1d40d19f5a031ed68a4b73a374/numpy-1.26.4-cp312-cp312-win_amd64.whl", hash = "sha256:08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818", size = 15517754, upload-time = "2024-02-05T23:58:36.364Z" },
         ]
+        build-hashes = [
+            "sha256:03a8c78d01d9781b28a6989f6fa1bb2c4f2d51201cf99d3dd875df6fbd96b23b",
+            "sha256:50193e430acfc1346175fcbdaa28ffec49947a06918b7b92130744e81e640110",
+            "sha256:9fad7dcb1aac3c7f0584a5a8133e3a43eeb2fe127f47e3632d43d677c66c102b",
+            "sha256:ab47dbe5cc8210f55aa58e4805fe224dac469cde56b9f731a4c098b91917159a",
+        ]
 
         [[package]]
         name = "project"
@@ -38219,6 +38400,15 @@ fn lock_x86() -> Result<()> {
         sdist = { url = "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz", hash = "sha256:2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010", size = 15786129, upload-time = "2024-02-06T00:26:44.495Z" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/28/4a/46d9e65106879492374999e76eb85f87b15328e06bd1550668f79f7b18c6/numpy-1.26.4-cp312-cp312-win32.whl", hash = "sha256:50193e430acfc1346175fcbdaa28ffec49947a06918b7b92130744e81e640110", size = 5677803, upload-time = "2024-02-05T23:58:08.963Z" },
+        ]
+        build-hashes = [
+            "sha256:03a8c78d01d9781b28a6989f6fa1bb2c4f2d51201cf99d3dd875df6fbd96b23b",
+            "sha256:08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818",
+            "sha256:1dda2e7b4ec9dd512f84935c5f126c8bd8b9f2fc001e9f54af255e8c5f16b0e0",
+            "sha256:675d61ffbfa78604709862923189bad94014bef562cc35cf61d3a07bba02a7ed",
+            "sha256:9fad7dcb1aac3c7f0584a5a8133e3a43eeb2fe127f47e3632d43d677c66c102b",
+            "sha256:ab47dbe5cc8210f55aa58e4805fe224dac469cde56b9f731a4c098b91917159a",
+            "sha256:b3ce300f3644fb06443ee2222c2201dd3a89ea6040541412b8fa189341847218",
         ]
 
         [[package]]
@@ -40030,6 +40220,10 @@ fn lock_intel_mac() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ae/71/1c91302526c45ab494c23f61c7a84aa568b8c1f9d196efa5993957faf906/nvidia_cublas_cu12-12.4.5.8-py3-none-manylinux2014_x86_64.whl", hash = "sha256:2fc8da60df463fdefa81e323eef2e36489e1c94335b5358bcb38360adf75ac9b", size = 363438805, upload-time = "2024-04-03T20:57:06.025Z" },
         ]
+        build-hashes = [
+            "sha256:0f8aa1706812e00b9f19dfe0cdb3999b092ccb8ca168c0db5b8ea712456fd9b3",
+            "sha256:5a796786da89203a0657eda402bcdcec6180254a8ac22d72213abc42069522dc",
+        ]
 
         [[package]]
         name = "nvidia-cuda-cupti-cu12"
@@ -40037,6 +40231,10 @@ fn lock_intel_mac() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/67/42/f4f60238e8194a3106d06a058d494b18e006c10bb2b915655bd9f6ea4cb1/nvidia_cuda_cupti_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:9dec60f5ac126f7bb551c055072b69d85392b13311fcc1bcda2202d172df30fb", size = 13813957, upload-time = "2024-04-03T20:55:01.564Z" },
+        ]
+        build-hashes = [
+            "sha256:5688d203301ab051449a2b1cb6690fbe90d2b372f411521c86018b950f3d7922",
+            "sha256:79279b35cf6f91da114182a5ce1864997fd52294a87a16179ce275773799458a",
         ]
 
         [[package]]
@@ -40046,6 +40244,10 @@ fn lock_intel_mac() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/2c/14/91ae57cd4db3f9ef7aa99f4019cfa8d54cb4caa7e00975df6467e9725a9f/nvidia_cuda_nvrtc_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:a178759ebb095827bd30ef56598ec182b85547f1508941a3d560eb7ea1fbf338", size = 24640306, upload-time = "2024-04-03T20:56:01.463Z" },
         ]
+        build-hashes = [
+            "sha256:0eedf14185e04b76aa05b1fea04133e59f465b6f960c0cbf4e37c3cb6b0ea198",
+            "sha256:a961b2f1d5f17b14867c619ceb99ef6fcec12e46612711bcec78eb05068a60ec",
+        ]
 
         [[package]]
         name = "nvidia-cuda-runtime-cu12"
@@ -40053,6 +40255,10 @@ fn lock_intel_mac() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ea/27/1795d86fe88ef397885f2e580ac37628ed058a92ed2c39dc8eac3adf0619/nvidia_cuda_runtime_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:64403288fa2136ee8e467cdc9c9427e0434110899d07c779f25b5c068934faa5", size = 883737, upload-time = "2024-04-03T20:54:51.355Z" },
+        ]
+        build-hashes = [
+            "sha256:09c2e35f48359752dfa822c09918211844a3d93c100a715d79b59591130c5e1e",
+            "sha256:961fe0e2e716a2a1d967aab7caee97512f71767f852f67432d572e36cb3a11f3",
         ]
 
         [[package]]
@@ -40065,6 +40271,9 @@ fn lock_intel_mac() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741, upload-time = "2024-04-22T15:24:15.253Z" },
         ]
+        build-hashes = [
+            "sha256:6278562929433d68365a07a4a1546c237ba2849852c0d4b2262a486e805b977a",
+        ]
 
         [[package]]
         name = "nvidia-cufft-cu12"
@@ -40076,6 +40285,10 @@ fn lock_intel_mac() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/27/94/3266821f65b92b3138631e9c8e7fe1fb513804ac934485a8d05776e1dd43/nvidia_cufft_cu12-11.2.1.3-py3-none-manylinux2014_x86_64.whl", hash = "sha256:f083fc24912aa410be21fa16d157fed2055dab1cc4b6934a0e03cba69eb242b9", size = 211459117, upload-time = "2024-04-03T20:57:40.402Z" },
         ]
+        build-hashes = [
+            "sha256:5dad8008fc7f92f5ddfa2101430917ce2ffacd86824914c82e28990ad7f00399",
+            "sha256:d802f4954291101186078ccbe22fc285a902136f974d369540fd4a5333d1440b",
+        ]
 
         [[package]]
         name = "nvidia-curand-cu12"
@@ -40083,6 +40296,10 @@ fn lock_intel_mac() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/8a/6d/44ad094874c6f1b9c654f8ed939590bdc408349f137f9b98a3a23ccec411/nvidia_curand_cu12-10.3.5.147-py3-none-manylinux2014_x86_64.whl", hash = "sha256:a88f583d4e0bb643c49743469964103aa59f7f708d862c3ddb0fc07f851e3b8b", size = 56305206, upload-time = "2024-04-03T20:58:08.722Z" },
+        ]
+        build-hashes = [
+            "sha256:1f173f09e3e3c76ab084aba0de819c49e56614feae5c12f69883f4ae9bb5fad9",
+            "sha256:f307cc191f96efe9e8f05a87096abc20d08845a841889ef78cb06924437f6771",
         ]
 
         [[package]]
@@ -40097,6 +40314,10 @@ fn lock_intel_mac() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/3a/e1/5b9089a4b2a4790dfdea8b3a006052cfecff58139d5a4e34cb1a51df8d6f/nvidia_cusolver_cu12-11.6.1.9-py3-none-manylinux2014_x86_64.whl", hash = "sha256:19e33fa442bcfd085b3086c4ebf7e8debc07cfe01e11513cc6d332fd918ac260", size = 127936057, upload-time = "2024-04-03T20:58:28.735Z" },
         ]
+        build-hashes = [
+            "sha256:d338f155f174f90724bbde3758b7ac375a70ce8e706d70b018dd3375545fc84e",
+            "sha256:e77314c9d7b694fcebc84f58989f3aa4fb4cb442f12ca1a9bde50f5e8f6d1b9c",
+        ]
 
         [[package]]
         name = "nvidia-cusparse-cu12"
@@ -40107,6 +40328,10 @@ fn lock_intel_mac() -> Result<()> {
         ]
         wheels = [
             { url = "https://files.pythonhosted.org/packages/db/f7/97a9ea26ed4bbbfc2d470994b8b4f338ef663be97b8f677519ac195e113d/nvidia_cusparse_cu12-12.3.1.170-py3-none-manylinux2014_x86_64.whl", hash = "sha256:ea4f11a2904e2a8dc4b1833cc1b5181cde564edd0d5cd33e3c168eff2d1863f1", size = 207454763, upload-time = "2024-04-03T20:58:59.995Z" },
+        ]
+        build-hashes = [
+            "sha256:9bc90fb087bc7b4c15641521f31c0371e9a612fc2ba12c338d3ae032e6b6797f",
+            "sha256:9d32f62896231ebe0480efd8a7f702e143c98cfaa0e8a76df3386c1ba2b54df3",
         ]
 
         [[package]]
@@ -40124,6 +40349,10 @@ fn lock_intel_mac() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/ff/ff/847841bacfbefc97a00036e0fce5a0f086b640756dc38caea5e1bb002655/nvidia_nvjitlink_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:06b3b9b25bf3f8af351d664978ca26a16d2c5127dbd53c0497e28d1fb9611d57", size = 21066810, upload-time = "2024-04-03T20:59:46.957Z" },
         ]
+        build-hashes = [
+            "sha256:4abe7fef64914ccfa909bc2ba39739670ecc9e820c83ccc7a6ed414122599b83",
+            "sha256:fd9020c501d27d135f983c6d3e244b197a7ccad769e34df53a42e276b0e25fa1",
+        ]
 
         [[package]]
         name = "nvidia-nvtx-cu12"
@@ -40131,6 +40360,10 @@ fn lock_intel_mac() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/87/20/199b8713428322a2f22b722c62b8cc278cc53dffa9705d744484b5035ee9/nvidia_nvtx_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl", hash = "sha256:781e950d9b9f60d8241ccea575b32f5105a5baf4c2351cab5256a24869f12a1a", size = 99144, upload-time = "2024-04-03T20:56:12.406Z" },
+        ]
+        build-hashes = [
+            "sha256:641dccaaa1139f3ffb0d3164b4b84f9d253397e38246a4f2f36728b48566d485",
+            "sha256:7959ad635db13edf4fc65c06a6e9f9e55fc2f92596db928d169c0bb031e88ef3",
         ]
 
         [[package]]
@@ -40184,6 +40417,16 @@ fn lock_intel_mac() -> Result<()> {
         wheels = [
             { url = "https://files.pythonhosted.org/packages/3f/14/e105b8ef6d324e789c1589e95cb0ab63f3e07c2216d68b1178b7c21b7d2a/torch-2.2.2-cp311-none-macosx_10_9_x86_64.whl", hash = "sha256:95b9b44f3bcebd8b6cd8d37ec802048c872d9c567ba52c894bba90863a439059", size = 150796474, upload-time = "2024-03-27T21:09:29.142Z" },
             { url = "https://files.pythonhosted.org/packages/79/78/29dcab24a344ffd9ee9549ec0ab2c7885c13df61cde4c65836ee275efaeb/torch-2.2.2-cp312-none-macosx_10_9_x86_64.whl", hash = "sha256:eb4d6e9d3663e26cd27dc3ad266b34445a16b54908e74725adb241aa56987533", size = 150797270, upload-time = "2024-03-27T21:08:29.623Z" },
+        ]
+        build-hashes = [
+            "sha256:32827fa1fbe5da8851686256b4cd94cc7b11be962862c2293811c94eea9457bf",
+            "sha256:451331406b760f4b1ab298ddd536486ab3cfb1312614cfe0532133535be60bea",
+            "sha256:49aa4126ede714c5aeef7ae92969b4b0bbe67f19665106463c39f22e0a1860d1",
+            "sha256:89ddac2a8c1fb6569b90890955de0c34e1724f87431cacff4c1979b5f769203c",
+            "sha256:ad4c03b786e074f46606f4151c0a1e3740268bcf29fbd2fdf6666d66341c1dcb",
+            "sha256:bf9558da7d2bf7463390b3b2a61a6a3dbb0b45b161ee1dd5ec640bf579d479fc",
+            "sha256:cf12cdb66c9c940227ad647bc9cf5dba7e8640772ae10dfe7569a0c1e2a28aca",
+            "sha256:f9ef0a648310435511e76905f9b89612e45ef2c8b023bee294f5e6f7e73a3e7c",
         ]
 
         [[package]]
@@ -40655,6 +40898,10 @@ fn windows_arm() -> Result<()> {
         source = { registry = "https://pypi.org/simple" }
         wheels = [
             { url = "https://files.pythonhosted.org/packages/21/27/0c8811fbc3ca188f93b5354e7c286eb91f80a53afa4e11007ef661afa746/pywin32-308-cp312-cp312-win_amd64.whl", hash = "sha256:00b3e11ef09ede56c6a43c71f2d31857cf7c54b0ab6e78ac659497abd2834f47", size = 6543015, upload-time = "2024-10-12T20:42:14.044Z" },
+        ]
+        build-hashes = [
+            "sha256:587f3e19696f4bf96fde9d8a57cec74a57021ad5f204c9e627e15c33ff568897",
+            "sha256:9b4de86c8d909aed15b7011182c8cab38c8850de36e6afb1f0db22b8959e3091",
         ]
 
         [[package]]
@@ -43748,6 +43995,17 @@ fn lock_android() -> Result<()> {
             { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_arm64_v8a.whl", hash = "sha256:a09292118bd3cbe9133c410c8228399a65467f1bcacbfbd35ffa27a2c1e8b3c3", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/deltachat_rpc_server-1.159.5-py3-none-android_21_armeabi_v7a.whl", hash = "sha256:fcedd34dfec4397a5f516266e7d38237b01133e2fbfe29f08140d04cf8ea5b64", upload-time = "2024-03-24T00:00:00Z" },
         ]
+        build-hashes = [
+            "sha256:08e3a635e20140a43c035a5661358ad86f26ea42c82fb05a041d44272a8736c1",
+            "sha256:2567f1fd7cc47da12de43e45716eed16d750ef5648e8f8f39ceb7e02c03d87b3",
+            "sha256:25f373c0498dc03760b39b710a38684c0f756bbecee7d3683b478def6541a847",
+            "sha256:4266ef338c8440536a694e2b027830e166efce47acbf206b450c89ad9d419ce8",
+            "sha256:5347ede8980554426148fc00b3957462cf666b3533cfe49831516fa98423e795",
+            "sha256:74e512b28749e2e7f78d4e3dc69b24de4f6cb106cef77cd2e721c55e7e2934be",
+            "sha256:82eccfae414a3caaea88e18730675d1e834a15c114a080c3e778dd1f95785410",
+            "sha256:9a3b9055a8f724ae2628dbf555ad683f6a7aa34c8aaf44aaa94060a7876034cd",
+            "sha256:dda1edd03c45797e83538719b9a7d903d1f105658c99373deb7bd9f4fed8c3f8",
+        ]
 
         [[package]]
         name = "project"
@@ -43836,6 +44094,11 @@ fn lock_android_no_sdist() -> Result<()> {
             { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-android_24_arm64_v8a.whl", hash = "sha256:0ca4362b6fd0e0c4044748dadb03809fa79d45c6da46d3954342ee8713d8b304", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-android_24_x86_64.whl", hash = "sha256:71fe9d1ad3501930e6b78d222dace8d8e007e5a8e506702080549f4b5d711d12", upload-time = "2024-03-24T00:00:00Z" },
         ]
+        build-hashes = [
+            "sha256:1171aa11dec32e1a173fa0ad723247d878922d3f4b0caab8badb0a7125658c91",
+            "sha256:3afc2a98a4799f041e324398ee7c8f9eb97ff68eaf2a5e8bd5a3cfee9964ff98",
+            "sha256:47fe2eb4701e00dd4f5ff50fcc21d48af08b6bff3c6e6f1adbc200f597d44075",
+        ]
 
         [[package]]
         name = "project"
@@ -43915,6 +44178,13 @@ fn lock_required_intersection() -> Result<()> {
             { url = "https://files.pythonhosted.org/packages/75/5b/ca6c8bd14007e5ca171c7c03102d17b4f4e0ceb53957e8c44343a9546dcc/numpy-1.26.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:03a8c78d01d9781b28a6989f6fa1bb2c4f2d51201cf99d3dd875df6fbd96b23b", size = 13685868, upload-time = "2024-02-05T23:55:56.28Z" },
             { url = "https://files.pythonhosted.org/packages/0f/50/de23fde84e45f5c4fda2488c759b69990fd4512387a8632860f3ac9cd225/numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:675d61ffbfa78604709862923189bad94014bef562cc35cf61d3a07bba02a7ed", size = 17950613, upload-time = "2024-02-05T23:56:56.054Z" },
             { url = "https://files.pythonhosted.org/packages/76/8c/2ba3902e1a0fc1c74962ea9bb33a534bb05984ad7ff9515bf8d07527cadd/numpy-1.26.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:1dda2e7b4ec9dd512f84935c5f126c8bd8b9f2fc001e9f54af255e8c5f16b0e0", size = 17786643, upload-time = "2024-02-05T23:57:56.585Z" },
+        ]
+        build-hashes = [
+            "sha256:08beddf13648eb95f8d867350f6a018a4be2e5ad54c8d8caed89ebca558b2818",
+            "sha256:50193e430acfc1346175fcbdaa28ffec49947a06918b7b92130744e81e640110",
+            "sha256:9fad7dcb1aac3c7f0584a5a8133e3a43eeb2fe127f47e3632d43d677c66c102b",
+            "sha256:ab47dbe5cc8210f55aa58e4805fe224dac469cde56b9f731a4c098b91917159a",
+            "sha256:b3ce300f3644fb06443ee2222c2201dd3a89ea6040541412b8fa189341847218",
         ]
 
         [[package]]
