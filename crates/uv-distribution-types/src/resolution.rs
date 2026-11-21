@@ -1,5 +1,6 @@
 use uv_distribution_filename::DistExtension;
 use uv_normalize::{ExtraName, GroupName, PackageName};
+use uv_pep440::Version;
 use uv_pypi_types::{HashDigest, HashDigests};
 use uv_redacted::policy::Raw;
 
@@ -43,12 +44,7 @@ impl Resolution {
         self.graph
             .node_indices()
             .filter_map(move |node| match &self.graph[node] {
-                Node::Dist {
-                    dist,
-                    hashes,
-                    install,
-                    ..
-                } if *install => Some((dist, hashes.as_slice())),
+                Node::Dist { dist, hashes } => Some((dist, hashes.as_slice())),
                 _ => None,
             })
     }
@@ -59,7 +55,7 @@ impl Resolution {
             .raw_nodes()
             .iter()
             .filter_map(|node| match &node.weight {
-                Node::Dist { dist, install, .. } if *install => Some(dist),
+                Node::Dist { dist, .. } => Some(dist),
                 _ => None,
             })
     }
@@ -83,10 +79,13 @@ impl Resolution {
     #[must_use]
     pub fn filter(mut self, predicate: impl Fn(&ResolvedDist) -> bool) -> Self {
         for node in self.graph.node_weights_mut() {
-            if let Node::Dist { dist, install, .. } = node {
-                if !predicate(dist) {
-                    *install = false;
-                }
+            if let Node::Dist { dist, .. } = node
+                && !predicate(dist)
+            {
+                *node = Node::Excluded {
+                    name: dist.name().clone(),
+                    version: dist.version().cloned(),
+                };
             }
         }
         self
@@ -177,7 +176,7 @@ impl Diagnostic for ResolutionDiagnostic {
     }
 }
 
-/// A node in the resolution, along with whether its been filtered out.
+/// A node in the resolution.
 ///
 /// We retain filtered nodes as we still need to be able to trace dependencies through the graph
 /// (e.g., to determine why a package was included in the resolution).
@@ -187,7 +186,10 @@ pub enum Node {
     Dist {
         dist: ResolvedDist,
         hashes: HashDigests,
-        install: bool,
+    },
+    Excluded {
+        name: PackageName,
+        version: Option<Version>,
     },
 }
 
