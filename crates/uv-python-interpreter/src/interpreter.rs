@@ -1225,12 +1225,27 @@ impl BrokenLink {
         self.venv
     }
 
-    /// Return the path of the broken link and its target if known.
-    pub fn into_paths(self) -> (PathBuf, Option<PathBuf>) {
-        let target = match self.kind {
-            BrokenLinkKind::Symlink(target) | BrokenLinkKind::Trampoline(target) => target,
-        };
-        (self.path, target)
+    fn target(&self) -> Option<&Path> {
+        match &self.kind {
+            BrokenLinkKind::Symlink(target) | BrokenLinkKind::Trampoline(target) => {
+                target.as_deref()
+            }
+        }
+    }
+
+    /// Format a warning for a caller skipping the environment containing this link.
+    pub fn ignored_environment_warning(&self) -> impl Display + '_ {
+        std::fmt::from_fn(|f| {
+            f.write_str(
+                "Ignoring existing virtual environment linked to non-existent Python interpreter: ",
+            )?;
+            let path = self.path.user_display();
+            if let Some(target) = self.target() {
+                write!(f, "`{}` -> `{}`", path.cyan(), target.user_display().cyan())
+            } else {
+                write!(f, "{}", path.cyan())
+            }
+        })
     }
 }
 
@@ -2381,7 +2396,8 @@ mod tests {
         let Err(Error::BrokenLink(link)) = resolve() else {
             anyhow::bail!("expected a broken trampoline");
         };
-        assert_eq!(link.into_paths(), (proxy.clone(), Some(first)));
+        assert_eq!(link.path, proxy);
+        assert_eq!(link.target(), Some(first.as_path()));
 
         // The target read before the lookup can belong to a replaced launcher.
         fs::write(

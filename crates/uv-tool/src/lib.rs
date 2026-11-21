@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use fs_err as fs;
 use fs_err::File;
-use owo_colors::OwoColorize;
 use thiserror::Error;
 use tracing::{debug, warn};
 
@@ -297,19 +296,7 @@ impl InstalledTools {
             Err(uv_python_interpreter::PythonEnvironmentError::Query(
                 uv_python_interpreter::InterpreterError::BrokenLink(link),
             )) => {
-                let (path, target) = link.into_paths();
-                if let Some(target_path) = target {
-                    warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: `{}` -> `{}`",
-                        path.user_display().cyan(),
-                        target_path.user_display().cyan(),
-                    );
-                } else {
-                    warn!(
-                        "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                        path.user_display().cyan(),
-                    );
-                }
+                warn!("{}", link.ignored_environment_warning());
 
                 Ok(None)
             }

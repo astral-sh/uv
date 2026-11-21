@@ -243,19 +243,7 @@ fn existing_project_environment(
         Err(uv_python_interpreter::PythonEnvironmentError::Query(
             uv_python_interpreter::InterpreterError::BrokenLink(link),
         )) => {
-            let (path, target) = link.into_paths();
-            if let Some(target_path) = target {
-                warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: `{}` -> `{}`",
-                    path.user_display().cyan(),
-                    target_path.user_display().cyan(),
-                );
-            } else {
-                warn_user!(
-                    "Ignoring existing virtual environment linked to non-existent Python interpreter: {}",
-                    path.user_display().cyan(),
-                );
-            }
+            warn_user!("{}", link.ignored_environment_warning());
             return Ok(None);
         }
         Err(err) => return Err(err.into()),
