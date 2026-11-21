@@ -971,25 +971,28 @@ fn long_stored_paths_can_be_rewritten() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("script.exe");
     let replacement = which::which("python")?;
-    let python = replacement
-        .with_file_name(r".\".repeat(50_000))
-        .join(replacement.file_name().unwrap());
-    assert!(python.as_os_str().len() > 3 * 32_767);
+    let proxy = temp_dir.child("proxy.exe");
+    fs_err::write(
+        proxy.path(),
+        windows_python_launcher(&replacement, WindowMode::Console)?,
+    )?;
+    let python = format!("{}proxy.exe", r".\".repeat(50_000));
     fs_err::write(
         path.path(),
         windows_script_launcher("print('long path')", false, &python)?,
     )?;
-    Command::new(path.path())
+    // Joining a relative target to a verbatim launcher path collapses the
+    // redundant components before the trampoline asks Windows to open it.
+    Command::new(fs_err::canonicalize(path.path())?)
         .assert()
         .success()
         .stdout("long path\r\n");
     let launcher = Launcher::try_from_path(path.path())?.context("Missing script launcher")?;
-    assert_eq!(launcher.python_path().as_os_str(), python.as_os_str());
+    assert_eq!(launcher.python_path().as_os_str(), python.as_str());
     launcher
         .with_python_path(&replacement)?
         .write_to_file(&mut File::create(path.path())?)?;
-    let launcher = Launcher::try_from_path(path.path())?.context("Missing rewritten launcher")?;
-    assert_eq!(launcher.python_path().as_os_str(), replacement.as_os_str());
+    fs_err::remove_file(proxy.path())?;
     Command::new(path.path())
         .assert()
         .success()
