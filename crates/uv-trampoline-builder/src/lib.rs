@@ -188,6 +188,12 @@ pub enum Error {
     #[cfg(windows)]
     #[error("The Python path resource is too large for an interpreter lookup")]
     PathResourceTooLarge,
+    #[cfg(windows)]
+    #[error("The launcher target `{}` depends on the working directory for its drive", path.user_display())]
+    DriveRelativeTarget { path: PathBuf },
+    #[cfg(windows)]
+    #[error("WOW64 may redirect the launcher target `{}`", path.user_display())]
+    PotentiallyRedirectedTarget { path: PathBuf },
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]

@@ -879,7 +879,7 @@ fn wow64_proxy_target_depends_on_the_launchers_view() -> Result<()> {
     fs_err::write(proxy.path(), bytes)?;
     assert!(matches!(
         super::read_launcher_target(proxy.path()),
-        Err(super::Error::UnprocessableMetadata)
+        Err(super::Error::PotentiallyRedirectedTarget { path }) if path == redirected
     ));
 
     fs_err::write(
@@ -1081,7 +1081,7 @@ fn drive_relative_target_cannot_establish_ownership() -> Result<()> {
     )?;
     assert!(matches!(
         super::read_launcher_target(path.path()),
-        Err(super::Error::UnprocessableMetadata)
+        Err(super::Error::DriveRelativeTarget { path }) if path == target
     ));
     let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
     assert_eq!(launcher.python_path(), target);

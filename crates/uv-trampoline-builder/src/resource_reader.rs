@@ -106,11 +106,11 @@ pub(super) fn read_target(file: File) -> Result<Option<(LauncherKind, PathBuf)>,
         // A drive-relative target such as C:python.exe depends on the
         // working directory for that drive even after the join.
         if target.is_relative() {
-            return Err(Error::UnprocessableMetadata);
+            return Err(Error::DriveRelativeTarget { path: target });
         }
     }
     if file.resources.view.may_redirect(&target)? {
-        return Err(Error::UnprocessableMetadata);
+        return Err(Error::PotentiallyRedirectedTarget { path: target });
     }
     Ok(Some((file.kind, target)))
 }
