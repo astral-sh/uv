@@ -328,7 +328,7 @@ pub struct ManagedPythonInstallation {
 }
 
 /// The operation for which a managed executable link is being identified.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinLinkOperation {
     Install,
     Uninstall,
@@ -1140,62 +1140,95 @@ mod tests {
     };
 
     #[cfg(windows)]
-    #[test]
-    fn proxy_ownership_through_minor_version_junction() -> anyhow::Result<()> {
-        let dir = tempfile::tempdir()?;
-        let root = dir.path().join("managed");
-        let alias = dir.path().join("alias");
-        fs_err::create_dir(&root)?;
-        replace_symlink(&root, &alias)?;
-        let bin = dir.path().join("bin");
-        fs_err::create_dir(&bin)?;
-        let proxy = bin.join("python.exe");
-        for (key, freethreaded) in [
-            ("cpython-3.13.1-windows-x86_64-none", false),
-            ("cpython-3.13.1+freethreaded-windows-x86_64-none", true),
-        ] {
-            let installed = root.join(key);
-            fs_err::create_dir(&installed)?;
-            replace_symlink(&installed, dir.path().join("current"))?;
-            let installation = ManagedPythonInstallation::from_path(alias.join(key))?;
-            for present in [false, true] {
-                if present {
-                    for name in ["python.exe", "python3.13t.exe", "other.exe"] {
-                        fs_err::write(installed.join(name), [])?;
-                    }
-                    // An external hard link to the same file belongs to a different directory.
-                    fs_err::hard_link(installed.join("python.exe"), dir.path().join("python.exe"))?;
-                }
-                for (target, owned) in [
-                    (r"..\current\python.exe", true),
-                    (r"..\current\python3.13t.exe", freethreaded),
-                    (r"..\current\other.exe", false),
-                    (r"..\python.exe", false),
-                ] {
-                    fs_err::write(
-                        &proxy,
-                        windows_python_launcher(target, WindowMode::Console)?,
-                    )?;
-                    for (operation, expected) in [
-                        (BinLinkOperation::Install, owned && present),
-                        (BinLinkOperation::Uninstall, owned),
-                    ] {
-                        let found = ManagedPythonInstallation::find_bin_link(
-                            &proxy,
-                            std::iter::once(&installation),
-                            operation,
-                        );
-                        assert_eq!(
-                            found.is_some(),
-                            expected,
-                            "{operation:?} {key}: {target} (present={present})"
-                        );
-                    }
-                }
-            }
-            fs_err::remove_file(dir.path().join("python.exe"))?;
+    mod proxy_ownership {
+        use super::BinLinkOperation::{Install, Uninstall};
+        use super::*;
+
+        const STANDARD: &str = "cpython-3.13.1-windows-x86_64-none";
+        const FREE_THREADED: &str = "cpython-3.13.1+freethreaded-windows-x86_64-none";
+
+        struct Fixture {
+            dir: tempfile::TempDir,
+            installation: ManagedPythonInstallation,
         }
-        Ok(())
+
+        impl Fixture {
+            fn new(key: &str) -> anyhow::Result<Self> {
+                let dir = tempfile::tempdir()?;
+                let root = dir.path().join("managed");
+                let installed = root.join(key);
+                fs_err::create_dir_all(&installed)?;
+                let alias = dir.path().join("alias");
+                replace_symlink(&root, &alias)?;
+                replace_symlink(&installed, dir.path().join("current"))?;
+                fs_err::create_dir(dir.path().join("bin"))?;
+                let installation = ManagedPythonInstallation::from_path(alias.join(key))?;
+                Ok(Self { dir, installation })
+            }
+
+            fn check(&self, target: &str, expected: &[BinLinkOperation]) -> anyhow::Result<()> {
+                let proxy = self.dir.path().join(r"bin\python.exe");
+                fs_err::write(
+                    &proxy,
+                    windows_python_launcher(target, WindowMode::Console)?,
+                )?;
+                for operation in [Install, Uninstall] {
+                    let owner = ManagedPythonInstallation::find_bin_link(
+                        &proxy,
+                        std::iter::once(&self.installation),
+                        operation,
+                    );
+                    assert_eq!(
+                        owner.is_some(),
+                        expected.contains(&operation),
+                        "{operation:?}: {target}"
+                    );
+                }
+                Ok(())
+            }
+        }
+
+        #[test]
+        fn live_targets_through_junctions() -> anyhow::Result<()> {
+            let fixture = Fixture::new(FREE_THREADED)?;
+            let installed = fixture.installation.path();
+            for name in ["python.exe", "python3.13t.exe", "other.exe"] {
+                fs_err::write(installed.join(name), [])?;
+            }
+            fs_err::hard_link(
+                installed.join("python.exe"),
+                fixture.dir.path().join("python.exe"),
+            )?;
+
+            fixture.check(r"..\current\python.exe", &[Install, Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[Install, Uninstall])?;
+            fixture.check(r"..\current\other.exe", &[])?;
+            fixture.check(r"..\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn dangling_targets_through_junctions() -> anyhow::Result<()> {
+            let fixture = Fixture::new(FREE_THREADED)?;
+            fixture.check(r"..\current\python.exe", &[Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[Uninstall])?;
+            fixture.check(r"..\current\other.exe", &[])?;
+            fixture.check(r"..\python.exe", &[])?;
+            Ok(())
+        }
+
+        #[test]
+        fn standard_installation_owns_only_standard_name() -> anyhow::Result<()> {
+            let fixture = Fixture::new(STANDARD)?;
+            fixture.check(r"..\current\python.exe", &[Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[])?;
+            for name in ["python.exe", "python3.13t.exe"] {
+                fs_err::write(fixture.installation.path().join(name), [])?;
+            }
+            fixture.check(r"..\current\python.exe", &[Install, Uninstall])?;
+            fixture.check(r"..\current\python3.13t.exe", &[])?;
+            Ok(())
+        }
     }
 
     fn create_test_installation(
