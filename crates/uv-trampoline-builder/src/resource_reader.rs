@@ -53,9 +53,7 @@ enum Languages {
 }
 
 pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>, Error> {
-    let Lookup::Found((mut resources, kind_languages)) =
-        Resources::open_launcher(path).ok_or(Error::UnprocessableMetadata)?
-    else {
+    let Some((mut resources, kind_languages)) = Resources::open_launcher(path)? else {
         return Ok(None);
     };
     let (kind, target) = resources
@@ -77,8 +75,7 @@ pub(super) fn read_target(path: &Path) -> Result<Option<(LauncherKind, PathBuf)>
 }
 
 pub(super) fn read_launcher(path: &Path) -> Result<Option<Launcher>, Error> {
-    let Some(Lookup::Found((mut resources, kind_languages))) = Resources::open_launcher(path)
-    else {
+    let Ok(Some((mut resources, kind_languages))) = Resources::open_launcher(path) else {
         return Ok(None);
     };
     let Some((kind, python_path)) = resources.target(kind_languages)? else {
@@ -113,15 +110,23 @@ struct Resources {
 }
 
 impl Resources {
-    /// Find the kind resource's language directory. Return `None` when the
-    /// file can't establish whether the loader can find the resource.
-    fn open_launcher(path: &Path) -> Option<Lookup<(Self, u32)>> {
+    fn open_launcher(path: &Path) -> Result<Option<(Self, u32)>, Error> {
         let file = match File::open(path) {
             Ok(file) => file,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Some(Lookup::Missing),
-            Err(_) => return None,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(err) => return Err(err.into()),
         };
-        let file_size = file.metadata().ok()?.len();
+        let file_size = file.metadata()?.len();
+        match Self::find_launcher(file, file_size) {
+            Some(Lookup::Found(launcher)) => Ok(Some(launcher)),
+            Some(Lookup::Missing) => Ok(None),
+            None => Err(Error::UnprocessableMetadata),
+        }
+    }
+
+    /// Find the kind resource's language directory. Return `None` when the
+    /// file can't establish whether the loader can find the resource.
+    fn find_launcher(file: File, file_size: u64) -> Option<Lookup<(Self, u32)>> {
         if file_size < u64::from(PE_PTR_OFFSET) + 4 {
             return Some(Lookup::Missing);
         }

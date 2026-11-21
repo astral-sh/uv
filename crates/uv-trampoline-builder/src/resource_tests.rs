@@ -379,6 +379,25 @@ fn deeply_nested_unrelated_resource() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn locked_executable_reports_target_lookup_error() -> Result<()> {
+    use fs_err::os::windows::fs::OpenOptionsExt;
+
+    let dir = assert_fs::TempDir::new()?;
+    let path = dir.child("locked.exe");
+    let _locked = fs_err::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .share_mode(0)
+        .open(path.path())?;
+    assert!(matches!(
+        super::read_launcher_target(path.path()),
+        Err(super::Error::Io(_))
+    ));
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
 /// MUI configuration permits the loader to obtain any launcher resource from a sidecar.
 #[test]
 fn mui_configuration_precludes_launcher_identification() -> Result<()> {
