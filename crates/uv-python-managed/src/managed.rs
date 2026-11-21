@@ -662,16 +662,7 @@ impl ManagedPythonInstallation {
 
     fn owns_missing_executable(&self, target: &Path) -> bool {
         // The parent of a missing interpreter can still resolve through a minor version junction.
-        let matches = |path: PathBuf| {
-            path == target
-                || (path.file_name() == target.file_name()
-                    && path
-                        .parent()
-                        .zip(target.parent())
-                        .is_some_and(|(dir, parent)| {
-                            same_file::is_same_file(dir, parent).unwrap_or_default()
-                        }))
-        };
+        let matches = |path: PathBuf| uv_fs::is_same_file_allow_missing(&path, target) == Some(true);
         // Either name could have been selected when the proxy was installed.
         let (standard, alternative) = self.executable_candidates(false);
         matches(standard) || alternative.is_some_and(matches)
