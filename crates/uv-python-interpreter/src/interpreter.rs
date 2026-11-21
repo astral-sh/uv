@@ -2025,16 +2025,18 @@ fn find_base_python(
     }
 }
 
-/// Return the configured Python home when its path has the same meaning for the interpreter.
+/// Return the Python home when the interpreter shares uv's view of both the config and its target.
 fn visible_python_home(interpreter: &Path) -> Option<PathBuf> {
-    let venv_root = interpreter.parent()?.parent()?;
-    let pyvenv_cfg = PyVenvConfiguration::parse(venv_root.join("pyvenv.cfg")).ok()?;
-    let home = pyvenv_cfg.home?;
+    let config = interpreter.parent()?.parent()?.join("pyvenv.cfg");
     #[cfg(windows)]
-    if uv_fs::wow64::FileSystemView::for_executable(interpreter)
-        .may_redirect(&home)
-        .ok()?
-    {
+    let view = uv_fs::wow64::FileSystemView::for_executable(interpreter);
+    #[cfg(windows)]
+    if view.may_redirect(&config).ok()? {
+        return None;
+    }
+    let home = PyVenvConfiguration::parse(config).ok()?.home?;
+    #[cfg(windows)]
+    if view.may_redirect(&home).ok()? {
         return None;
     }
     Some(home)
