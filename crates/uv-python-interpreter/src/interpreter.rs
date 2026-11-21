@@ -30,6 +30,7 @@ use uv_platform_tags::{CpuInfo, Platform, Tags, TagsError, TagsOptions};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{ResolverMarkerEnvironment, Scheme};
 use uv_static::EnvVars;
+use uv_trampoline_builder::LauncherKind;
 use uv_warnings::warn_user_once_with_chain;
 
 use crate::PointerSize;
@@ -906,7 +907,7 @@ pub fn canonicalize_executable(path: impl AsRef<Path>) -> std::io::Result<PathBu
 
 struct ExecutableTarget<'a> {
     absolute: &'a Path,
-    trampoline_target: Option<PathBuf>,
+    launcher: Option<(LauncherKind, PathBuf)>,
 }
 
 impl<'a> ExecutableTarget<'a> {
@@ -919,7 +920,7 @@ impl<'a> ExecutableTarget<'a> {
         match uv_trampoline_builder::read_launcher_target(path) {
             Ok(launcher) => Some(Self {
                 absolute: path,
-                trampoline_target: launcher.map(|(_, target)| target),
+                launcher,
             }),
             Err(err) => {
                 trace!("Unresolved launcher target for `{}`: {err}", path.display());
@@ -929,8 +930,8 @@ impl<'a> ExecutableTarget<'a> {
     }
 
     fn canonicalize(&self) -> io::Result<PathBuf> {
-        match &self.trampoline_target {
-            Some(target) => dunce::canonicalize(target),
+        match &self.launcher {
+            Some((_, target)) => dunce::canonicalize(target),
             None if cfg!(windows) => Ok(self.absolute.to_path_buf()),
             None => fs_err::canonicalize(self.absolute),
         }
@@ -940,7 +941,7 @@ impl<'a> ExecutableTarget<'a> {
         // A uv launcher selects the interpreter from its resources; a stale
         // configured home says nothing about it. CPython's venv launcher
         // selects by home and reports localized errors when Python is removed.
-        if self.trampoline_target.is_none()
+        if self.launcher.is_none()
             && matches!(error, Error::StatusCode(_))
             && has_missing_python_home(executable)
         {
@@ -961,11 +962,11 @@ impl<'a> ExecutableTarget<'a> {
         // Unless the target is missing, let the probe decide if the launcher
         // works. An error resolving a cache input would stop Python discovery,
         // even when the failure is local to one launcher (e.g., a junction loop).
-        if let Some(target) = &self.trampoline_target {
+        if let Some((_, target)) = &self.launcher {
             if err.kind() == io::ErrorKind::NotFound
                 && matches!(target.try_exists(), Ok(false))
-                && let Some(current) =
-                    Self::identify(self.absolute).and_then(|launcher| launcher.trampoline_target)
+                && let Some((_, current)) =
+                    Self::identify(self.absolute).and_then(|target| target.launcher)
                 && current == *target
             {
                 return Err(Error::BrokenLink(BrokenLink::new(
@@ -1014,6 +1015,11 @@ impl<'a> CacheTarget<'a> {
         let Some(canonical) = target.cache_input(executable, target.canonicalize())? else {
             return Ok(None);
         };
+        // A script runs its embedded payload. Even if it forwards a probe to
+        // Python, its stored interpreter path cannot identify the result.
+        if matches!(target.launcher, Some((LauncherKind::Script, _))) {
+            return Ok(None);
+        }
         Ok(Some(Self { target, canonical }))
     }
 
@@ -1040,7 +1046,7 @@ impl<'a> CacheTarget<'a> {
         // Python can report the launcher's junction path as its base executable.
         // Retargeting via another junction can change that path while leaving
         // the canonical interpreter and the launcher's timestamp unchanged.
-        let digest = if let Some(target) = &self.target.trampoline_target {
+        let digest = if let Some((_, target)) = &self.target.launcher {
             cache_digest(&("verified-launcher", key, target))
         } else {
             cache_digest(&key)
@@ -1065,7 +1071,8 @@ impl<'a> CacheTarget<'a> {
 
     #[cfg(windows)]
     fn snapshot_links(&self) -> Option<LinkSnapshot> {
-        LinkSnapshot::capture(self.target.trampoline_target.as_deref()?, &self.canonical)
+        let (_, path) = self.target.launcher.as_ref()?;
+        LinkSnapshot::capture(path, &self.canonical)
     }
 
     /// Check that the launcher still resolves to the interpreter that answered the probe.
@@ -1081,9 +1088,7 @@ impl<'a> CacheTarget<'a> {
         let Ok(Some(current)) = Self::resolve(self.target.absolute, self.target.absolute) else {
             return false;
         };
-        if current.target.trampoline_target != self.target.trampoline_target
-            || current.canonical != self.canonical
-        {
+        if current.target.launcher != self.target.launcher || current.canonical != self.canonical {
             return false;
         }
         let Ok(base) = std::path::absolute(dunce::simplified(base)) else {
@@ -1114,7 +1119,7 @@ impl<'a> CacheTarget<'a> {
         }
 
         #[cfg(windows)]
-        if self.target.trampoline_target.is_some()
+        if self.target.launcher.is_some()
             && !self.launcher_matches_probe(wire.metadata.sys_base_executable.as_deref(), links)
         {
             return false;
@@ -2128,7 +2133,7 @@ mod tests {
     use uv_pep440::Version;
     use uv_platform_tags::CpuInfo;
     #[cfg(windows)]
-    use uv_trampoline_builder::{WindowMode, windows_python_launcher};
+    use uv_trampoline_builder::{WindowMode, windows_python_launcher, windows_script_launcher};
 
     use crate::Interpreter;
     use crate::interpreter::{
@@ -2568,6 +2573,47 @@ mod tests {
 
     #[cfg(windows)]
     #[tokio::test]
+    async fn script_replacing_proxy_bypasses_cache() -> Result<()> {
+        let dir = tempdir()?;
+        let executable = dir.path().join("python.exe");
+        let target = dir.path().join("base.exe");
+        fs::write(&target, [])?;
+        let replace = |bytes| -> io::Result<()> {
+            fs::write(&executable, bytes)?;
+            fs::OpenOptions::new()
+                .write(true)
+                .open(&executable)?
+                .set_modified(UNIX_EPOCH)
+        };
+        let cache = Cache::temp()?.init().await?;
+        let mut probes = 0;
+        let mut probe = || {
+            probes += 1;
+            let mut response =
+                mocked_interpreter_response(&executable).expect("Valid mocked metadata");
+            response.metadata.sys_base_executable = Some(target.clone());
+            Ok((response, None))
+        };
+
+        replace(windows_python_launcher("base.exe", WindowMode::Console)?)?;
+        InterpreterInfo::query_cached(&executable, &cache, &mut probe)?;
+        InterpreterInfo::query_cached(&executable, &cache, unexpected_probe)?;
+
+        // The script runs its own entry point even with the same interpreter
+        // path and modification time as the cached proxy.
+        replace(windows_script_launcher(
+            "print('script')",
+            false,
+            "base.exe",
+        )?)?;
+        InterpreterInfo::query_cached(&executable, &cache, &mut probe)?;
+        InterpreterInfo::query_cached(&executable, &cache, probe)?;
+        assert_eq!(probes, 3);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
     async fn direct_launcher_cache_tracks_target() -> Result<()> {
         let dir = tempdir()?;
         let proxy = dir.path().join("python.exe");
@@ -2761,7 +2807,7 @@ mod tests {
         CacheTarget {
             target: ExecutableTarget {
                 absolute: proxy,
-                trampoline_target: None,
+                launcher: None,
             },
             canonical: proxy.to_path_buf(),
         }
