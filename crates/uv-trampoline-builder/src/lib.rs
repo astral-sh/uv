@@ -53,6 +53,11 @@ const RESOURCE_PYTHON_PATH: &str = "UV_PYTHON_PATH";
 #[cfg(windows)]
 const RESOURCE_SCRIPT_DATA: &str = "UV_SCRIPT_DATA";
 
+// An extended-length Windows path has at most 32,767 UTF-16 code units,
+// each contributing at most three bytes to the UTF-8 resource.
+#[cfg(windows)]
+const MAX_PYTHON_PATH_BYTES: usize = 3 * 32_767;
+
 /// Read the launcher kind and interpreter path without inspecting the script payload.
 /// Return a target only if it is absolute after resolving it against the launcher's directory.
 #[cfg(windows)]
@@ -165,6 +170,9 @@ pub enum Error {
     #[cfg(windows)]
     #[error("A Windows launcher requires a nonempty Python path")]
     EmptyPath,
+    #[cfg(windows)]
+    #[error("The Python path is too long for a Windows launcher")]
+    PathTooLong,
     #[error(
         "Unable to create Windows launcher for: {0} (only x86_64, x86, and arm64 are supported)"
     )]
@@ -273,6 +281,9 @@ fn encode_python_path(path: &Path) -> Result<String, Error> {
     let path = path.simplified_display().to_string();
     if path.is_empty() {
         return Err(Error::EmptyPath);
+    }
+    if path.len() > MAX_PYTHON_PATH_BYTES {
+        return Err(Error::PathTooLong);
     }
     Ok(path)
 }

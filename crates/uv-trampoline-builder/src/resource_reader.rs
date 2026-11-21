@@ -289,7 +289,8 @@ impl Resources {
         let Some(Lookup::Found(path)) = self.locate(RESOURCE_PYTHON_PATH) else {
             return Ok(None);
         };
-        if path.range.is_empty() {
+        let length = path.range.end - path.range.start;
+        if length == 0 || length > super::MAX_PYTHON_PATH_BYTES as u64 {
             return Ok(None);
         }
         let path = String::from_utf8(self.read(path.range)?)

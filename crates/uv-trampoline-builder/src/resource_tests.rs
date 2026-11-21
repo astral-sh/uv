@@ -664,6 +664,38 @@ fn empty_target_is_not_a_launcher() -> Result<()> {
 }
 
 #[test]
+fn interpreter_path_resource_size_limit() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("proxy.exe");
+    let mut python = "界".repeat(32_767);
+    fs_err::write(
+        path.path(),
+        windows_python_launcher(&python, WindowMode::Console)?,
+    )?;
+    let launcher = Launcher::try_from_path(path.path())?.context("Missing Python proxy")?;
+    assert_eq!(launcher.python_path, Path::new(&python));
+
+    python.push('x');
+    assert!(matches!(
+        windows_python_launcher(&python, WindowMode::Console),
+        Err(super::Error::PathTooLong)
+    ));
+    fs_err::write(
+        path.path(),
+        write_resources(
+            get_launcher_bin(false)?,
+            &[
+                (RESOURCE_TRAMPOLINE_KIND, &[2]),
+                (RESOURCE_PYTHON_PATH, python.as_bytes()),
+            ],
+        )?,
+    )?;
+    assert!(super::read_launcher_target(path.path())?.is_none());
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn relative_target_is_resolved_beside_the_launcher() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
     let path = temp_dir.child("proxy.exe");
