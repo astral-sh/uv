@@ -59,6 +59,10 @@ fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     Ok(())
 }
 
+/// Escape a value for a fish single-quoted string.
+fn escape_fish_for_single_quotes(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('\'', "\\'")
+}
 /// Create a [`VirtualEnvironment`] at the given location.
 pub(crate) fn create(
     location: &Path,
@@ -517,6 +521,7 @@ pub(crate) fn create(
                 r#"b"{}".decode("utf-8")"#,
                 virtual_prompt.as_bytes().escape_ascii(),
             )),
+            "activate.fish" => Cow::Owned(escape_fish_for_single_quotes(virtual_prompt)),
             _ => Cow::Borrowed(virtual_prompt),
         };
 
