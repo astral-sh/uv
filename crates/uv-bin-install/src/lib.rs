@@ -313,10 +313,11 @@ impl fmt::Display for BinVersion {
 const RUFF_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ruff/releases/download/";
 
 /// The pinned serc version used for bytecode compilation.
-const SERC_VERSION: [u64; 3] = [0, 1, 8];
+const SERC_VERSION: [u64; 3] = [0, 1, 11];
 
 /// The canonical GitHub URL prefix for serc releases.
-const SERC_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/serc/releases/download/";
+const SERC_GITHUB_URL_PREFIX: &str =
+    "https://github.com/astral-experiments/serc/releases/download/";
 
 /// The canonical GitHub URL prefix for ty releases.
 const TY_GITHUB_URL_PREFIX: &str = "https://github.com/astral-sh/ty/releases/download/";
