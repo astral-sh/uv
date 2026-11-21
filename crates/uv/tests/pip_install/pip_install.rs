@@ -9699,7 +9699,7 @@ fn require_hashes_constraint() -> Result<()> {
         .arg(constraints_txt.path()), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: anyio==4.0.0
+    error: Conflicting hashes for `anyio==4.0.0`: no hash is allowed by all requirements and constraints
     "
     );
 
@@ -9865,7 +9865,7 @@ fn require_hashes_repeated_requirements_constraint() -> Result<()> {
         .arg(context.workspace_root.join("test/links")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: ok==2.0.0
+    error: Conflicting hashes for `ok==2.0.0`: no hash is allowed by all requirements and constraints
     ");
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -9877,7 +9877,7 @@ fn require_hashes_repeated_requirements_constraint() -> Result<()> {
         .arg(context.workspace_root.join("test/links")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--verify-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: ok==2.0.0
+    error: Conflicting hashes for `ok==2.0.0`: no hash is allowed by all requirements and constraints
     ");
 
     requirements_txt.write_str(indoc! {r"
@@ -9894,7 +9894,7 @@ fn require_hashes_repeated_requirements_constraint() -> Result<()> {
         .arg(context.workspace_root.join("test/links")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--require-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: ok==2.0.0
+    error: Conflicting hashes for `ok==2.0.0`: no hash is allowed by all requirements and constraints
     ");
     uv_snapshot!(context.filters(), context.pip_install()
         .arg("-r")
@@ -9906,7 +9906,7 @@ fn require_hashes_repeated_requirements_constraint() -> Result<()> {
         .arg(context.workspace_root.join("test/links")), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    error: In `--verify-hashes` mode, all requirements must have a hash, but there were no overlapping hashes between the requirements and constraints for: ok==2.0.0
+    error: Conflicting hashes for `ok==2.0.0`: no hash is allowed by all requirements and constraints
     ");
 
     constraints_txt.write_str(indoc! {r"
