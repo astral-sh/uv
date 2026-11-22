@@ -73,39 +73,67 @@ impl Launcher {
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        let Ok(bytes) = fs_err::read(path) else {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW};
+
+        let path_wide = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+
+        // SAFETY: `path_wide` is a null-terminated UTF-16 string.
+        #[allow(unsafe_code)]
+        let Some(module) = (unsafe {
+            LoadLibraryExW(
+                windows::core::PCWSTR(path_wide.as_ptr()),
+                None,
+                LOAD_LIBRARY_AS_DATAFILE,
+            )
+            .ok()
+        }) else {
             return Ok(None);
-        };
-        let Ok(image) = Image::parse(bytes) else {
-            return Ok(None);
-        };
-        let Some(resources) = image.resource_directory() else {
-            return Ok(None);
-        };
-        let Some(kind_data) = read_resource(resources, RESOURCE_TRAMPOLINE_KIND) else {
-            return Ok(None);
-        };
-        let Some(&kind_value) = kind_data.first() else {
-            return Err(Error::UnprocessableMetadata);
-        };
-        let Some(kind) = LauncherKind::from_resource_value(kind_value) else {
-            return Err(Error::UnprocessableMetadata);
         };
 
-        let Some(path_data) = read_resource(resources, RESOURCE_PYTHON_PATH) else {
-            return Ok(None);
-        };
-        let python_path = PathBuf::from(
-            String::from_utf8(path_data.to_vec())
-                .map_err(|err| Error::InvalidPath(err.utf8_error()))?,
-        );
-        let script_data = read_resource(resources, RESOURCE_SCRIPT_DATA).map(<[u8]>::to_vec);
+        let result = (|| {
+            let Ok(metadata) = fs_err::metadata(path) else {
+                return Ok(None);
+            };
+            let read_resource = |name| read_resource(module, metadata.len(), name);
+            let Some(kind_data) = read_resource(RESOURCE_TRAMPOLINE_KIND) else {
+                return Ok(None);
+            };
+            let Some(&kind_value) = kind_data.first() else {
+                return Err(Error::UnprocessableMetadata);
+            };
+            let Some(kind) = LauncherKind::from_resource_value(kind_value) else {
+                return Err(Error::UnprocessableMetadata);
+            };
 
-        Ok(Some(Self {
-            kind,
-            python_path,
-            script_data,
-        }))
+            let Some(path_data) = read_resource(RESOURCE_PYTHON_PATH) else {
+                return Ok(None);
+            };
+            let python_path = PathBuf::from(
+                String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
+            );
+
+            let script_data = read_resource(RESOURCE_SCRIPT_DATA);
+
+            Ok(Some(Self {
+                kind,
+                python_path,
+                script_data,
+            }))
+        })();
+
+        // SAFETY: `module` was returned by a successful `LoadLibraryExW` call.
+        #[allow(unsafe_code)]
+        unsafe {
+            windows::Win32::Foundation::FreeLibrary(module)
+                .map_err(|err| Error::Io(io::Error::from_raw_os_error(err.code().0)))?;
+        }
+
+        result
     }
 
     /// Write this trampoline launcher to a file.
@@ -302,28 +330,79 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     Ok(image.data().to_vec())
 }
 
-/// Read a named resource from a parsed PE image.
+/// Safely read a named resource from a loaded PE image.
 #[cfg(windows)]
-fn read_resource<'a>(resources: &'a ResourceDirectory, name: &str) -> Option<&'a [u8]> {
-    let languages = resources
-        .root()
-        .get(ResourceEntryName::ID(RT_RCDATA))?
-        .as_table()?
-        .get(ResourceEntryName::from_string(name))?
-        .as_table()?;
+fn read_resource(
+    handle: windows::Win32::Foundation::HMODULE,
+    file_size: u64,
+    name: &str,
+) -> Option<Vec<u8>> {
+    use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
+    use windows::Win32::System::Memory::{MEMORY_BASIC_INFORMATION, VirtualQuery};
+    use windows::Win32::System::Threading::GetCurrentProcess;
 
-    // uv writes language-neutral resources. Older or externally edited launchers can use a
-    // different language, so accept the first available resource if the neutral one is absent.
-    languages
-        .get(ResourceEntryName::ID(0))
-        .and_then(ResourceEntry::as_data)
-        .or_else(|| {
-            languages
-                .entries()
-                .into_iter()
-                .find_map(|name| languages.get(name)?.as_data())
-        })
-        .map(ResourceData::data)
+    use windows::Win32::System::LibraryLoader::{
+        FindResourceW, LoadResource, LockResource, SizeofResource,
+    };
+
+    let name_wide = name
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+
+    // SAFETY: `name_wide` is null-terminated and the module stays loaded.
+    // `VirtualQuery` and `ReadProcessMemory` receive valid output buffers.
+    #[allow(unsafe_code)]
+    unsafe {
+        // Find the resource
+        let resource = FindResourceW(
+            Some(handle),
+            windows::core::PCWSTR(name_wide.as_ptr()),
+            windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
+        );
+        if resource.is_invalid() {
+            return None;
+        }
+
+        // Get resource size and data
+        let size = SizeofResource(Some(handle), resource);
+        if size == 0 {
+            return Some(Vec::new());
+        }
+
+        let data = LoadResource(Some(handle), resource).ok()?;
+        let pointer = LockResource(data).cast::<u8>();
+        if pointer.is_null() {
+            return None;
+        }
+
+        // The size in the resource table is untrusted. Bound the payload by
+        // both the datafile mapping and the file length (the last page is padded).
+        let mut mapping = MEMORY_BASIC_INFORMATION::default();
+        if VirtualQuery(
+            Some(handle.0),
+            &raw mut mapping,
+            size_of::<MEMORY_BASIC_INFORMATION>(),
+        ) == 0
+        {
+            return None;
+        }
+        let offset = pointer.addr().checked_sub(mapping.BaseAddress.addr())?;
+        let end = offset.checked_add(size as usize)?;
+        if end > mapping.RegionSize || end as u64 > file_size {
+            return None;
+        }
+        let mut bytes = vec![0; size as usize];
+        ReadProcessMemory(
+            GetCurrentProcess(),
+            pointer.cast(),
+            bytes.as_mut_ptr().cast(),
+            bytes.len(),
+            None,
+        )
+        .ok()?;
+        Some(bytes)
+    }
 }
 
 /// Construct a Windows script launcher.
