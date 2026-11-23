@@ -27,6 +27,10 @@ on:
         required: true
         default: false
         type: boolean
+      signer-service:
+        description: Use signer-service for a non-publishing macOS signing rehearsal
+        default: false
+        type: boolean
 
 env:
   # Release actions must not consume shared GitHub Actions caches.
@@ -65,6 +69,11 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Validate signer-service selection
+        if: ${{ inputs.signer-service && !inputs.dry-run }}
+        run: |
+          echo "::error::signer-service requires dry-run=true"
+          exit 1
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
@@ -139,7 +148,7 @@ jobs:
     uses: $/.github/workflows/sign-release-binaries.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
-      dry-run: ${{ inputs.dry-run }}
+      signer-service: ${{ inputs.dry-run && inputs.signer-service }}
     secrets: inherit
     permissions:
       contents: read
