@@ -35,42 +35,38 @@ jobs:
           path: artifacts
           merge-multiple: true
       - name: "Upload to R2"
+        uses: astral-sh/github-actions/upload-r2@46d9685eed35b39a3d83a8dde3a3b4e1bff97a8a # 2026.11.19.0
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MIRROR_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MIRROR_R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: https://${{ secrets.MIRROR_R2_CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          AWS_DEFAULT_REGION: auto
-          R2_BUCKET: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
-          PROJECT: uv
-        run: |
-          # R2 recommends single-part uploads for files under approximately 100 MB.
-          # AWS CLI interprets 100MB as 100 MiB. Current release artifacts are under
-          # this threshold. If we have larger artifacts, we will need to add additional
-          # retry handling because `--no-overwrite` does not make multipart retries
-          # idempotent against the immutable bucket.
-          # https://developers.cloudflare.com/r2/objects/upload-objects/#choose-an-upload-method
-          aws configure set default.s3.multipart_threshold 100MB
-
-          aws s3 sync --no-overwrite --output table --color on \
-            --exclude '*' \
-            --include '*.zip' --include '*.zip.sha256' \
-            --include '*.tar.gz' --include '*.tar.gz.sha256' \
-            --include sha256.sum --include '*.ps1' --include '*.sh' \
-            --cache-control "public, max-age=31536000, immutable" \
-            artifacts/ \
-            s3://${R2_BUCKET}/github/$PROJECT/releases/download/$VERSION/
+        with:
+          account-id: ${{ secrets.MIRROR_R2_CLOUDFLARE_ACCOUNT_ID }}
+          bucket: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
+          source-directory: artifacts
+          include: |
+            *.zip
+            *.zip.sha256
+            *.tar.gz
+            *.tar.gz.sha256
+            sha256.sum
+            *.ps1
+            *.sh
+          prefix: github/uv/releases/download/${{ env.VERSION }}
+          if-exists: skip
+          cache-control: public, max-age=31536000, immutable
       - name: "Upload latest installers to R2"
         if: ${{ !fromJson(inputs.plan).announcement_is_prerelease }}
+        uses: astral-sh/github-actions/upload-r2@46d9685eed35b39a3d83a8dde3a3b4e1bff97a8a # 2026.11.19.0
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MIRROR_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MIRROR_R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: https://${{ secrets.MIRROR_R2_CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          AWS_DEFAULT_REGION: auto
-          R2_BUCKET: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
-        run: |
-          for installer in uv-installer.sh uv-installer.ps1; do
-            aws s3 cp --output table --color on \
-              --cache-control "public, max-age=300" \
-              "artifacts/${installer}" \
-              "s3://${R2_BUCKET}/installers/uv/latest/${installer}"
-          done
+        with:
+          account-id: ${{ secrets.MIRROR_R2_CLOUDFLARE_ACCOUNT_ID }}
+          bucket: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
+          source-directory: artifacts
+          include: |
+            uv-installer.sh
+            uv-installer.ps1
+          prefix: installers/uv/latest
+          if-exists: overwrite
+          cache-control: public, max-age=300
