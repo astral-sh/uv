@@ -407,6 +407,9 @@ fn read_resource(
     name: &str,
 ) -> io::Result<Option<Vec<u8>>> {
     use std::io::{Read, Seek, SeekFrom};
+    use windows::Win32::Foundation::{
+        ERROR_RESOURCE_NAME_NOT_FOUND, ERROR_SUCCESS, GetLastError, SetLastError,
+    };
     use windows::Win32::System::LibraryLoader::{
         FindResourceW, LoadResource, LockResource, SizeofResource,
     };
@@ -427,13 +430,20 @@ fn read_resource(
             windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
         );
         if resource.is_invalid() {
-            return Ok(None);
+            return match GetLastError() {
+                ERROR_RESOURCE_NAME_NOT_FOUND => Ok(None),
+                error => Err(io::Error::from_raw_os_error(error.0.cast_signed())),
+            };
         }
 
-        // Get resource size and data
+        // Zero is both a valid payload size and the failure sentinel.
+        SetLastError(ERROR_SUCCESS);
         let size = SizeofResource(Some(handle), resource);
         if size == 0 {
-            return Ok(Some(Vec::new()));
+            return match GetLastError() {
+                ERROR_SUCCESS => Ok(Some(Vec::new())),
+                error => Err(io::Error::from_raw_os_error(error.0.cast_signed())),
+            };
         }
 
         let data = LoadResource(Some(handle), resource)?;
