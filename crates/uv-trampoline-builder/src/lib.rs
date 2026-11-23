@@ -74,15 +74,11 @@ impl Launcher {
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
         use fs_err::os::windows::fs::OpenOptionsExt;
-        use std::os::windows::io::AsRawHandle;
-        use windows::Win32::Foundation::{HANDLE, MAX_PATH};
-        use windows::Win32::Storage::FileSystem::{
-            FILE_NAME_NORMALIZED, FILE_SHARE_READ, GetFinalPathNameByHandleW,
-        };
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
         use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW};
 
-        // Keep the file open against writes and replacement. Load the resolved path
-        // from its handle so a change to a junction in `path` cannot retarget the probe.
+        // Hold the file against writes and replacement while the loader locates its resources.
         let Ok(mut file) = File::options()
             .read(true)
             .share_mode(FILE_SHARE_READ.0)
@@ -90,26 +86,11 @@ impl Launcher {
         else {
             return Ok(None);
         };
-        let mut path_wide = vec![0; MAX_PATH as usize];
-        loop {
-            // SAFETY: `file` owns the handle and `path_wide` is a writable buffer.
-            #[expect(unsafe_code)]
-            let len = unsafe {
-                GetFinalPathNameByHandleW(
-                    HANDLE(file.as_raw_handle()),
-                    &mut path_wide,
-                    FILE_NAME_NORMALIZED,
-                )
-            } as usize;
-            if len == 0 {
-                return Ok(None);
-            }
-            if len < path_wide.len() {
-                break;
-            }
-            // The required length includes the terminator when the buffer is too small.
-            path_wide.resize(len, 0);
-        }
+        let path_wide = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
 
         // SAFETY: `path_wide` is a null-terminated UTF-16 string.
         #[allow(unsafe_code)]
@@ -127,7 +108,7 @@ impl Launcher {
         let result = (|| {
             // LDR_IS_DATAFILE: the loader can reuse a DLL already loaded as an image.
             // Only the data-file layout gives us offsets into the file on disk.
-            if module.0.addr() & 1 == 0 {
+            if module.0.addr() & 1 == 0 || !mapping_matches_file(module, &file) {
                 return Ok(None);
             }
             let Ok(metadata) = file.metadata() else {
@@ -364,6 +345,56 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     image.set_resource_directory(resource_directory)?;
 
     Ok(image.data().to_vec())
+}
+
+/// Compare the names of the two open objects without resolving the input path
+/// again. Reopening a resolved name can redirect a native system file under WOW64.
+#[cfg(windows)]
+#[expect(unsafe_code)]
+fn mapping_matches_file(module: windows::Win32::Foundation::HMODULE, file: &File) -> bool {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::{HANDLE, MAX_PATH};
+    use windows::Win32::Storage::FileSystem::{
+        FILE_NAME_OPENED, GETFINALPATHNAMEBYHANDLE_FLAGS, GetFinalPathNameByHandleW,
+        VOLUME_NAME_DOS, VOLUME_NAME_NT,
+    };
+    use windows::Win32::System::ProcessStatus::K32GetMappedFileNameW;
+    use windows::Win32::System::Threading::GetCurrentProcess;
+
+    let mut mapped = vec![0; MAX_PATH as usize];
+    loop {
+        // SAFETY: The module remains loaded and the slice is a writable output buffer.
+        let len =
+            unsafe { K32GetMappedFileNameW(GetCurrentProcess(), module.0, &mut mapped) } as usize;
+        if len == 0 {
+            return false;
+        }
+        if len < mapped.len() {
+            mapped.truncate(len);
+            break;
+        }
+        mapped.resize(mapped.len() * 2, 0);
+    }
+
+    // Windows returns a native device name, even on volumes without drive letters.
+    // Wine can return a DOS device path in the NT namespace (\??\).
+    let volume = if mapped.iter().copied().take(4).eq(r"\??\".encode_utf16()) {
+        mapped[1] = u16::from(b'\\');
+        VOLUME_NAME_DOS
+    } else {
+        VOLUME_NAME_NT
+    };
+    let mut opened = vec![0; mapped.len() + 1];
+    // FILE_NAME_OPENED avoids requiring directory listing permission on SMB.
+    // SAFETY: The file owns the handle and the slice is a writable output buffer.
+    let len = unsafe {
+        GetFinalPathNameByHandleW(
+            HANDLE(file.as_raw_handle()),
+            &mut opened,
+            GETFINALPATHNAMEBYHANDLE_FLAGS(volume.0 | FILE_NAME_OPENED.0),
+        )
+    } as usize;
+    len == mapped.len() && opened[..len] == mapped
 }
 
 /// Distinguish a missing resource from an unreadable one so that rewriting
