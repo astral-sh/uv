@@ -44,13 +44,13 @@ jobs:
           bucket: ${{ secrets.MIRROR_R2_BUCKET_NAME }}
           source-directory: artifacts
           include: |
-            **/*.zip
-            **/*.zip.sha256
-            **/*.tar.gz
-            **/*.tar.gz.sha256
+            *.zip
+            *.zip.sha256
+            *.tar.gz
+            *.tar.gz.sha256
             sha256.sum
-            **/*.ps1
-            **/*.sh
+            *.ps1
+            *.sh
           prefix: github/uv/releases/download/${{ env.VERSION }}
           if-exists: skip
           cache-control: public, max-age=31536000, immutable
