@@ -21,16 +21,16 @@ runs:
       run: |
         case "$RUNNER_OS/$RUNNER_ARCH" in
           Linux/X64)
-            uv_version="0.13.7"
-            uv_checksum="c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83"
+            uv_version="0.13.9"
+            uv_checksum="a7fbaff2b9a271d85c1bdb540941090fd1ce011797b4abeb48e4dcd39c2471d5"
             ;;
           macOS/ARM64)
-            uv_version="0.13.7"
-            uv_checksum="81b811b57e4624df7ed3aac148e0359100d9962f3d9dce00aec533dc2e086731"
+            uv_version="0.13.9"
+            uv_checksum="5aeca67f2283f75235de40d0bd9c0a5bbc5fce23b6d48b3bf9fa1b2db08382ca"
             ;;
           Windows/X64)
-            uv_version="0.13.7"
-            uv_checksum="0cdc5b38fe5a8168ed6a25814f5ba43c21d313dd3187314fccb37b7cec46e021"
+            uv_version="0.13.9"
+            uv_checksum="edd61f7f5728a56cc62455386661860bdfc7bab65872f39b0c25bdcc1d8e1beb"
             ;;
           *)
             echo "Unsupported uv runner: $RUNNER_OS/$RUNNER_ARCH" >&2
