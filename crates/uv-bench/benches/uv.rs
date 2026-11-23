@@ -37,7 +37,6 @@ use uv_preview::Preview;
 use uv_pypi_types::{HashAlgorithm, Scheme};
 use uv_python_interpreter::PythonEnvironment;
 use uv_resolver::Manifest;
-use uv_static::TarBackend;
 
 const MANY_FILES_WHEEL_FILENAME: &str = "manyfiles-0.0.0-py3-none-any.whl";
 const MANY_FILES_WHEEL_FILE_COUNT: usize = 10_000;
@@ -255,7 +254,6 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
                         &mut archive,
                         SourceDistExtension::TarGz,
                         extracted_sdist,
-                        TarBackend::default(),
                     ))
                     .expect("Failed to unpack sdist");
                 drop(archive);

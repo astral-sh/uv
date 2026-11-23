@@ -10,7 +10,6 @@ exclusions = [
   { name = "astral-pubgrub", reason = "Maintained by Astral." },
   { name = "astral-reqwest-middleware", reason = "Maintained by Astral." },
   { name = "astral-reqwest-retry", reason = "Maintained by Astral." },
-  { name = "astral-tokio-tar", reason = "Maintained by Astral." },
   { name = "astral-version-ranges", reason = "Maintained by Astral." },
   { name = "astral_async_http_range_reader", reason = "Maintained by Astral." },
   { name = "astral_async_zip", reason = "Maintained by Astral." },

@@ -142,27 +142,6 @@ impl Hinted for Error {
             Self::PythonSelection(err) => err.hints(),
             Self::Operations(err) => err.hints(),
             Self::Extract(uv_extract::Error::Tar(err)) => {
-                // TODO(konsti): astral-tokio-tar should use a proper error instead of
-                // encoding everything in strings
-                // NOTE(ww): We check for both messages below because they indicate
-                // different external extraction scenarios; the first is for any
-                // absolute path outside of the target directory, and the second
-                // is specifically for symlinks that point outside.
-                if err.to_string().contains("/bin/python")
-                    && std::error::Error::source(err).is_some_and(|err| {
-                        let err = err.to_string();
-                        err.ends_with("outside of the target directory")
-                            || err.ends_with("external symlinks are not allowed")
-                    })
-                {
-                    Hints::from(
-                        "The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.",
-                    )
-                } else {
-                    Hints::none()
-                }
-            }
-            Self::Extract(uv_extract::Error::TarCodec(err)) => {
                 let is_python_executable = |path: &Path| {
                     path.file_name()
                         .is_some_and(|name| name.to_string_lossy().starts_with("python"))
@@ -829,13 +808,7 @@ async fn build_package(
             let ext = SourceDistExtension::from_path(path.as_path())
                 .map_err(|err| Error::InvalidSourceDistExt(path.user_display().to_string(), err))?;
             let temp_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))?;
-            let (temp_dir, _) = uv_extract::stream::archive(
-                &mut reader,
-                ext,
-                temp_dir,
-                build_dispatch.tar_backend(),
-            )
-            .await?;
+            let (temp_dir, _) = uv_extract::stream::archive(&mut reader, ext, temp_dir).await?;
             drop(reader);
 
             // Extract the top-level directory from the archive.
@@ -948,13 +921,7 @@ async fn build_package(
                 Error::InvalidSourceDistExt(source.path().user_display().to_string(), err)
             })?;
             let temp_dir = tempfile::tempdir_in(output_dir)?;
-            let (temp_dir, _) = uv_extract::stream::archive(
-                &mut reader,
-                ext,
-                temp_dir,
-                build_dispatch.tar_backend(),
-            )
-            .await?;
+            let (temp_dir, _) = uv_extract::stream::archive(&mut reader, ext, temp_dir).await?;
             drop(reader);
 
             // If the source distribution has a normalized filename, check its identity.
@@ -1138,14 +1105,12 @@ async fn build_sdist(
             let source_tree = source_tree.to_path_buf();
             let output_dir_ = output_dir.to_path_buf();
             let sources_enabled = sources.is_none();
-            let tar_backend = build_dispatch.tar_backend();
             let filename = tokio::task::spawn_blocking(move || {
                 uv_build_backend::build_source_dist(
                     &source_tree,
                     &output_dir_,
                     uv_version::version(),
                     sources_enabled,
-                    tar_backend,
                 )
             })
             .await??

@@ -123,7 +123,6 @@ arrayvec = { version = "0.7.6", default-features = false }
 astral-html = { version = "0.0.4", default-features = false }
 astral-ini = { version = "0.0.1", default-features = false }
 astral-mail-headers = { version = "0.0.1", default-features = false }
-astral-tokio-tar = { version = "0.7.0", default-features = false }
 async-channel = { version = "2.3.1", default-features = false, features = ["std"] }
 async-compression = { version = "0.4.12", default-features = false, features = [
   "gzip",

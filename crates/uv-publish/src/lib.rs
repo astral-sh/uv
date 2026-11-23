@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::{fmt, io};
 
 use fs_err::tokio::File;
-use futures::TryStreamExt;
 use glob::{GlobError, PatternError, glob};
 use itertools::Itertools;
 use reqwest::header::{
@@ -23,7 +22,7 @@ use rustc_hash::FxHashMap;
 use serde::Deserialize;
 use tar_codec::{Archive as _, Member, MemberPayload as _, TarArchive};
 use thiserror::Error;
-use tokio::io::{AsyncReadExt, BufReader};
+use tokio::io::BufReader;
 use tokio::sync::Semaphore;
 use tokio_util::io::ReaderStream;
 use tracing::{Level, debug, enabled, trace, warn};
@@ -42,7 +41,6 @@ use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_archive_metadata;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
 use uv_redacted::{SafeUrl, SafeUrlError};
-use uv_static::TarBackend;
 use uv_warnings::warn_user;
 
 use crate::trusted_publishing::TrustedPublishingService;
@@ -113,10 +111,6 @@ pub enum PublishPrepareError {
     Decode(#[source] tar_codec::DecodeError),
     #[error("Failed to read: {0}")]
     Read(String, #[source] tar_codec::DecodeError),
-    #[error(transparent)]
-    TokioTar(io::Error),
-    #[error("Failed to read: {0}")]
-    TokioTarRead(String, #[source] io::Error),
     #[error("Invalid PEP 740 attestation (not JSON): {0}")]
     InvalidAttestation(PathBuf, #[source] serde_json::Error),
 }
@@ -257,7 +251,6 @@ impl PreparedDistribution {
     async fn read_metadata(
         &self,
         reporter: Arc<impl Reporter>,
-        tar_backend: TarBackend,
     ) -> Result<(FormMetadata, Option<String>, u64), PublishError> {
         let size = fs_err::tokio::metadata(&self.file)
             .await
@@ -272,8 +265,7 @@ impl PreparedDistribution {
 
         let metadata: Result<_, PublishPrepareError> = async {
             let form_metadata =
-                FormMetadata::read_from_file(&self.file, &self.filename, reporter, tar_backend)
-                    .await?;
+                FormMetadata::read_from_file(&self.file, &self.filename, reporter).await?;
             let mut attestations = Vec::with_capacity(self.attestations.len());
             for attestation_path in &self.attestations {
                 let contents = fs_err::tokio::read_to_string(attestation_path).await?;
@@ -320,7 +312,6 @@ pub struct PublishSession<'a> {
     upload_client: &'a BaseClient,
     oidc_client: &'a BaseClient,
     retry_policy: ExponentialBackoff,
-    tar_backend: TarBackend,
     check_url_client: Option<CheckUrlClient<'a>>,
     download_concurrency: Semaphore,
 }
@@ -611,7 +602,6 @@ impl<'a> PublishSession<'a> {
         upload_client: &'a BaseClient,
         oidc_client: &'a BaseClient,
         retry_policy: ExponentialBackoff,
-        tar_backend: TarBackend,
     ) -> Self {
         Self {
             publish_url,
@@ -620,7 +610,6 @@ impl<'a> PublishSession<'a> {
             upload_client,
             oidc_client,
             retry_policy,
-            tar_backend,
             check_url_client: None,
             // Check URL requests are made one at a time against a single index.
             download_concurrency: Semaphore::new(1),
@@ -678,7 +667,7 @@ impl<'a> PublishSession<'a> {
         prepared: &PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<(), PublishError> {
-        prepared.read_metadata(reporter, self.tar_backend).await?;
+        prepared.read_metadata(reporter).await?;
         Ok(())
     }
 
@@ -692,9 +681,7 @@ impl<'a> PublishSession<'a> {
         prepared: PreparedDistribution,
         reporter: Arc<impl Reporter>,
     ) -> Result<UploadOutcome, PublishError> {
-        let (form_metadata, attestations, size) = prepared
-            .read_metadata(reporter.clone(), self.tar_backend)
-            .await?;
+        let (form_metadata, attestations, size) = prepared.read_metadata(reporter.clone()).await?;
         reporter.on_upload_ready(&prepared.filename, size)?;
 
         let mut n_past_redirections = 0;
@@ -1028,61 +1015,7 @@ async fn hash_file<const COUNT: usize>(
 }
 
 // Not in `uv-metadata` because we only support tar files here.
-async fn source_dist_pkg_info(
-    file: &Path,
-    tar_backend: TarBackend,
-) -> Result<Vec<u8>, PublishPrepareError> {
-    match tar_backend {
-        TarBackend::TarCodec => source_dist_pkg_info_tar_codec(file).await,
-        TarBackend::TokioTar => source_dist_pkg_info_tokio_tar(file).await,
-    }
-}
-
-async fn source_dist_pkg_info_tokio_tar(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
-    let reader = BufReader::new(File::open(&file).await?);
-    let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
-    let mut archive = tokio_tar::Archive::new(decoded);
-    let mut pkg_infos: Vec<(PathBuf, Vec<u8>)> = archive
-        .entries()
-        .map_err(PublishPrepareError::TokioTar)?
-        .map_err(PublishPrepareError::TokioTar)
-        .try_filter_map(async |mut entry| {
-            let path = entry
-                .path()
-                .map_err(PublishPrepareError::TokioTar)?
-                .to_path_buf();
-            let mut components = path.components();
-            let Some(_top_level) = components.next() else {
-                return Ok(None);
-            };
-            let Some(pkg_info) = components.next() else {
-                return Ok(None);
-            };
-            if components.next().is_some() || pkg_info.as_os_str() != "PKG-INFO" {
-                return Ok(None);
-            }
-            let mut buffer = Vec::new();
-            // We have to read while iterating or the entry is empty as we're beyond it in the file.
-            entry.read_to_end(&mut buffer).await.map_err(|err| {
-                PublishPrepareError::TokioTarRead(path.to_string_lossy().to_string(), err)
-            })?;
-            Ok(Some((path, buffer)))
-        })
-        .try_collect()
-        .await?;
-    match pkg_infos.len() {
-        0 => Err(PublishPrepareError::MissingPkgInfo),
-        1 => Ok(pkg_infos.remove(0).1),
-        _ => Err(PublishPrepareError::MultiplePkgInfo(
-            pkg_infos
-                .iter()
-                .map(|(path, _buffer)| path.to_string_lossy().into_owned())
-                .collect(),
-        )),
-    }
-}
-
-async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
+async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
     let reader = BufReader::new(File::open(&file).await?);
     let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
     // TODO(ww): Consider allowing vendor pax extensions while parsing here?
@@ -1128,11 +1061,7 @@ async fn source_dist_pkg_info_tar_codec(file: &Path) -> Result<Vec<u8>, PublishP
     }
 }
 
-async fn metadata(
-    file: &Path,
-    filename: &DistFilename,
-    tar_backend: TarBackend,
-) -> Result<Metadata23, PublishPrepareError> {
+async fn metadata(file: &Path, filename: &DistFilename) -> Result<Metadata23, PublishPrepareError> {
     let contents = match filename {
         DistFilename::SourceDistFilename(source_dist) => {
             if source_dist.extension != SourceDistExtension::TarGz {
@@ -1140,7 +1069,7 @@ async fn metadata(
                 // support creating and uploading them.
                 return Err(PublishPrepareError::InvalidExtension(source_dist.clone()));
             }
-            source_dist_pkg_info(file, tar_backend).await?
+            source_dist_pkg_info(file).await?
         }
         DistFilename::WheelFilename(wheel) => {
             let file = file.to_path_buf();
@@ -1168,7 +1097,6 @@ impl FormMetadata {
         file: &Path,
         filename: &DistFilename,
         reporter: Arc<impl Reporter>,
-        tar_backend: TarBackend,
     ) -> Result<Self, PublishPrepareError> {
         let [sha256_hash, blake2b_hash] = hash_file(
             file,
@@ -1181,7 +1109,7 @@ impl FormMetadata {
         )
         .await?;
 
-        let metadata = metadata(file, filename, tar_backend).await?;
+        let metadata = metadata(file, filename).await?;
 
         Ok(Self::from_metadata(
             metadata,
@@ -1482,7 +1410,6 @@ mod tests {
     use uv_distribution_filename::DistFilename;
     use uv_pypi_types::{HashDigest, Metadata23};
     use uv_redacted::SafeUrl;
-    use uv_static::TarBackend;
 
     use crate::{
         FormMetadata, PublishError, PublishOutcome, PublishPrepareError, PublishSendError,
@@ -1494,8 +1421,6 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct DummyReporter;
-
-    const TAR_BACKENDS: [TarBackend; 2] = [TarBackend::TarCodec, TarBackend::TokioTar];
 
     impl Reporter for DummyReporter {
         fn on_progress(&self, _name: &str, _id: usize) {}
@@ -1543,26 +1468,22 @@ mod tests {
         ])
         .await;
 
-        for backend in TAR_BACKENDS {
-            assert_eq!(
-                source_dist_pkg_info(file.path(), backend)
-                    .await
-                    .expect("top-level PKG-INFO should be read"),
-                expected
-            );
-        }
+        assert_eq!(
+            source_dist_pkg_info(file.path())
+                .await
+                .expect("top-level PKG-INFO should be read"),
+            expected
+        );
     }
 
     #[tokio::test]
     async fn source_dist_pkg_info_requires_a_file() {
         let file = source_dist(&[("example-1.0/nested/PKG-INFO", b"ignored")]).await;
 
-        for backend in TAR_BACKENDS {
-            assert_matches!(
-                source_dist_pkg_info(file.path(), backend).await,
-                Err(PublishPrepareError::MissingPkgInfo)
-            );
-        }
+        assert_matches!(
+            source_dist_pkg_info(file.path()).await,
+            Err(PublishPrepareError::MissingPkgInfo)
+        );
     }
 
     #[tokio::test]
@@ -1573,13 +1494,11 @@ mod tests {
         ])
         .await;
 
-        for backend in TAR_BACKENDS {
-            assert_matches!(
-                source_dist_pkg_info(file.path(), backend).await,
-                Err(PublishPrepareError::MultiplePkgInfo(paths))
-                    if paths == ["example-1.0/PKG-INFO", "other-1.0/PKG-INFO"]
-            );
-        }
+        assert_matches!(
+            source_dist_pkg_info(file.path()).await,
+            Err(PublishPrepareError::MultiplePkgInfo(paths))
+                if paths == ["example-1.0/PKG-INFO", "other-1.0/PKG-INFO"]
+        );
     }
 
     fn test_session(registry: SafeUrl, client: &BaseClient) -> PublishSession<'_> {
@@ -1592,7 +1511,6 @@ mod tests {
             client,
             client,
             client.retry_policy(),
-            TarBackend::default(),
         )
     }
 
@@ -1967,7 +1885,7 @@ mod tests {
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
-            .read_metadata(Arc::new(DummyReporter), TarBackend::default())
+            .read_metadata(Arc::new(DummyReporter))
             .await
             .expect("Failed to read upload metadata");
 
@@ -2095,7 +2013,7 @@ mod tests {
         let session = test_session(registry, &client);
         let prepared = preparation.pop().expect("Distribution should be found");
         let (form_metadata, attestations, _) = prepared
-            .read_metadata(Arc::new(DummyReporter), TarBackend::default())
+            .read_metadata(Arc::new(DummyReporter))
             .await
             .expect("Failed to read upload metadata");
 
@@ -2294,7 +2212,6 @@ mod tests {
             &client,
             &client,
             client.retry_policy(),
-            TarBackend::default(),
         )
         .with_credentials_prompt(prompt);
         let prepared = PublishSession::prepare(
@@ -2378,7 +2295,6 @@ mod tests {
             &client,
             &client,
             client.retry_policy(),
-            TarBackend::default(),
         )
         .with_credentials_prompt(prompt);
         let prepared = PublishSession::prepare(

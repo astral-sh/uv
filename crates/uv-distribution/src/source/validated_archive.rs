@@ -11,7 +11,6 @@ use uv_distribution_types::BuildableSource;
 use uv_extract::hash::{HashReader, Hasher};
 use uv_fs::rename_with_retry;
 use uv_pypi_types::{HashAlgorithm, HashDigest};
-use uv_static::TarBackend;
 
 use super::source_index_hashes;
 use crate::error::Error;
@@ -51,7 +50,6 @@ impl ValidatedSourceArchive {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         cache: &Cache,
-        tar_backend: TarBackend,
         validation: ArchiveValidation<'_>,
     ) -> Result<Self, Error> {
         let staging_dir = tempfile::tempdir_in(cache.bucket(CacheBucket::SourceDistributions))
@@ -74,10 +72,9 @@ impl ValidatedSourceArchive {
             .collect::<Vec<_>>();
         let mut hasher = HashReader::new(reader, &mut hashers);
 
-        let (staging_dir, _) =
-            uv_extract::stream::archive(&mut hasher, ext, staging_dir, tar_backend)
-                .await
-                .map_err(|err| Error::Extract(source.to_string(), err))?;
+        let (staging_dir, _) = uv_extract::stream::archive(&mut hasher, ext, staging_dir)
+            .await
+            .map_err(|err| Error::Extract(source.to_string(), err))?;
 
         if !algorithms.is_empty() || validation.expected_size.is_some() {
             hasher.finish().await.map_err(Error::HashExhaustion)?;
@@ -198,7 +195,6 @@ mod tests {
             &source,
             SourceDistExtension::TarGz,
             cache,
-            TarBackend::default(),
             validation,
         )
         .await

@@ -14,12 +14,6 @@ pub enum Error {
     Tar(
         #[source]
         #[from]
-        tokio_tar::TarError,
-    ),
-    #[error("Invalid tar file")]
-    TarCodec(
-        #[source]
-        #[from]
         tar_codec::ExtractError<tar_codec::DecodeError>,
     ),
     #[error(transparent)]
@@ -145,20 +139,6 @@ impl Error {
             Err(err) => err,
         };
         Self::Io(err)
-    }
-
-    /// When reading a tar archive, the error can either be an I/O error from the underlying
-    /// reader or an error with the archive. Both get wrapped into an I/O error through operations
-    /// such as `io::copy`. This method extracts tar errors to distinguish them from I/O errors.
-    pub(crate) fn io_or_tar(err: std::io::Error) -> Self {
-        if err.kind() != std::io::ErrorKind::Other {
-            return Self::Io(err);
-        }
-
-        match err.downcast::<tokio_tar::TarError>() {
-            Ok(tar_err) => Self::Tar(tar_err),
-            Err(err) => Self::Io(err),
-        }
     }
 
     /// Returns `true` if the error is due to the server not supporting HTTP streaming. Most
