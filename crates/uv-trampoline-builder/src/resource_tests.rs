@@ -162,6 +162,36 @@ fn assert_other_resources_unchanged(
     Ok(())
 }
 
+#[test]
+fn resource_offsets_require_the_same_file() -> Result<()> {
+    use windows::Win32::Foundation::FreeLibrary;
+    use windows::Win32::System::LibraryLoader::{
+        LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE, LoadLibraryExW,
+    };
+    use windows::core::HSTRING;
+
+    let dir = assert_fs::TempDir::new()?;
+    let original = dir.child("original.exe");
+    let copy = dir.child("copy.exe");
+    let launcher = get_launcher_bin(false)?;
+    fs_err::write(original.path(), launcher)?;
+    fs_err::write(copy.path(), launcher)?;
+
+    let path = HSTRING::from(original.path());
+    // SAFETY: The path is null-terminated and the module stays loaded through both checks.
+    #[expect(unsafe_code)]
+    let (same, different) = unsafe {
+        let module = LoadLibraryExW(&path, None, LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE)?;
+        let same = super::open_backing_file(module, original.path()).is_some();
+        let different = super::open_backing_file(module, copy.path()).is_some();
+        FreeLibrary(module)?;
+        (same, different)
+    };
+    assert!(same);
+    assert!(!different);
+    Ok(())
+}
+
 /// A claimed size beyond EOF must not turn a script into a launcher without a payload.
 #[test]
 fn oversized_resource_is_rejected() -> Result<()> {
