@@ -9,8 +9,6 @@ pub(crate) struct Cursor<'a> {
     input: &'a str,
     chars: Chars<'a>,
     pos: usize,
-    /// PEP 825 variables are scoped to the wheel declaring a dependency.
-    allow_variant_markers: bool,
 }
 
 impl<'a> Cursor<'a> {
@@ -20,17 +18,7 @@ impl<'a> Cursor<'a> {
             input,
             chars: input.chars(),
             pos: 0,
-            allow_variant_markers: true,
         }
-    }
-
-    pub(crate) fn without_variant_markers(mut self) -> Self {
-        self.allow_variant_markers = false;
-        self
-    }
-
-    pub(crate) fn allows_variant_markers(&self) -> bool {
-        self.allow_variant_markers
     }
 
     /// Returns a new cursor starting at the given position.
@@ -39,7 +27,6 @@ impl<'a> Cursor<'a> {
             input: self.input,
             chars: self.input[pos..].chars(),
             pos,
-            ..self
         }
     }
 

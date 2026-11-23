@@ -305,14 +305,11 @@ impl HashStrategy {
         mode: HashCheckingMode,
     ) -> Result<Self, HashStrategyError> {
         let mut constraint_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
-        let marker_env = marker_env.map(ResolverMarkerEnvironment::markers);
 
         // First, index the constraints by name.
         for (requirement, digests) in constraints {
             if !requirement
-                .marker
-                .resolve_variants_false()
-                .evaluate_optional_environment(marker_env, &[])
+                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
             {
                 continue;
             }
@@ -341,13 +338,8 @@ impl HashStrategy {
         // For each requirement, map from hash identity to allowed hashes.
         let mut requirement_hashes = FxHashMap::<VersionId, Vec<HashDigest>>::default();
         for (requirement, digests) in requirements {
-            let marker = match requirement {
-                UnresolvedRequirement::Named(requirement) => requirement.marker,
-                UnresolvedRequirement::Unnamed(requirement) => requirement.marker,
-            };
-            if !marker
-                .resolve_variants_false()
-                .evaluate_optional_environment(marker_env, &[])
+            if !requirement
+                .evaluate_markers(marker_env.map(ResolverMarkerEnvironment::markers), &[])
             {
                 continue;
             }
@@ -479,9 +471,6 @@ impl HashStrategy {
         let mut hashes = None;
 
         for requirement in requirements {
-            if requirement.marker.resolve_variants_false().is_false() {
-                continue;
-            }
             let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
@@ -803,23 +792,6 @@ mod tests {
                 ArchiveHashPolicy::All(expected.as_slice())
             );
         }
-    }
-
-    #[test]
-    fn inactive_variant_dependency_cannot_authorize_url() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let url = concat!(
-            "https://files.pythonhosted.org/packages/36/55/",
-            "ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/",
-            "anyio-4.0.0-py3-none-any.whl",
-        );
-        let digest = "cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f";
-        let mut dependency = requirement(&format!("{url}#sha256={digest}"));
-        dependency.marker = "variant_label == ''".parse()?;
-        let hasher = HashStrategy::require(Arc::default())
-            .augment_with_requirements(std::iter::once(&dependency))?;
-        assert!(!hasher.allows_url(&url.parse()?));
-        Ok(())
     }
 
     #[test]

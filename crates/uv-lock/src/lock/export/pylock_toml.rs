@@ -985,7 +985,6 @@ impl<'lock> PylockToml {
             environments: if target.lock().supported_environments().is_empty() {
                 None
             } else {
-                // TODO(konsti): Decide whether wheel variant markers should split environments.
                 Some(target.lock().simplified_supported_environments())
             },
             requires_python: Some(requires_python),

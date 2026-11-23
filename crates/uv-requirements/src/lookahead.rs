@@ -91,7 +91,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         // Queue up the initial requirements.
         let mut queue: VecDeque<_> = self
             .constraints
-            .apply_to_root(
+            .apply(
                 self.modifiers
                     .apply(DependencyModifierScope::Global, self.requirements),
             )
@@ -226,12 +226,7 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                             None
                         }
                     })
-                    .flatten()
-                    .map(|mut dependency| {
-                        // Dependency groups are outside the package's wheel metadata.
-                        dependency.marker = dependency.marker.resolve_variants_false();
-                        dependency
-                    }),
+                    .flatten(),
             )
             .map(|dependency| {
                 if dependency.name == requirement.name {
