@@ -96,6 +96,11 @@ impl Launcher {
         };
 
         let result = (|| {
+            // LDR_IS_DATAFILE: the loader can reuse a DLL already loaded as an image.
+            // Only the data-file layout gives us offsets into the file on disk.
+            if module.0.addr() & 1 == 0 {
+                return Ok(None);
+            }
             let Ok(metadata) = fs_err::metadata(path) else {
                 return Ok(None);
             };
