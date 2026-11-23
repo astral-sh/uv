@@ -10,10 +10,10 @@ Understand the intended behavior and the invariants that must hold before judgin
 Distinguish confirmed defects from questions, tradeoffs, and personal preferences. Use these
 defaults with the repository's instructions and concrete constraints:
 
-1. **Keep scope reviewable.** Look for behavior changes hidden inside refactors, dependency
-   upgrades, or mechanical cleanup. Recommend separation when it makes each change easier to
-   understand. Avoid expanding a focused fix into unrelated cleanup; account for changes that must
-   land together for compatibility.
+1. **Keep scope reviewable.** Identify the PR's goal from its description, diff, and discussion. A
+   partial feature can meet that goal. Look for independent behavior changes in refactors,
+   dependency upgrades, and fixes. Trace the effects of the whole diff, including in unchanged
+   callers and in code added to address earlier feedback.
 2. **Make abstractions justify their cost.** Look for a concrete consumer, a domain concept, or
    repeated steps callers must perform correctly. Search for existing helpers. Prefer ordinary
    functions, inherent methods, and enums for closed sets of implementations. Do not force
@@ -40,10 +40,14 @@ defaults with the repository's instructions and concrete constraints:
    duplicated representations. Follow local naming, import, and error conventions. Explain the
    concrete readability or maintenance benefit; fewer lines alone is insufficient.
 5. **Trace behavior across boundaries.** Check error paths, configuration precedence, cache and
-   serialized formats, older versions, and platform differences. Preserve useful error causes and
-   actionable context. Follow validation through shortcuts as well as normal paths. For concurrency
-   changes, reason about resource lifetimes, interprocess behavior, and consistency across related
-   data; passing race tests do not establish those guarantees.
+   serialized formats, older versions, and platform differences. When discovery or configuration
+   changes, check which inputs each affected command selects. A check can pass by skipping every
+   file it should inspect. When the change affects state, trace what the next operation reads after
+   success, failure, or retry. Include reuse of existing locks, caches, and installed packages where
+   relevant. Preserve useful error causes and actionable context. Follow validation through
+   shortcuts as well as normal paths. For concurrency changes, reason about resource lifetimes,
+   interprocess behavior, and consistency across related data; passing race tests do not establish
+   those guarantees.
 6. **Keep tests direct and focused.** Read neighboring tests and check existing coverage before
    recommending more cases. Follow the repository's test style throughout setup, commands, and
    assertions, and use the relevant existing test module. Integration scenarios should use explicit
@@ -69,14 +73,28 @@ defaults with the repository's instructions and concrete constraints:
 
 Before reporting a behavior defect, check whether the issue is handled by a caller, constructor,
 platform contract, or deliberate tradeoff. For design findings, distinguish guarantees enforced by
-the API from required call ordering. Respect corrections and withdrawn suggestions. Traits, clones,
-globals, duplication, and small helpers are contextual choices, not automatic findings. Do not
-repeat an existing finding or report unrelated pre-existing problems. No findings is a valid result.
+the API from required call ordering. Traits, clones, globals, duplication, and small helpers are
+contextual choices, not automatic findings.
 
-When a relevant finding may predate the PR, compare the triggering behavior at the merge base
-(`base` in `revisions.json`) and at the PR head. If it already occurs on the base, say so in the
-review comment and describe any new exposure or impact this PR introduces. If the fix can land in a
-separate PR, say whether it can follow this PR or needs to land first.
+If the PR could introduce, expose, worsen, or fix a suspected defect, trace the same input or
+sequence from the same starting state at the merge base (`base` in `revisions.json`) and head.
+Report newly broken behavior, new exposure to an existing defect, and incomplete intended fixes,
+even in unchanged code. Explain what changes for the user. If the defect exists on the base, say so.
+
+Once you've investigated the change, decide which findings to return before assigning priorities.
+
+- What would you change in this patch, and what goes wrong if it lands as written? If you'd leave it
+  as is, omit the finding, even at priority 3. For design, style, or test suggestions, name the
+  maintenance cost or the failure the tests would miss. For an optimization, show why the cost
+  matters through measurements or how it grows with the input.
+- Group symptoms with the same cause and recommend the smallest correction. If an optional change
+  causes the problem, consider removing it or splitting it out. Keep changes together when
+  correctness or compatibility requires it. Don't request independent work, even as a follow-up.
+- Compare the cause and consequence with earlier feedback. Omit repeats, including unanswered
+  suggestions. Respect corrections, withdrawals, and deferrals. Report a missed regression, a failed
+  fix, or a defect that has returned. To reopen a decision, explain what new evidence changes it,
+  such as a newly affected caller. Another example of an accepted limitation or a cheaper workaround
+  alone is insufficient.
 
 Return only JSON matching `$REVIEW_CONFIG/schema.json`. Each finding needs a precise diff location,
 triggering condition or concrete maintenance cost, evidence, and the smallest useful correction.
