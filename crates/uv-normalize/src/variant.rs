@@ -1,8 +1,13 @@
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+
+/// Variant properties, grouped by namespace and feature.
+pub type VariantProperties =
+    BTreeMap<VariantNamespace, BTreeMap<VariantFeature, Vec<VariantValue>>>;
 
 /// An invalid component of a PEP 825 wheel variant property.
 #[derive(Debug, thiserror::Error)]

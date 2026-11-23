@@ -9,6 +9,8 @@ pub use crate::specification::*;
 pub use crate::unnamed::*;
 pub use uv_configuration::RequirementsInput;
 
+use std::sync::Arc;
+
 use uv_distribution::check_supported_wheel_variant;
 use uv_distribution_types::{Dist, DistErrorKind, Requirement, RequirementSource};
 
@@ -26,7 +28,7 @@ pub enum Error {
     Dist(
         DistErrorKind,
         Box<Dist>,
-        #[source] Box<uv_distribution::Error>,
+        #[source] Arc<uv_distribution::Error>,
     ),
 
     #[error(transparent)]
@@ -52,7 +54,8 @@ impl Error {
     /// Return whether this is an expected user-facing failure.
     pub fn is_user_failure(&self) -> bool {
         match self {
-            Self::Dist(_, _, error) | Self::Distribution(error) => error.is_user_failure(),
+            Self::Dist(_, _, error) => error.is_user_failure(),
+            Self::Distribution(error) => error.is_user_failure(),
             Self::FlatIndex(error) => error.is_user_failure(),
             Self::DistributionTypes(_) | Self::HashStrategy(_) | Self::WheelFilename(_) => true,
             Self::Io(error) => matches!(
@@ -63,11 +66,12 @@ impl Error {
     }
 
     /// Create an [`Error`] from a distribution error.
-    fn from_dist(dist: Dist, err: uv_distribution::Error) -> Self {
+    fn from_dist(dist: Dist, err: impl Into<Arc<uv_distribution::Error>>) -> Self {
+        let err = err.into();
         Self::Dist(
-            DistErrorKind::from_dist(&dist, &err),
+            DistErrorKind::from_dist(&dist, err.as_ref()),
             Box::new(dist),
-            Box::new(err),
+            err,
         )
     }
 }

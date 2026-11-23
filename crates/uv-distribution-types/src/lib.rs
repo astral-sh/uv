@@ -247,6 +247,15 @@ pub struct RegistryBuiltWheel {
     pub size_is_authoritative: bool,
 }
 
+/// Variant metadata for a package version on an index.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RegistryVariantsJson {
+    pub filename: VariantsJsonFilename,
+    /// The advertised metadata URL. Proxy indexes do not rewrite sidecar URLs.
+    pub file: Box<VerbatimFile>,
+    pub index: IndexUrl,
+}
+
 /// A built distribution (wheel) that exists in a registry, like `PyPI`.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct RegistryBuiltDist {

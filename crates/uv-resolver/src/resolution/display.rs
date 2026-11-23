@@ -9,6 +9,7 @@ use uv_configuration::AnnotationStyle;
 use uv_distribution_types::{DistributionMetadata, Name, SourceAnnotation, SourceAnnotations};
 use uv_normalize::PackageName;
 use uv_pep508::MarkerTree;
+use uv_resolver_types::RequirementsTxtVariantMarkerError;
 
 use crate::resolution::{RequirementsTxtDist, ResolutionGraphNode};
 use crate::{ResolverEnvironment, ResolverOutput};
@@ -18,14 +19,14 @@ use crate::{ResolverEnvironment, ResolverOutput};
 pub struct DisplayResolutionGraph<'a> {
     /// The underlying graph.
     resolution: &'a ResolverOutput,
+    /// The graph after reducing extras and removing the root.
+    graph: RequirementsTxtGraph<'a>,
     /// The resolver marker environment, used to determine the markers that apply to each package.
     env: &'a ResolverEnvironment,
     /// The packages to exclude from the output.
     no_emit_packages: &'a [PackageName],
     /// Whether to include hashes in the output.
     show_hashes: bool,
-    /// Whether to include extras in the output (e.g., `black[colorama]`).
-    include_extras: bool,
     /// Whether to include environment markers in the output (e.g., `black ; sys_platform == "win32"`).
     include_markers: bool,
     /// Whether to include annotations in the output, to indicate which dependency or dependencies
@@ -62,7 +63,7 @@ impl<'a> DisplayResolutionGraph<'a> {
         include_annotations: bool,
         include_index_annotation: bool,
         annotation_style: AnnotationStyle,
-    ) -> Self {
+    ) -> Result<Self, RequirementsTxtVariantMarkerError> {
         for fork_marker in &underlying.fork_markers {
             assert!(
                 fork_marker.conflict().is_true(),
@@ -70,17 +71,44 @@ impl<'a> DisplayResolutionGraph<'a> {
                  cannot display resolver output with conflicts in requirements.txt format",
             );
         }
-        Self {
+        // Assign each package its propagated markers, since a requirements file needs to decide
+        // whether to install each package without looking at which packages depend on it.
+        let graph = underlying.graph.map(
+            |_index, node| match node {
+                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
+                ResolutionGraphNode::Dist(dist) => {
+                    DisplayResolutionGraphNode::Dist(RequirementsTxtDist::from_annotated_dist(dist))
+                }
+            },
+            // Keep the edge direction for annotations.
+            |_index, _edge| (),
+        );
+        let graph = if include_extras {
+            combine_extras(&graph)
+        } else {
+            strip_extras(&graph)
+        };
+        if let Some(dist) = graph.node_weights().find(|dist| {
+            !no_emit_packages.contains(dist.name())
+                && underlying
+                    .requires_python
+                    .simplify_markers(dist.markers)
+                    .has_variant_expression()
+        }) {
+            return Err(RequirementsTxtVariantMarkerError(dist.name().clone()));
+        }
+
+        Ok(Self {
             resolution: underlying,
+            graph,
             env,
             no_emit_packages,
             show_hashes,
-            include_extras,
             include_markers,
             include_annotations,
             include_index_annotation,
             annotation_style,
-        }
+        })
     }
 }
 
@@ -164,32 +192,7 @@ impl std::fmt::Display for DisplayResolutionGraph<'_> {
             SourceAnnotations::default()
         };
 
-        // Convert a [`petgraph::graph::Graph`] based on [`ResolutionGraphNode`] to a graph based on
-        // [`DisplayResolutionGraphNode`]. In other words: converts from [`AnnotatedDist`] to
-        // [`RequirementsTxtDist`].
-        //
-        // We assign each package its propagated markers: In `requirements.txt`, we want a flat list
-        // that for each package tells us if it should be installed on the current platform, without
-        // looking at which packages depend on it.
-        let graph = self.resolution.graph.map(
-            |_index, node| match node {
-                ResolutionGraphNode::Root => DisplayResolutionGraphNode::Root,
-                ResolutionGraphNode::Dist(dist) => {
-                    let dist = RequirementsTxtDist::from_annotated_dist(dist);
-                    DisplayResolutionGraphNode::Dist(dist)
-                }
-            },
-            // We can drop the edge markers, while retaining their existence and direction for the
-            // annotations.
-            |_index, _edge| (),
-        );
-
-        // Reduce the graph, removing or combining extras for a given package.
-        let graph = if self.include_extras {
-            combine_extras(&graph)
-        } else {
-            strip_extras(&graph)
-        };
+        let graph = &self.graph;
 
         // Collect all packages.
         let mut nodes = graph

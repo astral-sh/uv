@@ -30,7 +30,7 @@ use uv_distribution_filename::{
 };
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
-    NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
+    NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist, VariantPolicy,
 };
 use uv_errors::{Hinted, Hints};
 use uv_fs::{Simplified, normalize_path, relative_to};
@@ -270,6 +270,7 @@ pub async fn build_frontend(
         torch_backend: _,
         cuda_driver_version: _,
         amd_gpu_architecture: _,
+        variant_policy,
     } = settings;
 
     // Determine the source to build.
@@ -464,6 +465,7 @@ pub async fn build_frontend(
             client_builder.clone(),
             hash_checking,
             *build_hash_checking,
+            variant_policy,
             build_logs,
             gitignore,
             force_pep517,
@@ -537,6 +539,7 @@ async fn build_package(
     client_builder: BaseClientBuilder<'_>,
     hash_checking: Option<HashCheckingMode>,
     build_hash_checking: HashCheckingMode,
+    variant_policy: &VariantPolicy,
     build_logs: bool,
     gitignore: bool,
     force_pep517: bool,
@@ -699,7 +702,8 @@ async fn build_package(
         concurrency.clone(),
         preview,
     )
-    .with_build_hash_checking(build_hash_checking);
+    .with_build_hash_checking(build_hash_checking)
+    .with_variant_policy(variant_policy);
     let dependency_check = match types_build_isolation {
         uv_types::BuildIsolation::Isolated => None,
         uv_types::BuildIsolation::Shared(_) | uv_types::BuildIsolation::SharedPackage(..) => {

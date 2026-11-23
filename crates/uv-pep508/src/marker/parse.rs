@@ -69,6 +69,41 @@ fn parse_marker_operator<T: Pep508Url>(
     })
 }
 
+/// Parse a member of a variant marker set. Values outside the property vocabulary cannot
+/// match a selected wheel, but remain valid string literals in a dependency marker.
+fn parse_variant_list_pair(key: MarkerValueList, value: &str) -> Option<CanonicalMarkerListPair> {
+    let (base, value) = value
+        .split_once(" | ")
+        .map_or((None, value), |(base, value)| {
+            (Some(base.to_owned()), value)
+        });
+    match key {
+        MarkerValueList::VariantNamespaces => Some(CanonicalMarkerListPair::VariantNamespaces {
+            base,
+            namespace: value.parse().ok()?,
+        }),
+        MarkerValueList::VariantFeatures => {
+            let (namespace, feature) = value.split_once("::")?;
+            Some(CanonicalMarkerListPair::VariantFeatures {
+                base,
+                namespace: namespace.trim_end().parse().ok()?,
+                feature: feature.trim_start().parse().ok()?,
+            })
+        }
+        MarkerValueList::VariantProperties => {
+            let (namespace, rest) = value.split_once("::")?;
+            let (feature, value) = rest.split_once("::")?;
+            Some(CanonicalMarkerListPair::VariantProperties {
+                base,
+                namespace: namespace.trim_end().parse().ok()?,
+                feature: feature.trim().parse().ok()?,
+                value: value.trim_start().parse().ok()?,
+            })
+        }
+        MarkerValueList::Extras | MarkerValueList::DependencyGroups => None,
+    }
+}
+
 /// Either a single or double quoted string or one of '`python_version`', '`python_full_version`',
 /// '`os_name`', '`sys_platform`', '`platform_release`', '`platform_system`', '`platform_version`',
 /// '`platform_machine`', '`platform_python_implementation`', '`implementation_name`',
@@ -102,8 +137,31 @@ fn parse_marker_value<T: Pep508Url>(
         // ... or it can be a keyword
         Some(_) => {
             let (start, len) = cursor.take_while(|char| {
-                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
+                !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')' | '[')
             });
+            // uv's lockfile scopes labels to their owning package, just as it scopes
+            // the set-valued variant markers. Standard dependency markers omit this suffix.
+            if cursor.slice(start, len) == "variant_label" && cursor.eat_char('[').is_some() {
+                let base_start = cursor.pos();
+                let Some((_, quotation_mark @ ('"' | '\''))) = cursor.peek() else {
+                    return Err(Pep508Error {
+                        message: Pep508ErrorSource::String(
+                            "Expected a quoted package identifier".to_string(),
+                        ),
+                        start: base_start,
+                        len: cursor.pos() - base_start,
+                        input: cursor.to_string(),
+                    });
+                };
+                cursor.next();
+                let (start, len) = cursor.take_while(|character| character != quotation_mark);
+                let base = ArcStr::from(cursor.slice(start, len));
+                cursor.next_expect_char(quotation_mark, base_start)?;
+                cursor.next_expect_char(']', cursor.pos())?;
+                return Ok(MarkerValue::MarkerEnvString(
+                    MarkerValueString::VariantLabelBase(base),
+                ));
+            }
             let key = cursor.slice(start, len);
             MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
@@ -319,7 +377,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                             Ok(name) => CanonicalMarkerListPair::Extras(name),
                             Err(err) => {
                                 reporter.report(
-                                    MarkerWarningKind::ExtrasInvalidComparison,
+                                    MarkerWarningKind::ListInvalidComparison,
                                     format!("Expected extra name (found `{l_string}`): {err}"),
                                 );
                                 CanonicalMarkerListPair::Arbitrary {
@@ -334,7 +392,7 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                 Ok(name) => CanonicalMarkerListPair::DependencyGroup(name),
                                 Err(err) => {
                                     reporter.report(
-                                    MarkerWarningKind::ExtrasInvalidComparison,
+                                    MarkerWarningKind::ListInvalidComparison,
                                     format!("Expected dependency group name (found `{l_string}`): {err}"),
                                 );
                                     CanonicalMarkerListPair::Arbitrary {
@@ -343,6 +401,16 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                     }
                                 }
                             }
+                        }
+                        MarkerValueList::VariantNamespaces
+                        | MarkerValueList::VariantFeatures
+                        | MarkerValueList::VariantProperties => {
+                            parse_variant_list_pair(key, &l_string).unwrap_or_else(|| {
+                                CanonicalMarkerListPair::Arbitrary {
+                                    key,
+                                    value: l_string.to_string(),
+                                }
+                            })
                         }
                     };
 

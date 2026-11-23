@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use tracing::{Level, trace};
 
-use uv_distribution_types::{Dist, DistributionId, Identifier, IndexUrl, ResolvedDist};
+use uv_distribution_types::{
+    Dist, DistributionId, Identifier, IndexUrl, RegistryVariantsJson, ResolvedDist, SelectedVariant,
+};
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
 use uv_pep440::{MIN_VERSION, Version};
@@ -34,6 +36,15 @@ pub(crate) struct Resolution<'index> {
 pub(crate) struct SelectedDistribution {
     version: Version,
     source: SelectedSource,
+    variant: Option<SelectedVariant>,
+}
+
+pub(crate) struct SelectedDistributionParts {
+    pub(crate) version: Version,
+    pub(crate) dist: ResolvedDist,
+    pub(crate) metadata: Option<Arc<MetadataResponse>>,
+    pub(crate) variants_json: Option<RegistryVariantsJson>,
+    pub(crate) variant: Option<SelectedVariant>,
 }
 
 #[derive(Debug)]
@@ -48,6 +59,7 @@ enum SelectedSource {
         metadata_id: DistributionId,
         /// Direct-only resolution need not fetch registry metadata.
         metadata: Option<Arc<MetadataResponse>>,
+        variants_json: Option<RegistryVariantsJson>,
     },
 }
 
@@ -57,6 +69,7 @@ impl SelectedDistribution {
         package: &ResolutionPackage,
         version: Version,
         pins: &FilePins<'_>,
+        env: &ResolverEnvironment,
         index: &InMemoryIndex,
         git: &GitResolver,
     ) -> Result<Self, ResolveError> {
@@ -84,20 +97,33 @@ impl SelectedDistribution {
                 pins.dist_and_id(&package.name, &version).ok_or_else(|| {
                     ResolveError::UnregisteredTask(format!("{}=={version}", package.name))
                 })?;
-            let metadata =
-                index.distributions().get(metadata_id).and_then(|response| {
-                    match response.as_ref() {
-                        MetadataResponse::Found(_) => Some(response),
-                        MetadataResponse::Unavailable(_) | MetadataResponse::Error(..) => None,
-                    }
-                });
+            let metadata = if env.marker_environment().is_none()
+                && let ResolvedDist::Installable { dist, .. } = dist
+            {
+                index.variant_dependencies().get(dist)
+            } else {
+                None
+            }
+            .or_else(|| index.distributions().get(metadata_id))
+            .filter(|response| match response.as_ref() {
+                MetadataResponse::Found(_) => true,
+                MetadataResponse::Unavailable(_) | MetadataResponse::Error(..) => false,
+            });
             SelectedSource::Registry {
                 dist: dist.clone(),
                 metadata_id: metadata_id.clone(),
                 metadata,
+                variants_json: pins
+                    .variants_json(&package.name, &version)
+                    .and_then(|registered| registered.wait().as_ref().as_ref().ok().cloned())
+                    .map(|parsed| parsed.artifact.clone()),
             }
         };
-        Ok(Self { version, source })
+        Ok(Self {
+            variant: pins.variant(&package.name, &version).cloned(),
+            version,
+            source,
+        })
     }
 
     pub(crate) fn version(&self) -> &Version {
@@ -105,10 +131,22 @@ impl SelectedDistribution {
     }
 
     /// Move the selected artifact and metadata into the output graph.
-    pub(crate) fn into_parts(self) -> (Version, ResolvedDist, Option<Arc<MetadataResponse>>) {
-        match self.source {
-            SelectedSource::Url { dist, metadata, .. } => (self.version, dist, Some(metadata)),
-            SelectedSource::Registry { dist, metadata, .. } => (self.version, dist, metadata),
+    pub(crate) fn into_parts(self) -> SelectedDistributionParts {
+        let (dist, metadata, variants_json) = match self.source {
+            SelectedSource::Url { dist, metadata, .. } => (dist, Some(metadata), None),
+            SelectedSource::Registry {
+                dist,
+                metadata,
+                variants_json,
+                ..
+            } => (dist, metadata, variants_json),
+        };
+        SelectedDistributionParts {
+            version: self.version,
+            dist,
+            metadata,
+            variants_json,
+            variant: self.variant,
         }
     }
 

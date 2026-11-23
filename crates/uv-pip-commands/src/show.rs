@@ -8,7 +8,7 @@ use rustc_hash::FxHashMap;
 use tracing::debug;
 
 use uv_cache::Cache;
-use uv_distribution_types::{DependencyMetadata, Diagnostic, Name};
+use uv_distribution_types::{DependencyMetadata, Diagnostic, Name, SelectedVariant};
 use uv_fs::Simplified;
 use uv_install_wheel::read_record;
 use uv_installer::SitePackages;
@@ -121,12 +121,19 @@ pub fn pip_show(
     // For Requires field
     for dist in &distributions {
         if let Ok(metadata) = dist.read_metadata() {
+            let variants = dist.read_variant_context_for_markers(
+                metadata
+                    .requires_dist
+                    .iter()
+                    .map(|requirement| &requirement.marker),
+            )?;
+            let variants = SelectedVariant::marker_environment(variants.as_ref());
             requires_map.insert(
                 dist.name(),
                 metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|req| req.marker.evaluate_with_variants(&markers, &variants, &[]))
                     .map(|req| &req.name)
                     .sorted_unstable()
                     .dedup()
@@ -141,10 +148,16 @@ pub fn pip_show(
                 continue;
             }
             if let Ok(metadata) = installed.read_metadata() {
-                let requires = metadata
+                let relevant = metadata
                     .requires_dist
                     .iter()
-                    .filter(|req| req.evaluate_markers(&markers, &[]))
+                    .filter(|requirement| packages.binary_search(&requirement.name).is_ok());
+                let variants = installed.read_variant_context_for_markers(
+                    relevant.clone().map(|requirement| &requirement.marker),
+                )?;
+                let variants = SelectedVariant::marker_environment(variants.as_ref());
+                let requires = relevant
+                    .filter(|req| req.marker.evaluate_with_variants(&markers, &variants, &[]))
                     .map(|req| &req.name)
                     .collect_vec();
                 if !requires.is_empty() {

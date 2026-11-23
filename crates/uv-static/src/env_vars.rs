@@ -403,6 +403,18 @@ impl EnvVars {
     #[attr_added_in("0.8.4")]
     pub const UV_PREVIEW_FEATURES: &'static str = "UV_PREVIEW_FEATURES";
 
+    /// Equivalent to the `--variant-provider` command-line argument. Separate providers with spaces.
+    #[attr_hidden]
+    pub const UV_VARIANT_PROVIDER: &'static str = "UV_VARIANT_PROVIDER";
+
+    /// Equivalent to the `--variant-provider-index` command-line argument.
+    #[attr_hidden]
+    pub const UV_VARIANT_PROVIDER_INDEX: &'static str = "UV_VARIANT_PROVIDER_INDEX";
+
+    /// Equivalent to the `--variant-target` command-line argument.
+    #[attr_hidden]
+    pub const UV_VARIANT_TARGET: &'static str = "UV_VARIANT_TARGET";
+
     /// Equivalent to the `--token` argument for self update. A GitHub token for authentication.
     #[attr_added_in("0.4.10")]
     pub const UV_GITHUB_TOKEN: &'static str = "UV_GITHUB_TOKEN";

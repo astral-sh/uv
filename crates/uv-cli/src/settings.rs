@@ -30,7 +30,7 @@ use uv_configuration::{
 use uv_distribution_types::{
     ConfigSettings, DependencyMetadata, ExcludeNewerOverride, ExtraBuildVariables, Index,
     IndexLocations, IndexUrl, MinimumLibcVersion, NameRequirementSpecification,
-    PackageConfigSettings, Requirement,
+    PackageConfigSettings, Requirement, VariantPolicy,
 };
 use uv_install_wheel::LinkMode;
 use uv_normalize::{ExtraName, PackageName, PipGroupName};
@@ -998,6 +998,7 @@ impl ToolRunSettings {
             filesystem_options.map_or_default(|options| options.install_mirrors);
 
         let mut settings = ResolverInstallerSettings::try_from(options.clone())?;
+        settings.resolver.variant_policy = environment.variant_policy.clone();
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
@@ -1126,6 +1127,7 @@ impl ToolInstallSettings {
             filesystem_options.map_or_default(|options| options.install_mirrors);
 
         let mut settings = ResolverInstallerSettings::try_from(options.clone())?;
+        settings.resolver.variant_policy = environment.variant_policy.clone();
         if torch_backend.is_some() {
             settings.resolver.torch_backend = torch_backend;
         }
@@ -4476,6 +4478,7 @@ fn combine_resolver_settings(
     Ok(ResolverSettings {
         cuda_driver_version: environment.cuda_driver_version.clone(),
         amd_gpu_architecture: environment.amd_gpu_architecture,
+        variant_policy: environment.variant_policy.clone(),
         ..ResolverSettings::try_from(options)?
     })
 }
@@ -4512,6 +4515,7 @@ fn combine_resolver_installer_settings(
         resolver: ResolverSettings {
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
+            variant_policy: environment.variant_policy.clone(),
             ..base.resolver
         },
         ..base
@@ -4557,6 +4561,7 @@ pub struct PipSettings {
     pub torch_backend: Option<TorchMode>,
     pub cuda_driver_version: Option<Version>,
     pub amd_gpu_architecture: Option<AmdGpuArchitecture>,
+    pub variant_policy: VariantPolicy,
     pub build_isolation: BuildIsolation,
     pub extra_build_dependencies: ExtraBuildDependencies,
     pub extra_build_variables: ExtraBuildVariables,
@@ -4879,6 +4884,7 @@ impl PipSettings {
             torch_backend: args.torch_backend.combine(torch_backend),
             cuda_driver_version: environment.cuda_driver_version.clone(),
             amd_gpu_architecture: environment.amd_gpu_architecture,
+            variant_policy: environment.variant_policy.clone(),
             python_version: args.python_version.combine(python_version),
             python_platform: args.python_platform.combine(python_platform),
             universal: args.universal.combine(universal).unwrap_or_default(),
