@@ -253,6 +253,7 @@ jobs:
           safety-strategy: drop-sudo
           allow-users: "*"
           prompt-file: "${{ runner.temp }}/update-issue-context-prompt.md"
+          output-file: /dev/null
           codex-args: >-
             ["resume", "${{ steps.thread.outputs.session-id }}", "-"]
 
