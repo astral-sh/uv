@@ -3033,12 +3033,13 @@ pub struct CheckSettings {
 }
 
 impl CheckSettings {
-    /// Resolve the [`CheckSettings`] from the CLI and filesystem configuration.
+    /// Resolve the check settings and return the CLI overrides so they can also be applied to a
+    /// script's workspace configuration.
     pub fn resolve(
         args: CheckArgs,
         filesystem: Option<FilesystemOptions>,
-        environment: EnvironmentOptions,
-    ) -> anyhow::Result<Self> {
+        environment: &EnvironmentOptions,
+    ) -> Result<(Self, ResolverInstallerOptions)> {
         let CheckArgs {
             fix,
             all_packages,
@@ -3106,11 +3107,13 @@ impl CheckSettings {
             Some(environment.dev),
             Some(environment.no_dev),
         );
-        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), &environment);
+        let malware_settings = MalwareCheckSettings::resolve(filesystem.as_ref(), environment);
+        let options =
+            resolver_installer_options(installer, build, configured_indexes(filesystem.as_ref()))?;
         let settings =
-            resolve_resolver_installer_settings(installer, build, filesystem, &environment)?;
-        Ok(Self {
-            ty_path: environment.ty_path,
+            combine_resolver_installer_settings(options.clone(), filesystem, environment)?;
+        let check = Self {
+            ty_path: environment.ty_path.clone(),
             script,
             fix,
             all_packages,
@@ -3142,6 +3145,7 @@ impl CheckSettings {
             python: python.and_then(Maybe::into_option),
             install_mirrors: environment
                 .install_mirrors
+                .clone()
                 .combine(filesystem_install_mirrors),
             refresh: Refresh::try_from(refresh)?,
             settings,
@@ -3150,7 +3154,8 @@ impl CheckSettings {
             show_command,
             no_project,
             malware_settings,
-        })
+        };
+        Ok((check, options))
     }
 }
 
@@ -4492,8 +4497,8 @@ fn resolve_resolver_installer_settings(
     combine_resolver_installer_settings(args, filesystem, environment)
 }
 
-/// Reconcile the [`ResolverInstallerSettings`] from the CLI and filesystem configuration.
-fn combine_resolver_installer_settings(
+/// Combine the CLI, environment, and filesystem options into [`ResolverInstallerSettings`].
+pub fn combine_resolver_installer_settings(
     args: ResolverInstallerOptions,
     filesystem: Option<FilesystemOptions>,
     environment: &EnvironmentOptions,

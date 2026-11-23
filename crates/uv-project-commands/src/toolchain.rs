@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
@@ -19,13 +19,17 @@ use uv_environment_operations::{
 use uv_fs::{Simplified, normalize_path};
 use uv_install_operations::loggers::SummaryInstallLogger;
 use uv_lock::{Installable, Lock, Package, SelectedDependency};
-use uv_lock_operations::LockTarget;
+use uv_lock_operations::{LockMode, LockOperation, LockTarget};
 use uv_normalize::{DEV_DEPENDENCIES, GroupName, PackageName};
 use uv_preview::Preview;
 use uv_python_discovery::{ConfigDiscovery, ProjectPythonRequest};
 use uv_python_interpreter::{Interpreter, PythonEnvironment};
 use uv_python_types::{PythonArchitecture, PythonDownloads, PythonPreference};
-use uv_settings::{MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings};
+use uv_resolve_operations::loggers::SummaryResolveLogger;
+use uv_settings::{
+    LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+    ResolverSettings,
+};
 use uv_warnings::warn_user;
 use uv_workspace::{
     DiscoveryOptions, MemberDiscovery, VirtualProject, WorkspaceCache, WorkspaceErrorKind,
@@ -128,11 +132,13 @@ impl LockedToolInstaller<'_> {
         Ok((PythonEnvironment::from(environment), resolution))
     }
 
-    /// Use the script's containing workspace only to locate and install the checker.
+    /// Install the checker from the script's containing workspace if its lockfile supplies one.
     pub(super) async fn install_from_script_workspace(
         &self,
         script_dir: &Path,
         name: &PackageName,
+        lock_check: LockCheck,
+        workspace_resolver_settings: impl FnOnce(&Path) -> Result<ResolverSettings>,
         workspace_cache: &WorkspaceCache,
         config_discovery: ConfigDiscovery,
         python_preference: PythonPreference,
@@ -182,27 +188,11 @@ impl LockedToolInstaller<'_> {
         };
         let dependency_group = &*DEV_DEPENDENCIES;
         // Check for a direct declaration before discovering or downloading workspace Python.
-        let root = lock.root();
-        let has_declaration = if let Some(root) = root {
-            root.dependencies()
-                .iter()
-                .chain(
-                    root.resolved_dependency_groups()
-                        .get(dependency_group)
-                        .into_iter()
-                        .flatten(),
-                )
-                .any(|dependency| dependency.package_name() == name)
-        } else {
-            lock.dependency_groups()
-                .get(dependency_group)
-                .is_some_and(|group| group.iter().any(|requirement| &requirement.name == name))
-        };
-        if !has_declaration {
+        if !lock.has_root_dependency(name, dependency_group) {
             return Ok(None);
         }
 
-        let selection = PackageSelection::from_args(false, &[], root.map(Package::name));
+        let selection = PackageSelection::from_args(false, &[], lock.root().map(Package::name));
         let target = InstallTarget::from_project(&project, &lock, selection);
         // Only the checker subgraph is installed. Select one workspace interpreter without
         // group-specific bounds, then evaluate both declarations against its markers.
@@ -250,6 +240,40 @@ impl LockedToolInstaller<'_> {
             );
             return Ok(None);
         };
+        if let LockCheck::Enabled(source) = lock_check {
+            // Once the workspace supplies the tool, validate its lock against all members.
+            // TODO(zsol): Limit validation to the selected tool and its dependencies.
+            let project = VirtualProject::discover(
+                workspace.install_path(),
+                &DiscoveryOptions::default(),
+                self.cache,
+                workspace_cache,
+            )
+            .await?;
+            let workspace_settings = workspace_resolver_settings(workspace.install_path())?;
+            let validated = Box::pin(
+                LockOperation::new(
+                    LockMode::Locked(&interpreter, source),
+                    &workspace_settings,
+                    self.client_builder,
+                    &UniversalState::default(),
+                    Box::new(SummaryResolveLogger),
+                    self.concurrency,
+                    self.cache,
+                    workspace_cache,
+                    self.printer,
+                    self.preview,
+                )
+                .execute(LockTarget::Workspace(project.workspace())),
+            )
+            .await?;
+            if validated.lock() != &lock {
+                return Err(anyhow!(
+                    "The workspace lockfile changed while selecting `{name}`. Retry the command"
+                )
+                .into());
+            }
+        }
         let (environment, _) = self
             .install(target, tool.dependency(), &interpreter)
             .await?;

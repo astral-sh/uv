@@ -37,6 +37,7 @@ use uv_resolve_operations::loggers::SummaryResolveLogger;
 use uv_scripts::Pep723Script;
 use uv_settings::{
     FrozenSource, LockCheck, MalwareCheckSettings, PythonInstallMirrors, ResolverInstallerSettings,
+    ResolverSettings,
 };
 use uv_virtualenv::UpgradePolicy;
 use uv_warnings::warn_user;
@@ -64,6 +65,7 @@ pub async fn check(
     python: Option<String>,
     install_mirrors: PythonInstallMirrors,
     settings: ResolverInstallerSettings,
+    workspace_resolver_settings: impl FnOnce(&Path) -> Result<ResolverSettings>,
     ty_version: Option<String>,
     show_version: bool,
     show_command: bool,
@@ -492,6 +494,8 @@ pub async fn check(
                     .install_from_script_workspace(
                         &target_dir,
                         &ty_name,
+                        lock_check,
+                        workspace_resolver_settings,
                         workspace_cache,
                         config_discovery,
                         python_preference,

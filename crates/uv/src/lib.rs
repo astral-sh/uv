@@ -335,16 +335,9 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
     )
     .await
     {
-        let project =
-            FilesystemOptions::find(workspace.install_path()).map_err(map_settings_error)?;
-        let system = FilesystemOptions::system().map_err(map_settings_error)?;
-        let user = FilesystemOptions::user().map_err(map_settings_error)?;
-        project.combine(user).combine(system)
+        discover_project_options(workspace.install_path())?
     } else {
-        let project = FilesystemOptions::find(&project_dir).map_err(map_settings_error)?;
-        let system = FilesystemOptions::system().map_err(map_settings_error)?;
-        let user = FilesystemOptions::user().map_err(map_settings_error)?;
-        project.combine(user).combine(system)
+        discover_project_options(&project_dir)?
     };
 
     // If the target is a remote script, download it.
@@ -1464,6 +1457,7 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 globals,
                 config_discovery,
                 cli.top_level.global_args.project.is_some(),
+                cli.top_level.config_file.as_deref(),
                 client_builder,
                 filesystem,
                 cache,
@@ -2251,6 +2245,14 @@ fn required_version_error(
     )
 }
 
+/// Discover the project configuration and apply user and system defaults.
+fn discover_project_options(path: &Path) -> Result<Option<FilesystemOptions>> {
+    let project = FilesystemOptions::find(path).map_err(map_settings_error)?;
+    let system = FilesystemOptions::system().map_err(map_settings_error)?;
+    let user = FilesystemOptions::user().map_err(map_settings_error)?;
+    Ok(project.combine(user).combine(system))
+}
+
 /// Run a [`ProjectCommand`].
 async fn run_project(
     project_command: Box<ProjectCommand>,
@@ -2260,6 +2262,7 @@ async fn run_project(
     globals: GlobalSettings,
     config_discovery: ConfigDiscovery,
     explicit_project: bool,
+    config_file: Option<&Path>,
     client_builder: BaseClientBuilder<'_>,
     filesystem: Option<FilesystemOptions>,
     cache: Cache,
@@ -2911,7 +2914,8 @@ async fn run_project(
         }
         ProjectCommand::Check(args) => {
             // Resolve the settings from the command-line arguments and workspace configuration.
-            let args = settings::CheckSettings::resolve(args, filesystem, environment)?;
+            let (args, cli_options) =
+                settings::CheckSettings::resolve(args, filesystem, &environment)?;
             show_settings!(args);
 
             // Check for conflicts between offline and refresh.
@@ -2947,6 +2951,21 @@ async fn run_project(
                 args.python,
                 args.install_mirrors,
                 args.settings,
+                |path| {
+                    let filesystem = if let Some(file) = config_file {
+                        Some(FilesystemOptions::from_file(file).map_err(map_settings_error)?)
+                    } else if config_discovery.enabled() {
+                        discover_project_options(path)?
+                    } else {
+                        None
+                    };
+                    let settings = settings::combine_resolver_installer_settings(
+                        cli_options,
+                        filesystem,
+                        &environment,
+                    )?;
+                    Ok(settings.resolver)
+                },
                 args.ty_version,
                 args.show_version,
                 args.show_command,

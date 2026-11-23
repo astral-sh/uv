@@ -4907,6 +4907,9 @@ pub struct CheckArgs {
     ///
     /// Requires that the lockfile is up-to-date. If the lockfile is missing or needs to be updated,
     /// uv will exit with an error.
+    ///
+    /// With `--script`, uv checks the script's lockfile. If the workspace supplies `ty`, uv also
+    /// checks the workspace's `uv.lock`.
     #[arg(long, conflicts_with_all = ["frozen", "upgrade"], overrides_with = "no_locked")]
     pub locked: bool,
 

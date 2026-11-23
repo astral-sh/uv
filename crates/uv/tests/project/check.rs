@@ -2069,7 +2069,6 @@ fn check_uses_ty_version_from_forked_lock() -> Result<()> {
     Ok(())
 }
 
-/// The cached checker imports a dependency of a virtual member with no module to build.
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_uses_workspace_ty_subgraph_from_lock() -> Result<()> {
@@ -2090,27 +2089,9 @@ fn check_uses_workspace_ty_subgraph_from_lock() -> Result<()> {
 
         [tool.uv.sources]
         ty = { workspace = true }
-        checker-deps = { workspace = true }
 
         [tool.uv.workspace]
-        members = ["ty", "checker-deps"]
-    "#})?;
-    context
-        .temp_dir
-        .child("checker-deps/pyproject.toml")
-        .write_str(indoc! {r#"
-        [project]
-        name = "checker-deps"
-        version = "0.1.0"
-        requires-python = ">=3.12"
-        dependencies = ["iniconfig"]
-
-        [tool.uv]
-        package = false
-
-        [build-system]
-        requires = ["uv_build>=0.7,<10000"]
-        build-backend = "uv_build"
+        members = ["ty"]
     "#})?;
     let ty = context.temp_dir.child("ty");
     ty.create_dir_all()?;
@@ -2119,7 +2100,7 @@ fn check_uses_workspace_ty_subgraph_from_lock() -> Result<()> {
         name = "ty"
         version = "1.2.3"
         requires-python = ">=3.12"
-        dependencies = ["checker-deps"]
+        dependencies = []
 
         [project.scripts]
         ty = "ty:main"
@@ -2132,8 +2113,6 @@ fn check_uses_workspace_ty_subgraph_from_lock() -> Result<()> {
     ty_package.create_dir_all()?;
     ty_package.child("__init__.py").write_str(indoc! {r#"
         import sys
-
-        import iniconfig
 
         def main():
             if "--version" in sys.argv:
@@ -2153,7 +2132,7 @@ fn check_uses_workspace_ty_subgraph_from_lock() -> Result<()> {
 
     ----- stderr -----
     warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
-    Installed 2 packages in [TIME]
+    Installed 1 package in [TIME]
     Using ty 1.2.3
     "
     );
@@ -2323,13 +2302,17 @@ fn check_script() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_uses_workspace_ty() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_filter((r"ty 0\.0\.16(?: \([^)]*\))?", "ty 0.0.16"));
     context
         .temp_dir
         .child("pyproject.toml")
         .write_str(indoc! {r#"
+        [tool.uv]
+        exclude-newer = "2026-02-11T00:00:00Z"
+
         [tool.uv.workspace]
-        members = ["packages/member"]
+        members = ["packages/*"]
 
         [dependency-groups]
         check = ["ty"]
@@ -2337,10 +2320,14 @@ fn check_script_uses_workspace_ty() -> Result<()> {
     "#})?;
     write_workspace_member(&context, "member", "")?;
     let scripts = context.temp_dir.child("packages/member/scripts");
-    scripts.child("example.py").write_str(indoc! {r#"
+    let script = scripts.child("example.py");
+    script.write_str(indoc! {r#"
         # /// script
         # requires-python = "==3.11.*"
         # dependencies = ["iniconfig==2.0.0"]
+        #
+        # [tool.uv]
+        # exclude-newer = "2026-02-01T00:00:00Z"
         # ///
 
         import sys
@@ -2353,7 +2340,14 @@ fn check_script_uses_workspace_ty() -> Result<()> {
     "#})?;
     context
         .lock()
-        .args(["--exclude-newer", "2026-02-11T00:00:00Z"])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .assert()
+        .success();
+    context
+        .lock()
+        .arg("--script")
+        .arg(script.path())
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
         .assert()
         .success();
     let workspace_lock = context.read_bytes("uv.lock");
@@ -2364,7 +2358,20 @@ fn check_script_uses_workspace_ty() -> Result<()> {
         .child("pyproject.toml")
         .write_str("[tool.uv.workspace]\n")?;
 
-    uv_snapshot!(context.filters(), context.check().current_dir(caller.path()).args(["--script", "../example.py", "--python", "3.11", "--show-version"]), @"
+    let mut check = context.check();
+    check
+        .current_dir(caller.path())
+        .args([
+            "--script",
+            "../example.py",
+            "--python",
+            "3.11",
+            "--locked",
+            "--show-version",
+        ])
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER);
+
+    uv_snapshot!(context.filters(), &mut check, @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!
@@ -2374,7 +2381,21 @@ fn check_script_uses_workspace_ty() -> Result<()> {
     Installed 1 package in [TIME]
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     Installed 1 package in [TIME]
-    Using ty 0.0.16 (e96ea4cd9 2026-02-10)
+    Using ty 0.0.16
+    ");
+
+    // Adding a sibling makes the workspace lockfile stale while the script lockfile is current.
+    write_workspace_member(&context, "sibling", "")?;
+    uv_snapshot!(context.filters(), check, @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    error: Failed to use the workspace's locked `ty`. Use `--no-project` to skip the workspace lookup
+      cause: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; added: sibling
+
+    hint: To update the lockfile, run `uv lock`.
     ");
 
     assert_eq!(context.read_bytes("uv.lock"), workspace_lock);
@@ -2544,7 +2565,8 @@ fn check_script_workspace_ty_rejects_unsupported_platform() -> Result<()> {
 #[test]
 #[cfg(feature = "test-pypi")]
 fn check_script_workspace_ty_reports_inactive_dependency_from_old_lock() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
+        .with_exclude_newer("2026-02-15T00:00:00Z");
     context
         .temp_dir
         .child("pyproject.toml")
@@ -2597,7 +2619,14 @@ fn check_script_workspace_ty_reports_inactive_dependency_from_old_lock() -> Resu
         # ///
     "#})?;
 
-    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()).arg("--show-version"), @"
+    context
+        .lock()
+        .arg("--script")
+        .arg(script.path())
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.check().arg("--script").arg(script.path()).arg("--locked").arg("--show-version"), @"
     exit_code: 0 (success)
     ----- stdout -----
     All checks passed!

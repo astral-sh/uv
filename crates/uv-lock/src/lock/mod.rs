@@ -3308,6 +3308,21 @@ impl Lock {
         &self.manifest.dependency_groups
     }
 
+    /// Whether the workspace root declares `name` in its production dependencies or in `group`,
+    /// ignoring environment markers.
+    pub fn has_root_dependency(&self, name: &PackageName, group: &GroupName) -> bool {
+        if let Some(root) = self.root() {
+            root.dependencies()
+                .iter()
+                .chain(DependencyContext::Group(group).dependencies(root))
+                .any(|dependency| dependency.package_name() == name)
+        } else {
+            self.dependency_groups()
+                .get(group)
+                .is_some_and(|group| group.iter().any(|requirement| &requirement.name == name))
+        }
+    }
+
     /// Returns the environment-specific direct dependency selections for a lock target.
     ///
     /// If `project_name` is provided, dependencies attached to that package are used. Otherwise,
