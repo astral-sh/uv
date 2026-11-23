@@ -600,6 +600,7 @@ fn parse_dependency(
         let message = match error.message {
             Pep508ErrorSource::String(message)
             | Pep508ErrorSource::UnsupportedRequirement(message) => message,
+            message @ Pep508ErrorSource::VariantMarkerInEnvironment(_) => message.to_string(),
             Pep508ErrorSource::UrlError(_) => "Invalid URL requirement".to_string(),
         };
         anyhow!(

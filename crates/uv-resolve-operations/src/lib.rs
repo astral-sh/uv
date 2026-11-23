@@ -256,7 +256,10 @@ pub async fn resolve(
     // Incorporate hashes from requirements discovered while resolving source trees and groups.
     let mut hasher = hasher
         .clone()
-        .augment_with_requirements(requirements.iter())?;
+        .augment_with_requirements(requirements.iter().filter(|requirement| {
+            let marker = requirement.marker.resolve_variants_false();
+            marker == requirement.marker || !marker.is_false()
+        }))?;
 
     // Resolve the overrides from the provided sources.
     let overrides = {

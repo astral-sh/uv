@@ -464,7 +464,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
             // Add any requirements that are exclusive to the workspace root (e.g., dependencies in
             // PEP 723 scripts).
             for dependency in self.lock().requirements() {
-                if !dependency.marker.evaluate(marker_env, &[]) {
+                if !dependency
+                    .marker
+                    .resolve_variants_false()
+                    .evaluate(marker_env, &[])
+                {
                     continue;
                 }
 
@@ -539,7 +543,11 @@ trait InstallableExt<'lock>: Installable<'lock> {
                 })
                 .flatten()
             {
-                if !dependency.marker.evaluate(marker_env, &[]) {
+                if !dependency
+                    .marker
+                    .resolve_variants_false()
+                    .evaluate(marker_env, &[])
+                {
                     continue;
                 }
 
