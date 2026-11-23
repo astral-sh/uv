@@ -396,6 +396,11 @@ fn open_backing_file(module: HMODULE, path: &Path) -> Option<(File, u64)> {
         let status = NtAreMappedFilesTheSame(image.Value, data);
         let _ = UnmapViewOfFile(image);
         if status.0 != 0 {
+            tracing::trace!(
+                "Could not verify the backing file for `{}` (NTSTATUS {:#010x})",
+                path.display(),
+                status.0
+            );
             return None;
         }
     }
