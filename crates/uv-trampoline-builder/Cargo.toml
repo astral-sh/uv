@@ -35,7 +35,7 @@ thiserror = { workspace = true }
 async_zip = { workspace = true }
 editpe = { workspace = true }
 futures-lite = { workspace = true }
-windows = { workspace = true, features = ["Win32_System_Memory"] }
+windows = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

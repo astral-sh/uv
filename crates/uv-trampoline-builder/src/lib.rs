@@ -73,14 +73,43 @@ impl Launcher {
     /// Returns `Err` if the file looks like a trampoline executable but is formatted incorrectly.
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
-        use std::os::windows::ffi::OsStrExt;
+        use fs_err::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows::Win32::Foundation::{HANDLE, MAX_PATH};
+        use windows::Win32::Storage::FileSystem::{
+            FILE_NAME_NORMALIZED, FILE_SHARE_READ, GetFinalPathNameByHandleW,
+        };
         use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW};
 
-        let path_wide = path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect::<Vec<_>>();
+        // Keep the file open against writes and replacement. Load the resolved path
+        // from its handle so a change to a junction in `path` cannot retarget the probe.
+        let Ok(mut file) = File::options()
+            .read(true)
+            .share_mode(FILE_SHARE_READ.0)
+            .open(path)
+        else {
+            return Ok(None);
+        };
+        let mut path_wide = vec![0; MAX_PATH as usize];
+        loop {
+            // SAFETY: `file` owns the handle and `path_wide` is a writable buffer.
+            #[expect(unsafe_code)]
+            let len = unsafe {
+                GetFinalPathNameByHandleW(
+                    HANDLE(file.as_raw_handle()),
+                    &mut path_wide,
+                    FILE_NAME_NORMALIZED,
+                )
+            } as usize;
+            if len == 0 {
+                return Ok(None);
+            }
+            if len < path_wide.len() {
+                break;
+            }
+            // The required length includes the terminator when the buffer is too small.
+            path_wide.resize(len, 0);
+        }
 
         // SAFETY: `path_wide` is a null-terminated UTF-16 string.
         #[allow(unsafe_code)]
@@ -101,10 +130,10 @@ impl Launcher {
             if module.0.addr() & 1 == 0 {
                 return Ok(None);
             }
-            let Ok(metadata) = fs_err::metadata(path) else {
+            let Ok(metadata) = file.metadata() else {
                 return Ok(None);
             };
-            let read_resource = |name| read_resource(module, metadata.len(), name);
+            let mut read_resource = |name| read_resource(module, &mut file, metadata.len(), name);
             let Some(kind_data) = read_resource(RESOURCE_TRAMPOLINE_KIND) else {
                 return Ok(None);
             };
@@ -335,17 +364,15 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     Ok(image.data().to_vec())
 }
 
-/// Safely read a named resource from a loaded PE image.
+/// Locate a named resource in a PE data-file mapping and read it from the file.
 #[cfg(windows)]
 fn read_resource(
     handle: windows::Win32::Foundation::HMODULE,
+    file: &mut File,
     file_size: u64,
     name: &str,
 ) -> Option<Vec<u8>> {
-    use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
-    use windows::Win32::System::Memory::{MEMORY_BASIC_INFORMATION, VirtualQuery};
-    use windows::Win32::System::Threading::GetCurrentProcess;
-
+    use std::io::{Read, Seek, SeekFrom};
     use windows::Win32::System::LibraryLoader::{
         FindResourceW, LoadResource, LockResource, SizeofResource,
     };
@@ -356,9 +383,9 @@ fn read_resource(
         .collect::<Vec<_>>();
 
     // SAFETY: `name_wide` is null-terminated and the module stays loaded.
-    // `VirtualQuery` and `ReadProcessMemory` receive valid output buffers.
+    // We use the resource pointer only to compute its offset.
     #[allow(unsafe_code)]
-    unsafe {
+    let (pointer, size) = unsafe {
         // Find the resource
         let resource = FindResourceW(
             Some(handle),
@@ -381,33 +408,20 @@ fn read_resource(
             return None;
         }
 
-        // The size in the resource table is untrusted. Bound the payload by
-        // both the datafile mapping and the file length (the last page is padded).
-        let mut mapping = MEMORY_BASIC_INFORMATION::default();
-        if VirtualQuery(
-            Some(handle.0),
-            &raw mut mapping,
-            size_of::<MEMORY_BASIC_INFORMATION>(),
-        ) == 0
-        {
-            return None;
-        }
-        let offset = pointer.addr().checked_sub(mapping.BaseAddress.addr())?;
-        let end = offset.checked_add(size as usize)?;
-        if end > mapping.RegionSize || end as u64 > file_size {
-            return None;
-        }
-        let mut bytes = vec![0; size as usize];
-        ReadProcessMemory(
-            GetCurrentProcess(),
-            pointer.cast(),
-            bytes.as_mut_ptr().cast(),
-            bytes.len(),
-            None,
-        )
-        .ok()?;
-        Some(bytes)
+        (pointer, size)
+    };
+
+    // A data-file handle is the mapping's base address with the low bit set.
+    // Check the untrusted size before allocating, including in the padded last page.
+    let base = handle.0.addr() & !1;
+    let offset = pointer.addr().checked_sub(base)? as u64;
+    if offset.checked_add(u64::from(size))? > file_size {
+        return None;
     }
+    file.seek(SeekFrom::Start(offset)).ok()?;
+    let mut bytes = vec![0; size as usize];
+    file.read_exact(&mut bytes).ok()?;
+    Some(bytes)
 }
 
 /// Construct a Windows script launcher.
