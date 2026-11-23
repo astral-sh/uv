@@ -81,6 +81,11 @@ jobs:
             exit 0
           fi
 
+          if [ -L "$RUNNER_TEMP/issue-context/README.md" ]; then
+            echo "The issue context README must not be a symlink." >&2
+            exit 1
+          fi
+
           if [ ! -f "$RUNNER_TEMP/issue-context/README.md" ]; then
             echo "The issue context for $GITHUB_REPOSITORY#$ISSUE_NUMBER is not initialized."
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -90,6 +95,9 @@ jobs:
           echo "exists=true" >> "$GITHUB_OUTPUT"
           echo "context-sha=$(git -C "$RUNNER_TEMP/issue-context" rev-parse HEAD)" \
             >> "$GITHUB_OUTPUT"
+
+          mkdir "$RUNNER_TEMP/codex-scratch"
+          cp "$RUNNER_TEMP/issue-context/README.md" "$RUNNER_TEMP/codex-scratch/README.md"
 
           {
             printf 'Issue context update for #%s: %s\n\n' \
@@ -233,7 +241,8 @@ jobs:
         uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TMPDIR: ${{ runner.temp }}
+          # Keep Git metadata and runner command files outside the sandbox's writable directory.
+          TMPDIR: ${{ runner.temp }}/codex-scratch
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.169.0"
@@ -251,6 +260,15 @@ jobs:
         id: changes
         if: steps.find-thread.outputs.found == 'true'
         run: |
+          # Move the file out of the sandbox so it can't be replaced after the check.
+          readme="$RUNNER_TEMP/updated-README.md"
+          mv -T "$RUNNER_TEMP/codex-scratch/README.md" "$readme"
+          if [ -L "$readme" ] || [ ! -f "$readme" ]; then
+            echo "The updated README must be a regular file." >&2
+            exit 1
+          fi
+          cp "$readme" "$RUNNER_TEMP/issue-context/README.md"
+
           if [ -n "$(git -C "$RUNNER_TEMP/issue-context" status --porcelain -- . ':!README.md')" ]; then
             echo "Codex changed files outside the issue-context README."
             git -C "$RUNNER_TEMP/issue-context" status --short
