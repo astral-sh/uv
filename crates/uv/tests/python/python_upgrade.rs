@@ -873,3 +873,61 @@ print(sys.executable)
 
     Ok((context, python))
 }
+
+/// Test that `uv python upgrade` correctly upgrades the binary link when the managed Python
+/// installation directory is accessed through a symlink.
+#[test]
+#[cfg(unix)]
+fn python_upgrade_symlink_install_dir() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_filtered_latest_python_versions();
+
+    let real_dir = context.temp_dir.child("real");
+    fs_err::create_dir_all(&real_dir)?;
+    let link_dir = context.temp_dir.child("link");
+    std::os::unix::fs::symlink(&real_dir, &link_dir)?;
+
+    let python_dir = link_dir.join("python");
+    let bin_dir = link_dir.join("bin");
+
+    // Install an earlier patch version through the symlinked directory path
+    context
+        .python_install()
+        .arg("3.10.17")
+        .env(EnvVars::UV_PYTHON_INSTALL_DIR, &python_dir)
+        .env(EnvVars::UV_PYTHON_BIN_DIR, &bin_dir)
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "automatic")
+        .assert()
+        .success();
+
+    let bin_link = bin_dir.join("python3.10");
+    assert!(bin_link.is_symlink());
+
+    // Upgrade the version through the symlink path.
+    // Previously, this would warn that the executable is not managed by uv and skip upgrading the link.
+    let output = context
+        .python_upgrade()
+        .arg("3.10")
+        .env(EnvVars::UV_PYTHON_INSTALL_DIR, &python_dir)
+        .env(EnvVars::UV_PYTHON_BIN_DIR, &bin_dir)
+        .env(EnvVars::UV_PYTHON_DOWNLOADS, "automatic")
+        .assert()
+        .success();
+
+    let stderr = std::str::from_utf8(&output.get_output().stderr)?;
+    assert!(
+        !stderr.contains("not managed by uv"),
+        "Stderr should not contain 'not managed by uv': {stderr}"
+    );
+
+    // The binary link should now point to the upgraded version, not 3.10.17
+    let target = fs_err::read_link(&bin_link)?;
+    assert!(
+        !target.to_string_lossy().contains("3.10.17"),
+        "Link should be updated to latest patch, but still points to: {target:?}"
+    );
+
+    Ok(())
+}

@@ -1340,24 +1340,28 @@ fn find_matching_bin_link<'a>(
     mut installations: impl Iterator<Item = &'a ManagedPythonInstallation>,
     path: &Path,
 ) -> Option<&'a ManagedPythonInstallation> {
-    if cfg!(unix) {
+    let target = if cfg!(unix) {
         if !path.is_symlink() {
             return None;
         }
-        let target = fs_err::canonicalize(path).ok()?;
-
-        installations.find(|installation| installation.executable(false) == target)
+        fs_err::canonicalize(path).ok()?
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {
             return None;
         }
-        let target = dunce::canonicalize(launcher.python_path).ok()?;
-
-        installations.find(|installation| installation.executable(false) == target)
+        dunce::canonicalize(launcher.python_path).ok()?
     } else {
         unreachable!("Only Unix and Windows are supported")
-    }
+    };
+
+    installations.find(|installation| {
+        let executable = installation.executable(false);
+        executable == target
+            || executable
+                .simple_canonicalize()
+                .is_ok_and(|canon| canon == target)
+    })
 }
 
 /// Check if a download's build version matches an installation's build version.
