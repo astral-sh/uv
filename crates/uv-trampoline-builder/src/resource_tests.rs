@@ -201,7 +201,7 @@ fn oversized_resource_is_rejected() -> Result<()> {
     let mut launcher = write_resources(
         get_launcher_bin(false)?,
         &[
-            (RESOURCE_TRAMPOLINE_KIND, &[1]),
+            (RESOURCE_TRAMPOLINE_KIND, &[1, 0]),
             (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
             (RESOURCE_SCRIPT_DATA, script),
         ],

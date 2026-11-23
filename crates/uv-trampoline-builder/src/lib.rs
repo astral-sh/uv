@@ -104,7 +104,7 @@ impl Launcher {
             // Ordinary executables have no kind resource. Open and verify the
             // backing file only when the loader finds a resource to read.
             let mut backing = std::cell::LazyCell::new(|| open_backing_file(module, path));
-            let mut read_resource = |name| -> io::Result<Option<Vec<u8>>> {
+            let mut read_resource = |name, limit: usize| -> io::Result<Option<Vec<u8>>> {
                 use std::io::{Read, Seek, SeekFrom};
 
                 let Some((offset, size)) = resource_range(module, name)? else {
@@ -115,13 +115,14 @@ impl Launcher {
                     return Err(io::ErrorKind::UnexpectedEof.into());
                 }
                 file.seek(SeekFrom::Start(offset))?;
+                let size = (size as usize).min(limit);
                 let mut bytes = Vec::new();
-                bytes.try_reserve_exact(size as usize)?;
-                bytes.resize(size as usize, 0);
+                bytes.try_reserve_exact(size)?;
+                bytes.resize(size, 0);
                 file.read_exact(&mut bytes)?;
                 Ok(Some(bytes))
             };
-            let Ok(Some(kind_data)) = read_resource(RESOURCE_TRAMPOLINE_KIND) else {
+            let Ok(Some(kind_data)) = read_resource(RESOURCE_TRAMPOLINE_KIND, 1) else {
                 return Ok(None);
             };
             let Some(&kind_value) = kind_data.first() else {
@@ -131,14 +132,14 @@ impl Launcher {
                 return Err(Error::UnprocessableMetadata);
             };
 
-            let Ok(Some(path_data)) = read_resource(RESOURCE_PYTHON_PATH) else {
+            let Ok(Some(path_data)) = read_resource(RESOURCE_PYTHON_PATH, usize::MAX) else {
                 return Ok(None);
             };
             let python_path = PathBuf::from(
                 String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
             );
 
-            let Ok(script_data) = read_resource(RESOURCE_SCRIPT_DATA) else {
+            let Ok(script_data) = read_resource(RESOURCE_SCRIPT_DATA, usize::MAX) else {
                 return Ok(None);
             };
 
