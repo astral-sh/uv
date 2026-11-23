@@ -1240,6 +1240,7 @@ fn run_pep723_script_lock() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements changed from `iniconfig` to `anyio`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1804,7 +1805,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1825,7 +1826,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1839,7 +1840,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
+            #![CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -1869,7 +1870,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1886,7 +1887,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1909,7 +1910,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main").arg(context.temp_dir.child("main").as_os_str()), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1922,7 +1923,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--with").arg("iniconfig").arg("main_gui").arg(context.temp_dir.child("main_gui").as_os_str()), @r"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 6 packages in [TIME]
@@ -1947,7 +1948,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     }, {
             assert_snapshot!(
                 context.read("main"), @r#"
-            #![CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
+            #![CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/python
             # -*- coding: utf-8 -*-
             import sys
             from foo import main
@@ -1966,7 +1967,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--with").arg(".").arg("main"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/python
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/python
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -1977,7 +1978,7 @@ fn run_with_overlay_interpreter() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--gui-script").arg("--with").arg(".").arg("main_gui"), @r"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/pythonw
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/pythonw
 
     ----- stderr -----
     Resolved 4 packages in [TIME]
@@ -2669,6 +2670,7 @@ fn run_locked() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -3565,7 +3567,7 @@ fn run_no_project() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("--no-project").arg("--isolated").arg("python").arg("-c").arg("import sys; print(sys.executable)"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/builds-v0/[TMP]/[BIN]/[PYTHON]
+    [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/[PYTHON]
     ");
 
     // `run --no-project` should not (but it should still run in the same environment, as it would
@@ -4794,7 +4796,7 @@ fn run_script_environment_cache_repair() -> Result<()> {
     let output = uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/environments-v2/main-[HASH]
+    [CACHE_DIR]/environments-[VERSION]/main-[HASH]
     ");
 
     let environment = ChildPath::new(String::from_utf8(output.stdout)?.trim());
@@ -4808,7 +4810,7 @@ fn run_script_environment_cache_repair() -> Result<()> {
     uv_snapshot!(context.filters(), context.run().arg("main.py"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/environments-v2/main-[HASH]
+    [CACHE_DIR]/environments-[VERSION]/main-[HASH]
     ");
 
     environment
@@ -8057,7 +8059,7 @@ fn run_centralized_environment_path_file() -> Result<()> {
         .assert()
         .success();
     // Resolve a relative path file target from `.venv`'s parent.
-    environment.write_str("external")?;
+    environment.write_str("external\r\n")?;
 
     // Like a directory link, use the path file's interpreter to select the cached environment.
     uv_snapshot!(context.filters(), context.run()

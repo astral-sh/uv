@@ -12,6 +12,7 @@ use tempfile::tempdir_in;
 use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_cache::CacheBucket;
 use uv_fs::Simplified;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
@@ -965,6 +966,7 @@ fn sync_lock_flags_override_environment() -> Result<()> {
     warning: Ignoring `UV_FROZEN` because `--locked` was provided
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1036,6 +1038,7 @@ fn sync_no_lock_flags_override_environment() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `UV_LOCKED=1` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1376,6 +1379,7 @@ fn locked() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1385,6 +1389,7 @@ fn locked() -> Result<()> {
     exit_code: 1 (failure)
     ----- stderr -----
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1878,6 +1883,7 @@ fn sync_json() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `iniconfig` to `iniconfig<2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -7765,6 +7771,45 @@ fn no_install_package() -> Result<()> {
     Ok(())
 }
 
+/// Platform filtering can leave an excluded package without a locked distribution.
+#[test]
+fn no_install_package_without_artifact() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    let (filename, wheel) = WheelBuilder::new(&"demo".parse()?, &"1.0".parse()?)
+        .tag("py3-none-win_amd64")
+        .requires(&["child".parse()?])
+        .build();
+    wheels.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"child".parse()?, &"1.0".parse()?).build();
+    wheels.child(filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo; sys_platform == 'linux'"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["wheels"]
+    "#})?;
+
+    context.lock().assert().success();
+    uv_snapshot!(context.filters(), context.sync().args(["--frozen", "--python-platform", "linux", "--no-install-package", "demo"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + child==1.0
+    ");
+    Ok(())
+}
+
 /// Ensure that `--no-build` allows first-party projects and that `--no-install-project` still
 /// skips them.
 #[test]
@@ -8134,20 +8179,11 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
         # ///
     "#})?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-[a-z0-9]+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv sync` should fail due to missing build-dependencies
-    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved [N] packages in [TIME]
     error: Failed to build `child @ file://[TEMP_DIR]/child`
       cause: The build backend returned an error
@@ -8175,10 +8211,10 @@ fn sync_extra_build_dependencies_script() -> Result<()> {
 
     // Running `uv sync` should now succeed due to extra build-dependencies
     context.venv().arg("--clear").assert().success();
-    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -8241,20 +8277,11 @@ fn sync_extra_build_dependencies_script_sources() -> Result<()> {
     "#, anyio_local.portable_display()
     })?;
 
-    let filters = context
-        .filters()
-        .into_iter()
-        .chain(vec![(
-            r"environments-v2/script-[a-z0-9]+",
-            "environments-v2/script-[HASH]",
-        )])
-        .collect::<Vec<_>>();
-
     // Running `uv sync` should succeed with the sources applied
-    uv_snapshot!(filters, context.sync().arg("--script").arg("script.py"), @"
+    uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Installed [N] packages in [TIME]
@@ -9071,8 +9098,8 @@ fn sync_active_script_environment() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").env(EnvVars::VIRTUAL_ENV, "foo"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-v2/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
-    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-[VERSION]/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -9202,9 +9229,9 @@ fn sync_active_script_environment_json() -> Result<()> {
       },
       "sync": {
         "environment": {
-          "path": "[CACHE_DIR]/environments-v2/script-[HASH]",
+          "path": "[CACHE_DIR]/environments-[VERSION]/script-[HASH]",
           "python": {
-            "path": "[CACHE_DIR]/environments-v2/script-[HASH]/[BIN]/python",
+            "path": "[CACHE_DIR]/environments-[VERSION]/script-[HASH]/[BIN]/python",
             "version": "3.11.[X]",
             "implementation": "cpython"
           }
@@ -9233,7 +9260,7 @@ fn sync_active_script_environment_json() -> Result<()> {
     }
 
     ----- stderr -----
-    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-v2/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
+    warning: `VIRTUAL_ENV=foo` does not match the script environment path `[CACHE_DIR]/environments-[VERSION]/script-[HASH]` and will be ignored; use `--active` to target the active environment instead
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -11273,11 +11300,22 @@ fn sync_invalid_environment() -> Result<()> {
     fs_err::write(context.temp_dir.join(".venv").join("file"), b"")?;
 
     // We should never delete it
+    #[cfg(unix)]
     uv_snapshot!(context.filters(), context.sync(), @"
     exit_code: 2 (failure)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
     error: Project virtual environment directory `[VENV]/` cannot be used because it is not a compatible environment but cannot be recreated because it is not a virtual environment
+    ");
+    // The Windows launcher requires pyvenv.cfg to find the base interpreter.
+    #[cfg(windows)]
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Querying Python at `[VENV]/[BIN]/[PYTHON]` failed with exit status exit status: 106
+
+    [stderr]
+    No pyvenv.cfg file
     ");
 
     // Even if there's no Python executable
@@ -12180,14 +12218,14 @@ fn sync_derivation_chain() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -12235,14 +12273,14 @@ fn sync_derivation_chain_extra() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -12292,14 +12330,14 @@ fn sync_derivation_chain_group() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -13801,6 +13839,7 @@ fn sync_dry_run_and_locked() -> Result<()> {
     Would install 1 package
      + iniconfig==2.0.0
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio==3.7` to `iniconfig`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -13877,7 +13916,7 @@ fn sync_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -13906,7 +13945,7 @@ fn sync_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -13929,7 +13968,7 @@ fn sync_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 3 packages in [TIME]
     Uninstalled 1 package in [TIME]
      - iniconfig==2.0.0
@@ -13951,7 +13990,7 @@ fn sync_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Updating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 5 packages in [TIME]
     Prepared 2 packages in [TIME]
     Installed 5 packages in [TIME]
@@ -13966,7 +14005,7 @@ fn sync_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     error: `uv sync --locked` requires a script lockfile; run `uv lock --script script.py` to lock the script
     ");
 
@@ -14018,7 +14057,7 @@ fn sync_frozen_script_lockfile_before_environment() -> Result<()> {
              missing field `requires-python`
     ");
 
-    assert!(!context.cache_dir.child("environments-v2").exists());
+    assert!(!context.cache_bucket(CacheBucket::Environments).exists());
     Ok(())
 }
 
@@ -14100,7 +14139,7 @@ fn sync_locked_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 3 packages in [TIME]
     Prepared 3 packages in [TIME]
     Installed 3 packages in [TIME]
@@ -14127,7 +14166,7 @@ fn sync_locked_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--frozen"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Checked 3 packages in [TIME]
     ");
     assert_eq!(context.read("script.py.lock"), lock);
@@ -14136,9 +14175,10 @@ fn sync_locked_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -14146,7 +14186,7 @@ fn sync_locked_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 4 packages in [TIME]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
@@ -14234,10 +14274,11 @@ fn sync_locked_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py").arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Updating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Updating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Locked forks do not cover the required Python versions
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -14245,7 +14286,7 @@ fn sync_locked_script() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Using script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Using script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     warning: Resolving despite existing lockfile due to fork markers being disjoint with `requires-python`: `python_full_version >= '3.11'` vs `python_full_version >= '3.8' and python_full_version < '3.11'`
     Resolved 6 packages in [TIME]
     Prepared 2 packages in [TIME]
@@ -14287,7 +14328,7 @@ fn sync_script_with_compatible_build_constraints() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     Resolved 6 packages in [TIME]
     Prepared 6 packages in [TIME]
     Installed 6 packages in [TIME]
@@ -14328,7 +14369,7 @@ fn sync_script_with_incompatible_build_constraints() -> Result<()> {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("script.py"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/script-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/script-[HASH]
     error: Failed to download and build `requests==1.2.0`
       cause: Failed to resolve requirements from `setup.py` build
       cause: No solution found when resolving: `setuptools>=40.8.0`
@@ -15002,6 +15043,7 @@ fn sync_build_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints changed from `setuptools<78` to `setuptools<77`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -15548,7 +15590,7 @@ dependencies = [
         .arg("--upgrade"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile: Exclude-newer cutoff set to `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -15626,7 +15668,7 @@ exclude-newer-package = { tqdm = "2022-09-04T00:00:00Z" }
         .arg("--upgrade"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Resolving despite existing lockfile due to addition of exclude newer `2022-09-04T00:00:00Z` for package `tqdm`
+    Resolving despite existing lockfile: Exclude-newer cutoff set to `2022-09-04T00:00:00Z` for package `tqdm`
     Resolved [N] packages in [TIME]
     Prepared [N] packages in [TIME]
     Uninstalled [N] packages in [TIME]
@@ -18985,6 +19027,7 @@ fn project_build_hashes_lock_and_sync() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints changed from `build-dependency==1.0.0 (sha256:[BUILD_HASH])` to `build-dependency==1.0.0 (sha256:0000000000000000000000000000000000000000000000000000000000000000)`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19773,7 +19816,7 @@ fn project_build_hashes_script() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     warning: The `--require-build-hashes` option is experimental and may change without warning. Pass `--preview-features build-dependency-hashes` to disable this warning.
-    Creating script environment at: fresh-cache/environments-v2/script-[HASH]
+    Creating script environment at: fresh-cache/environments-[VERSION]/script-[HASH]
     Prepared 1 package in [TIME]
     Installed 1 package in [TIME]
      + project==0.1.0 (from file://[TEMP_DIR]/)

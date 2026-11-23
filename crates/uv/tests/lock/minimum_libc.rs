@@ -394,7 +394,7 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
         exit_code: 0 (success)
         ----- stdout -----
         demo==1.0.0 ; python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'
-        demo==1.0.0+cpu ; (python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux')
+        demo==1.0.0+cpu ; (python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'
     ");
 
     let lock = context.read("uv.lock");
@@ -441,7 +441,7 @@ fn minimum_libc_local_version_fallback() -> Result<()> {
         source = { virtual = "." }
         dependencies = [
             { name = "demo", version = "1.0.0", source = { registry = "links" }, marker = "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux'" },
-            { name = "demo", version = "1.0.0+cpu", source = { registry = "links" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux')" },
+            { name = "demo", version = "1.0.0+cpu", source = { registry = "links" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux'" },
         ]
 
         [package.metadata]
@@ -501,6 +501,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Minimum libc version changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -588,6 +589,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
     warning: Setting `minimum-libc-version` is experimental and may change without warning. Pass `--preview-features minimum-libc-version` to disable this warning.
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Minimum libc version changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -610,6 +612,7 @@ fn minimum_libc_backtracks_and_invalidates_lock() -> Result<()> {
         ----- stderr -----
         Resolved 2 packages in [TIME]
         error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+          cause: Minimum libc version changed
 
         hint: To update the lockfile, run `uv lock`.
     ");

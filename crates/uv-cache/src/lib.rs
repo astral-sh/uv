@@ -14,17 +14,15 @@ use uv_fs::{LockedFile, LockedFileError, LockedFileMode, Simplified, cachedir, d
 use uv_normalize::PackageName;
 use uv_pypi_types::ResolutionMetadata;
 
-pub use crate::by_timestamp::CachedByTimestamp;
 #[cfg(feature = "clap")]
 pub use crate::cli::CacheArgs;
 use crate::removal::Remover;
-pub use crate::removal::{Removal, RemovalAccounting};
+pub use crate::removal::{PhysicalBytes, Removal, RemovalAccounting};
 pub use crate::wheel::WheelCache;
 use crate::wheel::WheelCacheKind;
 pub use archive::{ArchiveFileId, ArchiveId};
 
 mod archive;
-mod by_timestamp;
 #[cfg(feature = "clap")]
 mod cli;
 mod removal;
@@ -1296,20 +1294,12 @@ pub enum CacheBucket {
 impl CacheBucket {
     fn to_str(self) -> &'static str {
         match self {
-            // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::SourceDistributions => "sdists-v10",
-            // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv/tests/lock/lock.rs`.
+            Self::SourceDistributions => "sdists-v11",
             Self::FlatIndex => "flat-index-v7",
-            Self::Git => "git-v1",
-            Self::Interpreter => "interpreter-v5",
-            // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv/tests/build/cache_clean.rs`.
-            Self::Simple => "simple-v27",
-            // Note that when bumping this, you'll also need to bump it
-            // in `crates/uv/tests/build/cache_prune.rs`.
-            Self::Wheels => "wheels-v7",
+            Self::Git => "git-v2",
+            Self::Interpreter => "interpreter-v6",
+            Self::Simple => "simple-v28",
+            Self::Wheels => "wheels-v8",
             // Note that when bumping this, you'll also need to bump
             // `ARCHIVE_VERSION` in `crates/uv-cache/src/lib.rs`.
             Self::Archive => "archive-v0",
@@ -1454,7 +1444,7 @@ impl CacheBucket {
     }
 
     /// Return an iterator over all cache buckets.
-    fn iter() -> impl Iterator<Item = Self> {
+    pub fn iter() -> impl Iterator<Item = Self> {
         [
             Self::Wheels,
             Self::SourceDistributions,

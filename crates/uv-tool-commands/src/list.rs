@@ -19,6 +19,7 @@ use uv_settings::{Combine, ResolverInstallerOptions};
 use uv_tool::InstalledTools;
 use uv_warnings::warn_user;
 
+use crate::common::combine_tool_options;
 use uv_command_support::ExitStatus;
 use uv_command_support::Printer;
 use uv_resolve_operations::latest::LatestClient;
@@ -130,9 +131,9 @@ pub async fn list(
                 let filesystem = filesystem.clone();
                 async move {
                     let capabilities = IndexCapabilities::default();
-                    let settings = ResolverInstallerSettings::from(args.combine(
-                        ResolverInstallerOptions::from(tool.options().clone()).combine(filesystem),
-                    ));
+                    let settings = ResolverInstallerSettings::try_from(args.combine(
+                        combine_tool_options(tool.options().clone().into(), filesystem),
+                    ))?;
                     let interpreter = tool_env.environment().interpreter();
 
                     let client = RegistryClientBuilder::new(

@@ -1,6 +1,6 @@
 [package]
 name = "uv-dev"
-version = "0.0.99"
+version = "0.0.101"
 description = "This is an internal component crate of uv"
 publish = false
 
@@ -53,7 +53,7 @@ markdown = { version = "1.0.0", default-features = false }
 poloto = { version = "19.1.2", default-features = false, optional = true }
 pretty_assertions = { version = "1.4.1", default-features = false, features = ["std"] }
 reqwest = { workspace = true, features = ["stream"] }
-resvg = { version = "0.47.0", default-features = false, features = ["text", "system-fonts"], optional = true }
+resvg = { version = "0.48.0", default-features = false, features = ["text", "system-fonts"], optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -89,6 +89,3 @@ dev = ["dep:tracing-durations-export"]
 performance = ["performance-memory-allocator"]
 performance-memory-allocator = ["dep:uv-performance-memory-allocator"]
 render = ["poloto", "resvg", "tagu"]
-
-[package.metadata.cargo-shear]
-ignored = ["uv-performance-memory-allocator"]

@@ -1,6 +1,6 @@
 [package]
 name = "uv-python-discovery"
-version = "0.0.99"
+version = "0.0.101"
 description = "This is an internal component crate of uv"
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -28,6 +28,7 @@ uv-fs = { workspace = true }
 uv-macros = { workspace = true }
 uv-pep440 = { workspace = true }
 uv-platform = { workspace = true }
+uv-preview = { workspace = true }
 uv-python-interpreter = { workspace = true }
 uv-python-managed = { workspace = true }
 uv-python-types = { workspace = true }

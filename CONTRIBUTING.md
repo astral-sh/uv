@@ -180,13 +180,13 @@ groups include `jaq`. Use `uv run --only-group=jaq <script>` to put it on `PATH`
 ```shell
 # Rust
 CARGO_BUILD_WARNINGS=deny cargo clippy --workspace --all-targets --all-features --locked
-cargo +1.99.0 hawk check -D warnings
+cargo +1.100.0 hawk check -D warnings
 
 # Python
 uv run --only-group=check ruff check .
 
 # Python type checking
-uv run --only-group=check ty check python/uv
+TY_UV=scripts UV_LOCKED=1 uv run --only-group=check ty check
 
 # Python project metadata and uv schema
 ./scripts/validate-pyproject.sh
@@ -198,7 +198,7 @@ cargo dev generate-all --mode dry-run
 shellcheck <script>
 
 # Spell checking
-uv run --only-group=check typos
+uv run --only-group=typos typos
 
 # Unused Rust dependencies
 uv run --only-group=check cargo-shear
@@ -238,8 +238,10 @@ just resolving requirements. To prevent this, there's a Docker container you can
 ```console
 $ docker build -t uv-builder -f crates/uv-dev/builder.dockerfile --load .
 # Build for musl to avoid glibc errors, might not be required with your OS version
-cargo build --target x86_64-unknown-linux-musl --profile profiling
-docker run --rm -it -v $(pwd):/app uv-builder /app/target/x86_64-unknown-linux-musl/profiling/uv-dev resolve-many --cache-dir /app/cache-docker /app/scripts/popular_packages/pypi_10k_most_dependents.txt
+cargo build --bin uv --target x86_64-unknown-linux-musl --profile profiling
+docker run --rm -it -v "$(pwd):/app" uv-builder \
+    /app/target/x86_64-unknown-linux-musl/profiling/uv --config-file /app/test/uv.toml \
+    pip compile /app/test/requirements/trio.in --cache-dir /app/cache-docker
 ```
 
 We recommend using this container if you don't trust the dependency tree of the package(s) you are

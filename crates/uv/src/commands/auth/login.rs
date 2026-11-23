@@ -123,7 +123,9 @@ pub(crate) async fn login(
         }
         AuthBackend::TextStore(mut store, _lock) => {
             store.insert(service.clone(), credentials);
-            store.write(TextCredentialStore::default_file()?, _lock)?;
+            store
+                .write(TextCredentialStore::default_file()?, _lock)
+                .await?;
         }
     }
 

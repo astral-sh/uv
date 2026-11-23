@@ -1,7 +1,6 @@
-use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{self, Display};
+use std::fmt;
 use std::str::FromStr;
 
 use itertools::{Either, Itertools};
@@ -9,6 +8,10 @@ use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use uv_distribution_filename::VariantLabel;
+use uv_normalize::{InvalidNameError, PackageName};
+pub use uv_normalize::{VariantFeature, VariantNamespace, VariantValue};
+use uv_pep440::{Version, VersionParseError, VersionSpecifier};
+use version_ranges::Ranges;
 
 // TODO(konsti): Standardize on a single schema URL once the variant metadata format is finalized.
 /// The PEP 825 draft schema for variant metadata without providers.
@@ -70,7 +73,7 @@ impl fmt::Display for UnsupportedVariantProperties {
                     if index > 0 {
                         f.write_str(" or ")?;
                     }
-                    write!(f, "`{namespace} :: {} :: {}`", feature.0, value.0)?;
+                    write!(f, "`{namespace} :: {feature} :: {value}`")?;
                 }
                 f.write_str(close)?;
             }
@@ -120,9 +123,11 @@ pub struct VariantsJsonContent {
     #[serde(rename = "$schema")]
     schema: String,
     default_priorities: DefaultPriorities,
+    variants: BTreeMap<VariantLabel, VariantProperties>,
+    // Keep `providers` last in both structs so compact MessagePack can omit it.
+    // TODO(konsti): Remove this constraint once `providers` is required in all supported schemas.
     #[serde(skip_serializing_if = "Option::is_none")]
     providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
-    variants: BTreeMap<VariantLabel, VariantProperties>,
 }
 
 impl VariantsJsonContent {
@@ -145,6 +150,42 @@ impl VariantsJsonContent {
                 labels: metadata.variants.into_keys().collect(),
             })
         }
+    }
+
+    fn is_abi_dependency(&self, namespace: &VariantNamespace) -> bool {
+        let Some(VariantProvider {
+            kind: ProviderKind::Builtin { builtin },
+            ..
+        }) = self
+            .providers
+            .as_ref()
+            .and_then(|providers| providers.get(namespace))
+        else {
+            return false;
+        };
+        *builtin == BuiltinProvider::AbiDependency
+    }
+
+    /// Collect the ABI requirements for a variant.
+    ///
+    /// Returns an error if the variant is missing or any of its ABI requirements is invalid.
+    pub fn abi_dependencies(
+        &self,
+        label: &VariantLabel,
+    ) -> Result<Vec<(PackageName, Ranges<Version>)>, AbiDependencyError> {
+        let properties = self
+            .variants
+            .get(label)
+            .ok_or_else(|| AbiDependencyError::MissingVariant(label.clone()))?;
+        let mut dependencies = Vec::new();
+        for (namespace, features) in properties {
+            if self.is_abi_dependency(namespace) {
+                for (feature, values) in features {
+                    dependencies.push(abi_dependency(feature, values)?);
+                }
+            }
+        }
+        Ok(dependencies)
     }
 
     /// Score a variant using the target's ordered compatible features and values.
@@ -270,7 +311,12 @@ impl VariantsJsonContent {
                         requires,
                         plugin_api: plugin_api.as_deref(),
                     },
-                    ProviderKind::Builtin { builtin } => VariantProviderRequest::Builtin(builtin),
+                    ProviderKind::Builtin { builtin } => {
+                        VariantProviderRequest::Builtin(match builtin {
+                            BuiltinProvider::AbiDependency => "abi_dependency",
+                            BuiltinProvider::Unknown(name) => name,
+                        })
+                    }
                     ProviderKind::Static { .. } => return None,
                 };
                 Some((namespace, request))
@@ -343,8 +389,25 @@ enum ProviderKind {
         plugin_api: Option<String>,
     },
     Builtin {
-        builtin: String,
+        builtin: BuiltinProvider,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "String", rename_all = "snake_case")]
+enum BuiltinProvider {
+    AbiDependency,
+    #[serde(untagged)]
+    Unknown(String),
+}
+
+impl From<String> for BuiltinProvider {
+    fn from(name: String) -> Self {
+        match name.as_str() {
+            "abi_dependency" => Self::AbiDependency,
+            _ => Self::Unknown(name),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -353,26 +416,21 @@ struct VariantsJsonWire {
     #[serde(rename = "$schema")]
     schema: String,
     default_priorities: DefaultPriorities,
-    providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
     variants: BTreeMap<VariantLabel, VariantProperties>,
+    #[serde(default)]
+    providers: Option<BTreeMap<VariantNamespace, VariantProvider>>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum VariantMetadataError {
-    #[error("Invalid variant namespace: `{0}`")]
-    InvalidNamespace(String),
-    #[error("Invalid variant feature: `{0}`")]
-    InvalidFeature(String),
-    #[error("Invalid variant value: `{0}`")]
-    InvalidValue(String),
     #[error("Variant namespace priorities must be non-empty and unique")]
     NamespacePriorities,
     #[error("Variant namespace `{0}` is missing from default-priorities.namespace")]
     MissingNamespace(VariantNamespace),
     #[error(
         "Variant providers must match the namespaces in default-priorities.namespace: expected {expected:?}, found {actual:?}",
-        expected = .expected.iter().map(|namespace| &namespace.0).collect_vec(),
-        actual = .actual.iter().map(|namespace| &namespace.0).collect_vec(),
+        expected = .expected.iter().map(VariantNamespace::as_str).collect_vec(),
+        actual = .actual.iter().map(VariantNamespace::as_str).collect_vec(),
     )]
     ProviderNamespaces {
         expected: Vec<VariantNamespace>,
@@ -380,7 +438,7 @@ pub enum VariantMetadataError {
     },
     #[error(
         "Variant provider `{namespace}` must define feature-order for multiple static features: {features:?}",
-        features = .features.iter().map(|feature| &feature.0).collect_vec(),
+        features = .features.iter().map(VariantFeature::as_str).collect_vec(),
     )]
     MissingFeatureOrder {
         namespace: VariantNamespace,
@@ -388,8 +446,8 @@ pub enum VariantMetadataError {
     },
     #[error(
         "Variant provider `{namespace}` has an invalid feature-order: expected a non-empty list containing each static feature in {expected:?} exactly once, found {actual:?}",
-        expected = .expected.iter().map(|feature| &feature.0).collect_vec(),
-        actual = .actual.iter().map(|feature| &feature.0).collect_vec(),
+        expected = .expected.iter().map(VariantFeature::as_str).collect_vec(),
+        actual = .actual.iter().map(VariantFeature::as_str).collect_vec(),
     )]
     InvalidFeatureOrder {
         namespace: VariantNamespace,
@@ -400,7 +458,7 @@ pub enum VariantMetadataError {
     EmptyValues(VariantNamespace, VariantFeature),
     #[error(
         "Variant feature `{namespace} :: {feature}` must not contain duplicate values: {values:?}",
-        values = .values.iter().map(|value| &value.0).collect_vec(),
+        values = .values.iter().map(VariantValue::as_str).collect_vec(),
     )]
     DuplicateValues {
         namespace: VariantNamespace,
@@ -518,152 +576,77 @@ impl TryFrom<VariantsJsonWire> for VariantsJsonContent {
     }
 }
 
+/// An error reading a variant's ABI dependency requirements.
+#[derive(Debug, thiserror::Error)]
+pub enum AbiDependencyError {
+    #[error("Variant `{0}` is missing from the variant metadata")]
+    MissingVariant(VariantLabel),
+    #[error("Invalid ABI dependency feature name: {0}")]
+    InvalidName(#[from] InvalidNameError),
+    #[error(
+        "Invalid ABI dependency feature name: `{feature}` must use the normalized \
+         distribution name `{expected}`"
+    )]
+    NonNormalizedName {
+        feature: VariantFeature,
+        expected: String,
+    },
+    #[error("Unsupported ABI dependency value `{value}` for `{name}`: {source}")]
+    InvalidVersion {
+        name: PackageName,
+        value: VariantValue,
+        #[source]
+        source: VersionParseError,
+    },
+    #[error(
+        "Unsupported ABI dependency for `{name}`: \
+         expected a canonical release prefix with one to three components: {value}"
+    )]
+    InvalidReleasePrefix {
+        name: PackageName,
+        value: VariantValue,
+    },
+}
+
+/// ABI features name a distribution and list the release prefixes it can provide.
+fn abi_dependency(
+    feature: &VariantFeature,
+    values: &[VariantValue],
+) -> Result<(PackageName, Ranges<Version>), AbiDependencyError> {
+    let name = PackageName::from_str(feature.as_str())?;
+    let dist_info_name = name.as_dist_info_name();
+    if dist_info_name != feature.as_str() {
+        return Err(AbiDependencyError::NonNormalizedName {
+            feature: feature.clone(),
+            expected: dist_info_name.into_owned(),
+        });
+    }
+    // The allowed version range is the union of the specified versions, as any matching
+    // version is sufficient.
+    let mut versions = Ranges::empty();
+    for value in values {
+        let version = Version::from_str(value.as_str()).map_err(|source| {
+            AbiDependencyError::InvalidVersion {
+                name: name.clone(),
+                value: value.clone(),
+                source,
+            }
+        })?;
+        let release = version.release();
+        if release.len() > 3 || version.only_release().to_string() != value.as_str() {
+            return Err(AbiDependencyError::InvalidReleasePrefix {
+                name,
+                value: value.clone(),
+            });
+        }
+        versions = versions.union(&VersionSpecifier::equals_star_version(version).into());
+    }
+    Ok((name, versions))
+}
+
 /// The schema field alone, used to identify unknown schemas when parsing fails.
 #[derive(Deserialize)]
 struct VariantsJsonSchema {
     #[serde(rename = "$schema")]
     schema: String,
-}
-
-/// A validated variant namespace.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantNamespace(Cow<'static, str>);
-
-impl VariantNamespace {
-    /// Create a variant namespace from a static string.
-    ///
-    /// An invalid namespace causes a compilation error in a const context and a panic at runtime.
-    pub const fn from_static(value: &'static str) -> Self {
-        assert!(valid_component(value, false), "invalid variant namespace");
-        Self(Cow::Borrowed(value))
-    }
-}
-
-impl Display for VariantNamespace {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl FromStr for VariantNamespace {
-    type Err = VariantMetadataError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.to_owned())
-    }
-}
-
-impl TryFrom<String> for VariantNamespace {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, false) {
-            Ok(Self(Cow::Owned(value)))
-        } else {
-            Err(VariantMetadataError::InvalidNamespace(value))
-        }
-    }
-}
-
-/// A validated variant feature.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantFeature(Cow<'static, str>);
-
-impl VariantFeature {
-    /// Create a variant feature from a static string.
-    ///
-    /// An invalid feature causes a compilation error in a const context and a panic at runtime.
-    pub const fn from_static(value: &'static str) -> Self {
-        assert!(valid_component(value, false), "invalid variant feature");
-        Self(Cow::Borrowed(value))
-    }
-}
-
-impl Display for VariantFeature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl FromStr for VariantFeature {
-    type Err = VariantMetadataError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.to_owned())
-    }
-}
-
-impl TryFrom<String> for VariantFeature {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, false) {
-            Ok(Self(Cow::Owned(value)))
-        } else {
-            Err(VariantMetadataError::InvalidFeature(value))
-        }
-    }
-}
-
-/// A validated variant value.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "String")]
-pub struct VariantValue(Cow<'static, str>);
-
-impl VariantValue {
-    /// Create a variant value from a static string.
-    ///
-    /// An invalid value causes a compilation error in a const context and a panic at runtime.
-    pub const fn from_static(value: &'static str) -> Self {
-        assert!(valid_component(value, true), "invalid variant value");
-        Self(Cow::Borrowed(value))
-    }
-}
-
-impl Display for VariantValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl FromStr for VariantValue {
-    type Err = VariantMetadataError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        Self::try_from(value.to_owned())
-    }
-}
-
-impl TryFrom<String> for VariantValue {
-    type Error = VariantMetadataError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if valid_component(&value, true) {
-            Ok(Self(Cow::Owned(value)))
-        } else {
-            Err(VariantMetadataError::InvalidValue(value))
-        }
-    }
-}
-
-const fn valid_component(value: &str, allow_period: bool) -> bool {
-    if value.is_empty() {
-        return false;
-    }
-    let bytes = value.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        let character = bytes[index];
-        if !(character.is_ascii_lowercase()
-            || character.is_ascii_digit()
-            || character == b'_'
-            || (allow_period && character == b'.'))
-        {
-            return false;
-        }
-        index += 1;
-    }
-    true
 }

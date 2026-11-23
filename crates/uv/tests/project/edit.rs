@@ -24,7 +24,9 @@ use wiremock::{
 };
 
 #[cfg(feature = "test-git-lfs")]
-use uv_cache_key::{RepositoryUrl, cache_digest};
+use uv_cache::CacheBucket;
+#[cfg(feature = "test-git-lfs")]
+use uv_cache_key::{GitUpstreamUrl, cache_digest};
 use uv_fs::Simplified;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
@@ -661,16 +663,17 @@ fn add_git_lfs() -> Result<()> {
     "#})?;
 
     // Gather cache locations
-    let git_cache = context.cache_dir.child("git-v1");
+    let git_cache = context.cache_bucket(CacheBucket::Git);
     let git_checkouts = git_cache.child("checkouts");
     let git_db = git_cache.child("db");
-    let repo_url = RepositoryUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
+    let repo_url = GitUpstreamUrl::parse("https://github.com/astral-sh/test-lfs-repo")?;
     let lfs_db_bucket_objects = git_db
         .child(cache_digest(&repo_url))
         .child(".git")
         .child("lfs");
+    let lfs_enabled = true;
     let ok_checkout_file = git_checkouts
-        .child(cache_digest(&repo_url.with_lfs(Some(true))))
+        .child(repo_url.checkout_digest(lfs_enabled))
         .child("261c828.ok");
 
     uv_snapshot!(context.filters(), context.add()
@@ -8574,6 +8577,7 @@ fn remove_locked_reverts_project() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` differ; removed: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -8612,6 +8616,7 @@ fn add_locked_readonly_workspace() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `member==0.1.0` differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -8828,12 +8833,12 @@ fn fail_to_add_revert_project() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 1, in <module>
              ZeroDivisionError: division by zero
@@ -8928,12 +8933,12 @@ fn fail_to_edit_revert_project() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 1, in <module>
              ZeroDivisionError: division by zero
@@ -9039,15 +9044,15 @@ fn fail_to_add_revert_workspace_root() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
                  return self.get_requires_for_build_wheel(config_settings)
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 1, in <module>
              ZeroDivisionError: division by zero
@@ -9155,15 +9160,15 @@ fn fail_to_add_revert_workspace_member() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 448, in get_requires_for_build_editable
                  return self.get_requires_for_build_wheel(config_settings)
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 1, in <module>
              ZeroDivisionError: division by zero

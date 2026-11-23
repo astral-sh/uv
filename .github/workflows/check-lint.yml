@@ -17,7 +17,7 @@ env:
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
   # renovate: datasource=github-releases depName=astral-sh/hawk
-  HAWK_VERSION: 0.1.17
+  HAWK_VERSION: 0.1.18
   RUSTUP_MAX_RETRIES: 10
   UV_LOCKED: 1
   UV_PYTHON_DOWNLOADS_JSON_URL: ${{ github.workspace }}/crates/uv-python-managed/download-metadata.json
@@ -45,16 +45,12 @@ jobs:
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: auto
-      # `uv check` checks the entire repository; keep this scoped to the Python package.
-      - run: uv run --only-group check ty check python/uv
-      - name: "Check scrolls"
-        env:
-          # TODO: Remove once ty infers Python versions from script environments instead of the root project.
-          TY_CONFIG_FILE: /dev/null
-          UV_PREVIEW_FEATURES: check-command,workspace-list-scripts
+      - name: "typecheck"
         run: |
           set -e -o pipefail
-          uv workspace list --scripts |
+          uv check --only-group check
+
+          uv workspace list --scripts --preview-features workspace-list-scripts |
           while IFS= read -r script; do
             printf 'Checking %s\n' "$script" >&2
             uv check --script "$script" --locked
@@ -98,7 +94,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: 3.14
+          python-version: 3.15
       - run: python scripts/transform_readme.py --target pypi
 
   clippy-ubuntu:
@@ -116,7 +112,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           save-if: ${{ inputs.save-rust-cache == 'true' }}
       - name: "Clippy"
@@ -148,7 +144,7 @@ jobs:
       - name: "Install Rust toolchain"
         run: rustup component add clippy
 
-      - uses: astral-sh/github-actions/rust-workspace-cache@3c9fe5db47e144ea224b57565e3ab1ab769ef41d
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           workspace: ${{ env.UV_WORKSPACE }}
           save-if: ${{ inputs.save-rust-cache == 'true' }}
@@ -187,7 +183,7 @@ jobs:
     if: ${{ inputs.code-changed == 'true' || github.ref == 'refs/heads/main' }}
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-latest' }}
     env:
-      RUSTUP_TOOLCHAIN: "1.99.0"
+      RUSTUP_TOOLCHAIN: "1.100.0"
       RUSTC_BOOTSTRAP: "1"
       CARGO_UNSTABLE_CHECKSUM_FRESHNESS: "true"
     steps:
@@ -196,7 +192,7 @@ jobs:
           persist-credentials: false
       - name: Install Rust toolchain
         run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
-      - uses: astral-sh/github-actions/rust-workspace-cache@ecaa281a478297a7f6ad7ab58da2779de4771ca0
+      - uses: astral-sh/github-actions/rust-workspace-cache@61a5a2c7e0df1c0caf46fe5d1e74a4cb8a7205f8 # 2026.11.16.1
         with:
           target-directory: target/hawk
           extra-target-directory: hawk-fragments
@@ -237,4 +233,4 @@ jobs:
       - uses: $/.github/actions/setup-uv-toolchain
         with:
           enable-cache: auto
-      - run: uv run --only-group check typos
+      - run: uv run --only-group typos typos

@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from importlib import import_module
 from pathlib import Path
 from typing import Optional
 
@@ -154,7 +155,7 @@ if __name__ == "__main__":
     # Ensure that pip is available (e.g., the Chainguard distroless image ships
     # Python but not pip).
     try:
-        import pip  # noqa: F401
+        import_module("pip")
     except ModuleNotFoundError:
         logger.info("pip not found, running ensurepip...")
         subprocess.run(

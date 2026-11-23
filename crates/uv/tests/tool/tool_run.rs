@@ -1,12 +1,19 @@
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::process::Stdio;
+use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 #[cfg(unix)]
 use fs_err::{metadata, set_permissions};
 use indoc::indoc;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use tokio::time::timeout;
+use uv_cache::{Cache, CacheBucket, WheelCache};
+use uv_pep508::VerbatimUrl;
 use uv_static::EnvVars;
 use uv_test::packse::PackseServer;
 use uv_test::{copy_dir_ignore, uv_snapshot, venv_bin_path};
@@ -629,6 +636,72 @@ fn tool_run_from_install_constraints() {
     ");
 }
 
+/// Concurrent runs of the same tool should build and use a single cached environment.
+#[tokio::test]
+async fn tool_run_concurrent_cache_miss() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]).with_tool_dirs();
+    let wheel = context
+        .workspace_root
+        .join("test/links/simple_launcher-0.1.0-py3-none-any.whl");
+    // Hold the wheel lock so the first process cannot finish installing the environment.
+    let url = VerbatimUrl::from_normalized_path(&wheel)?.into_url();
+    let wheel_lock = Cache::from_path(context.cache_dir.path())
+        .entry(
+            CacheBucket::Wheels,
+            WheelCache::Url(&url).wheel_dir("simple-launcher"),
+            "0.1.0-py3-none-any.lock",
+        )
+        .lock()
+        .await?;
+
+    let mut command = Command::from(context.tool_run());
+    command
+        .args(["--verbose", "--no-index", "--from"])
+        .arg(wheel)
+        .args(["python", "-c", "import sys; print(sys.prefix)"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut start_waiter = async || -> Result<_> {
+        let mut child = command.spawn()?;
+        let mut stderr = BufReader::new(child.stderr.as_mut().expect("stderr is piped")).lines();
+        loop {
+            let line = timeout(Duration::from_secs(30), stderr.next_line())
+                .await??
+                .context("uv exited before waiting for a lock")?;
+            if line.contains("Waiting to acquire exclusive lock")
+                && (line.contains(&CacheBucket::Wheels.to_string())
+                    || line.contains(&CacheBucket::Environments.to_string()))
+            {
+                return Ok(child);
+            }
+        }
+    };
+
+    // The first process waits for the wheel. The second has also missed the environment
+    // cache when it waits for the first process (or for the wheel, if both start installing).
+    let first = start_waiter().await?;
+    let second = start_waiter().await?;
+    drop(wheel_lock);
+    let first = first.wait_with_output().await?.assert().success();
+    let second = second.wait_with_output().await?.assert().success();
+    assert_eq!(
+        str::from_utf8(&first.get_output().stdout)?,
+        str::from_utf8(&second.get_output().stdout)?,
+    );
+
+    let archives = context.cache_files(CacheBucket::Archive)?;
+    assert_eq!(
+        archives
+            .iter()
+            .filter(|path| path.ends_with("pyvenv.cfg"))
+            .count(),
+        1
+    );
+    Ok(())
+}
+
 #[test]
 fn tool_run_cache() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"])
@@ -1071,12 +1144,12 @@ fn tool_run_git_lfs() {
     Installed [N] packages in [TIME]
      + test-lfs-repo==0.1.0 (from git+https://github.com/astral-sh/test-lfs-repo@e282f5be233e3f1d44934164895a043fc534b8aa)
     Traceback (most recent call last):
-      File "[CACHE_DIR]/archive-v0/[HASH]/bin/test-lfs-repo-assets", line 12, in <module>
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/bin/test-lfs-repo-assets", line 12, in <module>
         sys.exit(main_lfs())
                  ~~~~~~~~^^
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
         from .lfs_module import LFS_TEST
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
         version https://git-lfs.github.com/spec/v1
                 ^^^^^
     SyntaxError: invalid syntax
@@ -1096,12 +1169,12 @@ fn tool_run_git_lfs() {
     Traceback (most recent call last):
       File "<frozen runpy>", line 198, in _run_module_as_main
       File "<frozen runpy>", line 88, in _run_code
-      File "[CACHE_DIR]/archive-v0/[HASH]/Scripts/test-lfs-repo-assets/__main__.py", line 10, in <module>
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/Scripts/test-lfs-repo-assets/__main__.py", line 10, in <module>
         sys.exit(main_lfs())
                  ~~~~~~~~^^
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/__init__.py", line 5, in main_lfs
         from .lfs_module import LFS_TEST
-      File "[CACHE_DIR]/archive-v0/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
+      File "[CACHE_DIR]/archive-[VERSION]/[HASH]/[PYTHON-LIB]/site-packages/test_lfs_repo/lfs_module.py", line 1
         version https://git-lfs.github.com/spec/v1
                 ^^^^^
     SyntaxError: invalid syntax
@@ -2864,7 +2937,7 @@ fn tool_run_with_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2876,7 +2949,7 @@ fn tool_run_with_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }
@@ -2896,7 +2969,7 @@ fn tool_run_with_from_url_ending_in_py() {
     ----- stderr -----
     error: Failed to resolve `--with` requirement
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 
@@ -2910,7 +2983,7 @@ fn tool_run_with_from_url_ending_in_py() {
     error: Failed to resolve tool requirement
       cause: Failed to download and build `easyeda2kicad @ git+https://github.com/uPesy/easyeda2kicad.py`
       cause: Git operation failed
-      cause: failed to fetch into: [CACHE_DIR]/git-v1/db/efbd3507bcbea33c
+      cause: failed to fetch into: [CACHE_DIR]/git-[VERSION]/db/efbd3507bcbea33c
       cause: Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)
     ");
 }

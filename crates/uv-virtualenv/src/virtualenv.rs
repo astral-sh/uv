@@ -496,6 +496,9 @@ pub(crate) fn create(
                 r#"'"$(dirname -- "$(dirname -- "$(realpath -- "$SCRIPT_PATH")")")"'"#,
             ),
             (true, "activate.bat") => Cow::Borrowed(r"%~dp0.."),
+            // Batch files use double-quoted paths, so POSIX single-quote escaping
+            // would become part of the value (for example, around apostrophes).
+            (false, "activate.bat") => Cow::Borrowed(location_string),
             (true, "activate.fish") => {
                 Cow::Borrowed(r"'(dirname -- (dirname -- (realpath -- (status -f))))'")
             }

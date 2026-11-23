@@ -21,7 +21,8 @@ use tracing::instrument;
 use uv_build_backend::BuildBackendSettings;
 use uv_configuration::{ExcludeDependency, GitLfsSetting, Override};
 use uv_distribution_types::{
-    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, RequirementSource,
+    Index, IndexName, MinimumLibcVersion, NameRequirementSpecification, ProxyIndex,
+    RequirementSource,
 };
 use uv_fs::{PortablePathBuf, try_relative_to_if};
 use uv_macros::{DeserializeUntagged, OptionsMetadata};
@@ -434,6 +435,29 @@ pub struct ToolUv {
     )]
     #[serde(deserialize_with = "deserialize_index_vec", default)]
     pub index: Option<Vec<Index>>,
+
+    /// The proxy indexes to use when resolving and downloading packages.
+    ///
+    /// `proxy-for` names a configured upstream index, `url` sets the proxy's Simple API URL, and
+    /// `artifact-base-url` sets its package download URL prefix. uv records upstream URLs in
+    /// lockfiles.
+    #[option(
+        default = "[]",
+        value_type = "dict",
+        example = r#"
+            [[tool.uv.index]]
+            name = "pypi"
+            url = "https://pypi.org/simple/"
+            default = true
+
+            [[tool.uv.proxy-index]]
+            name = "socket"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/"
+            proxy-for = "pypi"
+        "#
+    )]
+    pub proxy_index: Option<Vec<ProxyIndex>>,
 
     /// The workspace definition for the project, if any.
     #[option_group]
@@ -1350,11 +1374,7 @@ impl<'de> Deserialize<'de> for Source {
             package: Option<bool>,
             index: Option<IndexName>,
             workspace: Option<WorkspaceReference>,
-            #[serde(
-                skip_serializing_if = "uv_pep508::marker::ser::is_empty",
-                serialize_with = "uv_pep508::marker::ser::serialize",
-                default
-            )]
+            #[serde(default, deserialize_with = "MarkerTree::deserialize_environment")]
             marker: MarkerTree,
             extra: Option<ExtraName>,
             group: Option<GroupName>,

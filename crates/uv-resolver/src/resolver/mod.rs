@@ -22,11 +22,14 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{Level, debug, info, instrument, trace, warn};
 
 use uv_configuration::{Constraints, DependencyModifiers, IndexStrategy};
-use uv_distribution::{ArchiveMetadata, DistributionDatabase, supported_variant_properties};
+use uv_distribution::{
+    ArchiveMetadata, DistributionDatabase, Metadata, supported_variant_properties,
+};
 use uv_distribution_types::{
     BuiltDist, DerivationChain, Dist, DistErrorKind, Identifier, IndexCapabilities, IndexLocations,
-    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, Requirement, RequiresPython,
-    ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent, VersionOrUrlRef,
+    IndexMetadata, IndexUrl, InstalledDist, Name, RemoteSource, RequestedDist, Requirement,
+    RequiresPython, ResolutionRecorder, ResolvedDist, SourceDist, VariantsJsonContent,
+    VersionOrUrlRef,
 };
 use uv_git::GitResolver;
 use uv_normalize::PackageName;
@@ -34,7 +37,7 @@ use uv_pep440::{MIN_VERSION, Version, VersionSpecifiers, release_specifiers_to_r
 use uv_pep508::{
     MarkerEnvironment, MarkerExpression, MarkerOperator, MarkerTree, MarkerValueString,
 };
-use uv_platform_tags::{IncompatibleTag, Tags};
+use uv_platform_tags::{IncompatibleTag, TagCompatibility, Tags};
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{ConflictItem, ConflictItemRef, ConflictKindRef, Conflicts, VerbatimParsedUrl};
 use uv_resolver_types::{PackageNodeKind, VariantsJsonMetadataError};
@@ -82,6 +85,7 @@ pub use crate::resolver::provider::{
     DefaultResolverProvider, MetadataResponse, PackageVersionsResult, ResolverProvider,
     VariantsJsonResponse, VersionsResponse, WheelMetadataResult,
 };
+use crate::resolver::provider::{classify_metadata_error, classify_wheel_metadata_error};
 pub use crate::resolver::reporter::Reporter;
 use crate::resolver::requests::{MetadataRequest, MetadataRequests};
 pub(crate) use crate::resolver::requests::{RegisteredMetadata, RegisteredVariantsJson};
@@ -1290,11 +1294,19 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 }
             }
 
-            let incompatible_tag = if filename.variant().is_some() {
-                // Selecting a wheel variant requires variant metadata from the index.
+            let incompatible_tag = if filename.variant().is_some()
+                && (!uv_preview::is_enabled(PreviewFeature::WheelVariants)
+                    || env.marker_environment().is_none())
+            {
+                // Universal lockfiles cannot yet record wheel variants.
                 Some(IncompatibleTag::Variant)
             } else if !python_requirement.target().matches_wheel_tag(filename) {
                 Some(IncompatibleTag::AbiPythonVersion)
+            } else if filename.variant().is_some()
+                && let Some(tags) = &self.tags
+                && let TagCompatibility::Incompatible(tag) = filename.tag_compatibility(tags)
+            {
+                Some(tag)
             } else {
                 None
             };
@@ -1322,6 +1334,30 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                         IncompatibleSource::RequiresPython(requires_python.clone(), kind),
                     )),
                 )));
+            }
+        }
+
+        if let Dist::Built(wheel) = dist
+            && let Some(label) = wheel.wheel_filename().variant().cloned()
+            && let Some(tags) = &self.tags
+            && let Some(variant) = requests.read_wheel_variant(wheel)?
+        {
+            let unavailable = match variant {
+                Ok(variant) => {
+                    let supported = supported_variant_properties(&variant, tags.python_platform());
+                    // TODO(konsti): Include the unsupported properties in the resolver error.
+                    variant
+                        .unsupported_variant_properties(&label, &supported)
+                        .map(|_| {
+                            UnavailableVersion::IncompatibleDist(IncompatibleDist::Wheel(
+                                IncompatibleWheel::Tag(IncompatibleTag::Variant),
+                            ))
+                        })
+                }
+                Err(reason) => Some(self.record_unavailable_metadata(name, version, &reason)),
+            };
+            if let Some(reason) = unavailable {
+                return Ok(Some(ResolverVersion::Unavailable(version.clone(), reason)));
             }
         }
 
@@ -1376,7 +1412,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         debug!("Searching for a compatible version of {package} ({range})");
 
         // Find a version.
-        let Some(candidate) = self.selector.select(
+        let candidate = self.selector.select(
             name,
             range,
             version_maps,
@@ -1386,7 +1422,11 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        ) else {
+        );
+
+        VersionMap::check_proxy_mapping_errors(version_maps)?;
+
+        let Some(candidate) = candidate else {
             // Short circuit: we couldn't find _any_ versions for a package.
             return Ok(None);
         };
@@ -1579,10 +1619,13 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 }
             }
-            // Prefer a compatible variant from this index, then its ordinary wheel or sdist,
-            // before considering a distribution from the next index.
-            if let Some(variant) = dist.prioritize_variants(&metadata) {
-                selection.distribution = Some(Cow::Owned(variant));
+            // Try this index's variants, then its ordinary wheel or sdist, before moving on
+            // to the next index.
+            if !metadata.is_empty()
+                && let Some((_, index)) = dist.scored_variants(&metadata).max()
+                && let Some(selected) = dist.select_variant(index)
+            {
+                selection.distribution = Some(Cow::Owned(selected));
                 break;
             }
             if dist.get().is_some() {
@@ -1699,7 +1742,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             candidate.version().clone().without_local(),
         ));
 
-        let Some(base_candidate) = self.selector.select(
+        let base_candidate = self.selector.select(
             name,
             &range,
             version_maps,
@@ -1709,7 +1752,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
             index,
             env,
             self.tags.as_ref(),
-        ) else {
+        );
+        VersionMap::check_proxy_mapping_errors(version_maps)?;
+
+        let Some(base_candidate) = base_candidate else {
             return Ok(None);
         };
         let CandidateDist::Compatible(base_dist) = base_candidate.dist() else {
@@ -1948,10 +1994,14 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         python_requirement: &PythonRequirement,
         pubgrub: &State<UvDependencyProvider>,
     ) -> Result<Dependencies, ResolveError> {
-        let expander =
-            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
         let dependencies = match &**package {
             PubGrubPackageInner::Root(_) => {
+                let expander = RequirementExpander::new(
+                    &self.constraints,
+                    &self.modifiers,
+                    env,
+                    python_requirement,
+                );
                 let requirements = expander.expand(&self.requirements, RequirementContext::Root);
 
                 PubGrubDependency::from_requirements(
@@ -1981,7 +2031,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     return Ok(Dependencies::Unforkable(Vec::default()));
                 }
 
-                let registered = pins
+                let (registered, index) = pins
                     .metadata(name, version)
                     .ok_or_else(|| ResolveError::UnregisteredTask(format!("{name}=={version}")))?;
 
@@ -2019,66 +2069,16 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     }
                 };
 
-                // If there was no requires-python on the index page, we may have an incompatible
-                // distribution or need to fork.
-                if let Some(requires_python) = &metadata.requires_python {
-                    if !python_requirement.target().is_contained_by(requires_python) {
-                        return Ok(Dependencies::RequiresPython(requires_python.clone()));
-                    }
-                }
-
-                // Identify any system dependencies based on the index URL.
-                let system_dependencies = self
-                    .options
-                    .torch_backend
-                    .as_ref()
-                    .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
-                    .filter(|torch_backend| torch_backend.has_system_dependency(name))
-                    .and_then(|_| pins.get(name, version).and_then(ResolvedDist::index))
-                    .map(IndexUrl::url)
-                    .and_then(SystemDependency::from_index)
-                    .into_iter()
-                    .inspect(|system_dependency| {
-                        debug!(
-                            "Adding system dependency `{}` for `{package}@{version}`",
-                            system_dependency
-                        );
-                    })
-                    .map(PubGrubDependency::from);
-
-                let (requirements, context) = match kind {
-                    PackageNodeKind::Group(group) => (
-                        metadata
-                            .dependency_groups
-                            .get(group)
-                            .map_or(&[][..], AsRef::as_ref),
-                        RequirementContext::Group { name, version },
-                    ),
-                    PackageNodeKind::Extra(extra) => (
-                        metadata.requires_dist.as_ref(),
-                        RequirementContext::Extra {
-                            name,
-                            version,
-                            extra,
-                        },
-                    ),
-                    PackageNodeKind::Base => (
-                        metadata.requires_dist.as_ref(),
-                        RequirementContext::Package { name, version },
-                    ),
-                };
-                let requirements = expander.expand(requirements, context);
-
-                PubGrubDependency::from_requirements(
-                    &self.conflicts,
-                    requirements,
-                    kind.group(),
-                    Some(package),
-                )
-                .map(|mut dependencies| {
-                    dependencies.extend(system_dependencies);
-                    dependencies
-                })
+                return Ok(self.dependencies_from_metadata(
+                    package,
+                    name,
+                    version,
+                    kind,
+                    metadata,
+                    index,
+                    env,
+                    python_requirement,
+                ));
             }
 
             PubGrubPackageInner::Python(_) => return Ok(Dependencies::Unforkable(Vec::default())),
@@ -2158,12 +2158,84 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                 ));
             }
         };
-        Ok(match dependencies {
-            Ok(dependencies) => Dependencies::Available(dependencies),
-            Err(requirement) => {
-                Dependencies::Unavailable(UnavailableVersion::UnsatisfiableDependency(requirement))
-            }
-        })
+        Ok(Dependencies::from_requirements(dependencies))
+    }
+
+    /// Expand the selected distribution's metadata for the requested package, extra, or group.
+    fn dependencies_from_metadata(
+        &self,
+        package: &PubGrubPackage,
+        name: &PackageName,
+        version: &Version,
+        kind: &PackageNodeKind,
+        metadata: &Metadata,
+        index: Option<&IndexUrl>,
+        env: &ResolverEnvironment,
+        python_requirement: &PythonRequirement,
+    ) -> Dependencies {
+        // If there was no requires-python on the index page, we may have an incompatible
+        // distribution or need to fork.
+        if let Some(requires_python) = &metadata.requires_python
+            && !python_requirement.target().is_contained_by(requires_python)
+        {
+            return Dependencies::RequiresPython(requires_python.clone());
+        }
+
+        // Identify any system dependencies based on the index URL.
+        let system_dependencies = self
+            .options
+            .torch_backend
+            .as_ref()
+            .filter(|torch_backend| matches!(torch_backend, TorchStrategy::Cuda { .. }))
+            .filter(|torch_backend| torch_backend.has_system_dependency(name))
+            .and(index)
+            .map(IndexUrl::url)
+            .and_then(SystemDependency::from_index)
+            .into_iter()
+            .inspect(|system_dependency| {
+                debug!(
+                    "Adding system dependency `{}` for `{package}@{version}`",
+                    system_dependency
+                );
+            })
+            .map(PubGrubDependency::from);
+
+        let (requirements, context) = match kind {
+            PackageNodeKind::Group(group) => (
+                metadata
+                    .dependency_groups
+                    .get(group)
+                    .map_or(&[][..], AsRef::as_ref),
+                RequirementContext::Group { name, version },
+            ),
+            PackageNodeKind::Extra(extra) => (
+                metadata.requires_dist.as_ref(),
+                RequirementContext::Extra {
+                    name,
+                    version,
+                    extra,
+                },
+            ),
+            PackageNodeKind::Base => (
+                metadata.requires_dist.as_ref(),
+                RequirementContext::Package { name, version },
+            ),
+        };
+        let expander =
+            RequirementExpander::new(&self.constraints, &self.modifiers, env, python_requirement);
+        let requirements = expander.expand(requirements, context);
+
+        let dependencies = PubGrubDependency::from_requirements(
+            &self.conflicts,
+            requirements,
+            kind.group(),
+            Some(package),
+        )
+        .map(|mut dependencies| {
+            dependencies.extend(system_dependencies);
+            dependencies
+        });
+        Dependencies::from_requirements(dependencies)
     }
 
     fn record_unavailable_metadata(
@@ -2261,6 +2333,35 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
         provider: &Provider,
     ) -> Result<Option<Response>, ResolveError> {
         match request {
+            // TODO(konsti): This read stands in for a request to evaluate arbitrary providers
+            // off the resolver thread.
+            Request::WheelVariant { wheel, response } => {
+                let result = match provider
+                    .get_wheel_variant_metadata(&wheel)
+                    .boxed_local()
+                    .await
+                {
+                    Ok(metadata) => Ok(metadata.map(Ok)),
+                    Err(uv_distribution::Error::WheelMetadata(_, err)) => {
+                        Ok(Some(Err(classify_wheel_metadata_error(*err))))
+                    }
+                    Err(uv_distribution::Error::Client(err)) => classify_metadata_error(err)
+                        .map(|reason| Some(Err(reason)))
+                        .map_err(uv_distribution::Error::from),
+                    Err(err) => Err(err),
+                }
+                .map_err(|err| {
+                    let dist = Box::new(RequestedDist::Installable(Dist::Built(wheel)));
+                    ResolveError::Dist(
+                        DistErrorKind::from_requested_dist(&dist, &err),
+                        dist,
+                        DerivationChain::default(),
+                        Arc::new(err),
+                    )
+                })?;
+                let _ = response.send(result);
+                Ok(None)
+            }
             Request::VariantsJson(variants_json) => {
                 let response = provider
                     .fetch_variants_json(
@@ -2275,7 +2376,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     VariantsJsonResponse::Found(contents) => {
                         VariantsJsonContent::from_slice(&contents).map_err(|source| {
                             MetadataUnavailable::InvalidVariantMetadata(Arc::new(
-                                VariantsJsonMetadataError {
+                                VariantsJsonMetadataError::Index {
                                     filename: variants_json.filename.clone(),
                                     source,
                                 },
@@ -2429,7 +2530,7 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
 
                 // Try to find a compatible version. If there aren't any compatible versions,
                 // short-circuit.
-                let Some(candidate) = self.selector.select(
+                let candidate = self.selector.select(
                     &package_name,
                     &range,
                     version_map,
@@ -2439,7 +2540,10 @@ impl<InstalledPackages: InstalledPackagesProvider> ResolverState<InstalledPackag
                     None,
                     &env,
                     self.tags.as_ref(),
-                ) else {
+                );
+                VersionMap::check_proxy_mapping_errors(version_map)?;
+
+                let Some(candidate) = candidate else {
                     return Ok(None);
                 };
 
@@ -3532,6 +3636,11 @@ pub(crate) enum Request {
     Installed(InstalledDist),
     /// A request to fetch variant metadata for a selected version.
     VariantsJson(RegistryVariantsJson),
+    /// A request to read embedded variant metadata from a wheel.
+    WheelVariant {
+        wheel: BuiltDist,
+        response: oneshot::Sender<Option<ParsedVariantsJsonResponse>>,
+    },
     /// A request to pre-fetch the metadata for a package and the best-guess distribution.
     Prefetch(PackageName, Range<Version>, PythonRequirement),
 }
@@ -3588,6 +3697,9 @@ impl Display for Request {
             Self::VariantsJson(variants_json) => {
                 write!(f, "Variant metadata `{}`", variants_json.filename)
             }
+            Self::WheelVariant { wheel, .. } => {
+                write!(f, "Variant metadata `{}`", wheel.wheel_filename())
+            }
             Self::Prefetch(package_name, range, _) => {
                 write!(f, "Prefetch {package_name} {range}")
             }
@@ -3639,6 +3751,19 @@ enum Dependencies {
     /// same name and version, but differ according to marker expressions.
     /// But we never want this to result in a fork.
     Unforkable(Vec<PubGrubDependency>),
+}
+
+impl Dependencies {
+    fn from_requirements(
+        dependencies: Result<Vec<PubGrubDependency>, UnsatisfiableRequirement>,
+    ) -> Self {
+        match dependencies {
+            Ok(dependencies) => Self::Available(dependencies),
+            Err(requirement) => {
+                Self::Unavailable(UnavailableVersion::UnsatisfiableDependency(requirement))
+            }
+        }
+    }
 }
 
 /// Information about the (possibly forked) dependencies for a particular

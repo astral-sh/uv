@@ -3,7 +3,7 @@ use async_http_range_reader::AsyncHttpRangeReader;
 use futures::io::BufReader;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use uv_distribution_filename::WheelFilename;
-use uv_metadata::{find_archive_dist_info, validate_archive_variant};
+use uv_metadata::{WheelMetadata, find_archive_dist_info, read_archive_variant_entry};
 use uv_redacted::SafeUrl;
 
 /// Read `METADATA` and, for a variant wheel, validate `variant.json` using HTTP range requests.
@@ -50,7 +50,7 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
     filename: &WheelFilename,
     debug_name: &SafeUrl,
     reader: &mut AsyncHttpRangeReader,
-) -> Result<String, Error> {
+) -> Result<WheelMetadata, Error> {
     // Make sure we have the back part of the stream.
     // Best guess for the central directory size inside the zip
     const CENTRAL_DIRECTORY_SIZE: u64 = 16384;
@@ -101,22 +101,25 @@ pub(crate) async fn wheel_metadata_from_remote_zip(
             .await;
     }
 
-    // Read the contents of the METADATA file
-    let mut contents = String::new();
+    // Read the contents of the `METADATA` file.
+    let mut core = Vec::new();
     reader
         .reader_with_entry(metadata_idx)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?
-        .read_to_string_checked(&mut contents)
+        .read_to_end_checked(&mut core)
         .await
         .map_err(|err| ErrorKind::Zip(filename.clone(), err))?;
 
     // Check that `variant.json` describes the variant named in the filename, so the resolver
     // can mark the version unavailable if the wheel is malformed.
-    if let Some((label, path)) = variant {
-        validate_archive_variant(&mut reader, &path, label)
+    let variant = if let Some((label, path)) = variant {
+        let metadata = read_archive_variant_entry(&mut reader, &path, label)
             .await
             .map_err(|err| ErrorKind::Metadata(debug_name.to_string(), err))?;
-    }
-    Ok(contents)
+        Some(Box::new(metadata))
+    } else {
+        None
+    };
+    Ok(WheelMetadata { core, variant })
 }

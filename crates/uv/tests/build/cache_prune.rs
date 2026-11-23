@@ -3,6 +3,7 @@ use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use indoc::indoc;
 
+use uv_cache::CacheBucket;
 use uv_static::EnvVars;
 
 use uv_test::uv_snapshot;
@@ -136,7 +137,7 @@ fn prune_stale_directory() -> Result<()> {
 fn prune_python_downloads() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
-    let python_cache = context.cache_dir.child("python-v1");
+    let python_cache = context.cache_bucket(CacheBucket::Python);
     python_cache.create_dir_all()?;
     let download = python_cache.child("python.tar.gz");
     download.write_binary(b"cached Python download")?;
@@ -192,8 +193,8 @@ fn prune_cached_env() {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing cached environment: [CACHE_DIR]/environments-v2/[ENTRY]
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing cached environment: [CACHE_DIR]/environments-[VERSION]/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-[VERSION]/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 }
@@ -214,7 +215,7 @@ fn prune_stale_symlink() -> Result<()> {
         .success();
 
     // Remove the wheels directory, causing the symlink to become stale.
-    let wheels = context.cache_dir.child("wheels-v7");
+    let wheels = context.cache_bucket(CacheBucket::Wheels);
     fs_err::remove_dir_all(wheels)?;
 
     let filters: Vec<_> = context
@@ -235,7 +236,7 @@ fn prune_stale_symlink() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-[VERSION]/[ENTRY]
     Removed 44 files ([SIZE])
     ");
 
@@ -270,8 +271,8 @@ async fn prune_force() -> Result<()> {
     ");
 
     // Add a stale directory to the cache.
-    let simple = context.cache_dir.child("simple-v4");
-    simple.create_dir_all()?;
+    let stale = context.cache_dir.child("stale");
+    stale.create_dir_all()?;
 
     // When locked, `--force` should proceed without blocking
     let _cache = uv_cache::Cache::from_path(context.cache_dir.path())
@@ -285,7 +286,7 @@ async fn prune_force() -> Result<()> {
     DEBUG Lock is busy for `[CACHE_DIR]/`
     DEBUG Cache is currently in use, proceeding due to `--force`
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling cache bucket: [CACHE_DIR]/simple-v4
+    DEBUG Removing dangling cache bucket: [CACHE_DIR]/stale
     Removed 1 directory (0B)
     ");
 
@@ -444,8 +445,8 @@ fn prune_stale_revision() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v10/[ENTRY]
-    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-v0/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-[VERSION]/[ENTRY]
+    DEBUG Removing dangling cache archive: [CACHE_DIR]/archive-[VERSION]/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 
@@ -546,7 +547,7 @@ fn prune_stale_revision_content_addressed_cache() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-v10/[ENTRY]
+    DEBUG Removing dangling source revision: [CACHE_DIR]/sdists-[VERSION]/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 
@@ -587,7 +588,9 @@ fn prune_temporary_build_environment() -> Result<()> {
         ));
 
     // Populate the cache with a temporary build environment.
-    let builds = context.cache_dir.child("builds-v0").child(".tmp123456");
+    let builds = context
+        .cache_bucket(CacheBucket::Builds)
+        .child(".tmp123456");
     builds.create_dir_all()?;
     builds.child("pyvenv.cfg").write_str("home = /usr/bin")?;
 
@@ -597,7 +600,7 @@ fn prune_temporary_build_environment() -> Result<()> {
     DEBUG Searching for user configuration in: [UV_USER_CONFIG_DIR]/uv.toml
     DEBUG uv [VERSION] ([COMMIT] DATE)
     Pruning cache at: [CACHE_DIR]/
-    DEBUG Removing temporary build environment: [CACHE_DIR]/builds-v0/[ENTRY]
+    DEBUG Removing temporary build environment: [CACHE_DIR]/builds-[VERSION]/[ENTRY]
     Removed [N] files ([SIZE])
     ");
 

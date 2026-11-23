@@ -7742,6 +7742,29 @@ fn conflicting_index_urls_requirements_txt() -> Result<()> {
     Ok(())
 }
 
+/// Distinguish index URLs whose paths differ by a `.git` suffix.
+#[test]
+fn conflicting_index_urls_git_suffix() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_in = context.temp_dir.child("requirements.in");
+    requirements_in.write_str("--index-url https://example.com/simple/")?;
+
+    let constraints_in = context.temp_dir.child("constraints.in");
+    constraints_in.write_str("--index-url https://example.com/simple.git/")?;
+
+    uv_snapshot!(context.filters(), context.pip_compile()
+            .arg("requirements.in")
+            .arg("--constraint")
+            .arg("constraints.in"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Multiple index URLs specified: `https://example.com/simple/` vs. `https://example.com/simple.git/`
+    "
+    );
+
+    Ok(())
+}
+
 /// Doesn't raise an error when multiple `requirements.txt` files include matching `--index-url` flags.
 #[test]
 fn matching_index_urls_requirements_txt() -> Result<()> {
@@ -9202,7 +9225,7 @@ fn universal_platform_fork() -> Result<()> {
         # via torch
     torch==2.5.1 ; (python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin'
         # via -r requirements.in
-    torch==2.5.1+cpu ; (python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.5.1+cpu ; (python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'
         # via -r requirements.in
     typing-extensions==4.9.0
         # via
@@ -9632,7 +9655,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via torch
     sympy==1.13.3
         # via torch
-    torch==2.0.0 ; (python_full_version < '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'darwin')
+    torch==2.0.0 ; python_full_version < '3.11' and ((platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or sys_platform == 'darwin')
         # via
         #   -r requirements.in
         #   example
@@ -9640,7 +9663,7 @@ fn universal_disjoint_base_or_local_requirement() -> Result<()> {
         # via
         #   -r requirements.in
         #   example
-    torch==2.0.0+cu118 ; (python_full_version >= '3.11' and python_full_version < '3.13') or (python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')
+    torch==2.0.0+cu118 ; python_full_version >= '3.11' and python_full_version < '3.13' or python_full_version < '3.11' and ((platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux'))
         # via
         #   -r requirements.in
         #   example
@@ -9718,7 +9741,7 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux' or implementation_name != 'cpython' and ((platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32'))
         # via torch
     sympy==1.13.3
         # via torch
@@ -9729,9 +9752,9 @@ fn universal_nested_overlapping_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (python_full_version < '3.13' and implementation_name != 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform == 'darwin') or (implementation_name != 'cpython' and sys_platform == 'win32')
+    torch==2.3.0 ; python_full_version < '3.13' and implementation_name != 'cpython' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' or implementation_name != 'cpython' and (sys_platform == 'darwin' or sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_machine != 'aarch64' and sys_platform == 'linux') or (implementation_name != 'cpython' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (implementation_name != 'cpython' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; python_full_version >= '3.13' and implementation_name != 'cpython' and sys_platform == 'linux' or implementation_name != 'cpython' and ((platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32'))
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -9881,7 +9904,7 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         # via sympy
     networkx==3.4.2
         # via torch
-    pytorch-triton-rocm==2.3.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    pytorch-triton-rocm==2.3.0 ; python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux' or os_name != 'Linux' and ((platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32'))
         # via torch
     sympy==1.13.3
         # via torch
@@ -9896,9 +9919,9 @@ fn universal_nested_disjoint_local_requirement() -> Result<()> {
         #   -r requirements.in
         #   example
         #   triton
-    torch==2.3.0 ; (python_full_version < '3.13' and os_name != 'Linux' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform == 'darwin') or (os_name != 'Linux' and sys_platform == 'win32')
+    torch==2.3.0 ; python_full_version < '3.13' and os_name != 'Linux' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' or os_name != 'Linux' and (sys_platform == 'darwin' or sys_platform == 'win32')
         # via -r requirements.in
-    torch==2.3.0+rocm6.0 ; (python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux') or (os_name != 'Linux' and platform_machine != 'aarch64' and sys_platform == 'linux') or (os_name != 'Linux' and platform_python_implementation != 'CPython' and sys_platform == 'linux') or (os_name != 'Linux' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')
+    torch==2.3.0+rocm6.0 ; python_full_version >= '3.13' and os_name != 'Linux' and sys_platform == 'linux' or os_name != 'Linux' and ((platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32'))
         # via -r requirements.in
     triton==2.0.0 ; implementation_name == 'cpython' and os_name == 'Linux' and platform_machine == 'x86_64' and sys_platform == 'linux'
         # via torch
@@ -14916,7 +14939,7 @@ fn git_source_missing_tag() -> Result<()> {
     ----- stderr -----
     error: Failed to download and build `uv-public-pypackage @ git+https://github.com/astral-test/uv-public-pypackage@missing`
       cause: Git operation failed
-      cause: failed to clone into: [CACHE_DIR]/git-v1/db/8dab139913c4b566
+      cause: failed to clone into: [CACHE_DIR]/git-[VERSION]/db/8dab139913c4b566
       cause: failed to fetch tag `missing`
       cause: process didn't exit successfully: `git fetch --force --update-head-ok 'https://github.com/astral-test/uv-public-pypackage' '+refs/tags/missing:refs/remotes/origin/tags/missing'` (exit status: 128)
              --- stderr
@@ -16740,14 +16763,14 @@ fn compile_derivation_chain() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170

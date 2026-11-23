@@ -48,6 +48,7 @@ use std::str::FromStr;
 
 use memchr::memchr3;
 
+use uv_cache_key::CanonicalUrl;
 use uv_distribution_filename::{
     DistExtension, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
@@ -86,6 +87,7 @@ pub use crate::installed::*;
 pub use crate::minimum_libc_version::MinimumLibcVersion;
 pub use crate::origin::*;
 pub use crate::pip_index::*;
+pub use crate::proxy_index::*;
 pub use crate::requested::*;
 pub use crate::requirement::*;
 pub use crate::requires_python::*;
@@ -122,6 +124,7 @@ mod installed_modules;
 mod minimum_libc_version;
 mod origin;
 mod pip_index;
+mod proxy_index;
 mod requested;
 mod requirement;
 mod requires_python;
@@ -728,7 +731,7 @@ impl BuiltDist {
     }
 
     /// Returns the [`IndexUrl`], if the distribution is from a registry.
-    pub fn index(&self) -> Option<&IndexUrl> {
+    fn index(&self) -> Option<&IndexUrl> {
         match self {
             Self::Registry(registry) => Some(&registry.best_wheel().index),
             Self::DirectUrl(_) => None,
@@ -1201,7 +1204,7 @@ impl DistributionMetadata for Dist {
     }
 }
 
-impl RemoteSource for File {
+impl<Url> RemoteSource for File<Url> {
     fn filename(&self) -> Result<Cow<'_, str>, Error> {
         Ok(Cow::Borrowed(&self.filename))
     }
@@ -1451,11 +1454,13 @@ impl RemoteSource for Dist {
 
 impl Identifier for SafeUrl {
     fn distribution_id(&self) -> DistributionId {
-        DistributionId::Url(uv_cache_key::CanonicalUrl::new(self.clone()))
+        DistributionId::Url(CanonicalUrl::new(self.clone()))
     }
 
     fn resource_id(&self) -> ResourceId {
-        ResourceId::Url(uv_cache_key::RepositoryUrl::new(self.clone()))
+        let mut url = self.clone();
+        url.set_fragment(None);
+        ResourceId::Url(CanonicalUrl::new(url))
     }
 }
 
@@ -1465,7 +1470,7 @@ impl Identifier for File {
             .first()
             .cloned()
             .map(DistributionId::Digest)
-            .unwrap_or_else(|| self.url.distribution_id())
+            .unwrap_or_else(|| self.location.distribution_id())
     }
 
     fn resource_id(&self) -> ResourceId {
@@ -1473,7 +1478,7 @@ impl Identifier for File {
             .first()
             .cloned()
             .map(ResourceId::Digest)
-            .unwrap_or_else(|| self.url.resource_id())
+            .unwrap_or_else(|| self.location.resource_id())
     }
 }
 
@@ -1487,22 +1492,22 @@ impl Identifier for Path {
     }
 }
 
-impl Identifier for FileLocation {
+impl Identifier for CanonicalFileLocation {
     fn distribution_id(&self) -> DistributionId {
         match self {
-            Self::RelativeUrl(base, url) => {
+            Self::RelativeUrl(base, url, _) => {
                 DistributionId::RelativeUrl(base.to_string(), url.to_string())
             }
-            Self::AbsoluteUrl(url) => DistributionId::AbsoluteUrl(url.to_string()),
+            Self::AbsoluteUrl(url, _) => DistributionId::AbsoluteUrl(url.to_string()),
         }
     }
 
     fn resource_id(&self) -> ResourceId {
         match self {
-            Self::RelativeUrl(base, url) => {
+            Self::RelativeUrl(base, url, _) => {
                 ResourceId::RelativeUrl(base.to_string(), url.to_string())
             }
-            Self::AbsoluteUrl(url) => ResourceId::AbsoluteUrl(url.to_string()),
+            Self::AbsoluteUrl(url, _) => ResourceId::AbsoluteUrl(url.to_string()),
         }
     }
 }
@@ -1569,11 +1574,11 @@ impl Identifier for PathBuiltDist {
 
 impl Identifier for GitPathBuiltDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        DistributionId::GitPath(self.git.as_ref().into(), self.install_path.clone())
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        ResourceId::Git(self.git.repository().clone())
     }
 }
 
@@ -1599,21 +1604,21 @@ impl Identifier for DirectorySourceDist {
 
 impl Identifier for GitPathSourceDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        GitPathSourceUrl::from(self).distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        GitPathSourceUrl::from(self).resource_id()
     }
 }
 
 impl Identifier for GitDirectorySourceDist {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        GitDirectorySourceUrl::from(self).distribution_id()
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        GitDirectorySourceUrl::from(self).resource_id()
     }
 }
 
@@ -1699,21 +1704,21 @@ impl Identifier for DirectSourceUrl<'_> {
 
 impl Identifier for GitDirectorySourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        DistributionId::GitDirectory(self.git.into(), self.subdirectory.map(Path::to_path_buf))
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        ResourceId::Git(self.git.repository().clone())
     }
 }
 
 impl Identifier for GitPathSourceUrl<'_> {
     fn distribution_id(&self) -> DistributionId {
-        self.url.distribution_id()
+        DistributionId::GitPath(self.git.into(), self.path.to_path_buf())
     }
 
     fn resource_id(&self) -> ResourceId {
-        self.url.resource_id()
+        ResourceId::Git(self.git.repository().clone())
     }
 }
 

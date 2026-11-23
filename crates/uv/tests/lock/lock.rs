@@ -22,6 +22,8 @@ use wiremock::{
 };
 
 #[cfg(feature = "test-universal")]
+use uv_cache::CacheBucket;
+#[cfg(feature = "test-universal")]
 use uv_fs::PythonExt;
 use uv_fs::{Simplified, create_symlink};
 use uv_redacted::SafeUrl;
@@ -338,6 +340,7 @@ fn lock_equivalent_requirements() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `ok>=2, <3` to `ok>=2, <2.5`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -515,6 +518,7 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints differ; added: `a>=2, <3`; removed: `a<3`, `a>=1`, `a>=2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -524,6 +528,7 @@ fn lock_equivalent_manifest_inputs() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Build constraints differ; added: `a>=2, <3`; removed: `a<3`, `a>=1`, `a>=2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -4351,6 +4356,44 @@ fn lock_project_with_scoped_overrides() -> Result<()> {
     Ok(())
 }
 
+/// A scoped override can introduce a recursive extra even when the package has no self-dependency.
+/// Checking only the declared dependencies skipped expansion of `urllib3[socks]`, causing a
+/// fresh `uv lock` to panic in debug builds with `extras not flattened for urllib3`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_project_with_scoped_override_recursive_extra() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["urllib3==2.2.1"]
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "urllib3", version = "2.2.1" }, dependencies = ["urllib3[socks]"] },
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    └── urllib3 v2.2.1
+        └── pysocks v1.7.1
+    ");
+
+    Ok(())
+}
+
 /// Reject conflicting overrides scoped to the same package version.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -4641,6 +4684,52 @@ fn lock_project_with_scoped_override_index() -> Result<()> {
     Ok(())
 }
 
+/// Report a mismatched wheel from an explicitly configured index without exposing credentials.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_mismatched_wheel_name_explicit_index() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+
+    let index_url = server.uri().replacen("://", "://user:password@", 1);
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(&formatdoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["validation==1.0.0"]
+
+        [tool.uv.sources]
+        validation = {{ index = "private" }}
+
+        [[tool.uv.index]]
+        name = "private"
+        url = "{index_url}/simple"
+        explicit = true
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().env_remove(EnvVars::UV_EXCLUDE_NEWER), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of validation==1.0.0 and your project depends on validation==1.0.0, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
+    ");
+    Ok(())
+}
+
 /// Lock a project with `uv.tool.exclude-dependencies`.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -4822,6 +4911,7 @@ fn lock_project_with_excludes() -> Result<()> {
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency exclusions changed from `werkzeug` to `jinja2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -4871,6 +4961,82 @@ fn lock_project_with_constraints() -> Result<()> {
      + anyio==3.7.0
      + idna==3.3
      + sniffio==1.3.1
+    ");
+
+    Ok(())
+}
+
+/// With no active extra, `extra != 'unused'` applies the version constraint.
+///
+/// This is a regression test added for a bug where we weren't properly
+/// propagating extras from constraints in the resolver. Without the bug
+/// fixed, the lock file selects `ok==2.0.0` even though there is an
+/// active constraint for `ok<2`.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_constraint_with_negative_extra_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["ok"]
+
+        [tool.uv]
+        constraint-dependencies = ["ok<2; extra != 'unused'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--offline")
+        .arg("--no-index")
+        .arg("--find-links")
+        .arg(context.workspace_root.join("test/links")), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock");
+    insta::with_settings!({ filters => context.filters() }, {
+        assert_snapshot!(lock, @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [manifest]
+        constraints = [{ name = "ok", marker = "extra != 'unused'", specifier = "<2" }]
+
+        [[package]]
+        name = "ok"
+        version = "1.0.0"
+        source = { registry = "[WORKSPACE]/test/links" }
+        wheels = [
+            { path = "[WORKSPACE]/test/links/ok-1.0.0-py3-none-any.whl" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "ok" },
+        ]
+
+        [package.metadata]
+        requires-dist = [{ name = "ok" }]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.tree().arg("--frozen"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    project v0.1.0
+    └── ok v1.0.0
     ");
 
     Ok(())
@@ -5908,6 +6074,7 @@ fn lock_conflicting_project_basic1() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; changed: sortedcontainers==2.3.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -7551,10 +7718,10 @@ fn lock_check_refresh_workspace_conflicts() -> Result<()> {
 
         [package.optional-dependencies]
         non-prod = [
-            { name = "package-a", extra = ["non-prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-9-package-a-non-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+            { name = "package-a", extra = ["non-prod"], marker = "extra == 'extra-14-workspace-demo-non-prod' and (extra == 'extra-14-workspace-demo-prod' or extra == 'extra-9-package-a-non-prod') or extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod'" },
         ]
         prod = [
-            { name = "package-a", extra = ["prod"], marker = "(extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod') or (extra == 'extra-14-workspace-demo-prod' and extra == 'extra-9-package-a-prod') or (extra == 'extra-9-package-a-non-prod' and extra == 'extra-9-package-a-prod')" },
+            { name = "package-a", extra = ["prod"], marker = "extra == 'extra-14-workspace-demo-non-prod' and extra == 'extra-14-workspace-demo-prod' or (extra == 'extra-14-workspace-demo-prod' or extra == 'extra-9-package-a-non-prod') and extra == 'extra-9-package-a-prod'" },
         ]
 
         [package.metadata]
@@ -12573,6 +12740,7 @@ fn lock_new_extras() -> Result<()> {
     ----- stderr -----
     Resolved 7 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: requests==2.31.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -12690,6 +12858,7 @@ fn lock_metadata_free_new_extra_marker() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; added: psycopg[binary]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -12797,6 +12966,7 @@ fn lock_invalid_hash() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace member `project` is expected to be virtual
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -13145,6 +13315,7 @@ async fn lock_core_metadata_hash() -> Result<()> {
 }
 
 /// Lock with an index that advertises multiple hashes, then require SHA256 for that index.
+/// The CPython 3.12 wheel only advertises SHA512 and is excluded by `requires-python`.
 #[cfg(feature = "test-universal")]
 #[tokio::test]
 async fn lock_index_hash_algorithm() -> Result<()> {
@@ -13164,6 +13335,10 @@ async fn lock_index_hash_algorithm() -> Result<()> {
                 "sha512": "765bde25938af485e492e25ee0e8cde262462565122c1301213a69bf9ceb2008e3997b652a604092a238c4b1a6a334e697ff3cee3c22f9a617cb14f34e26ef17"
             },
             "core-metadata": true
+        }, {
+            "filename": "basic_package-0.1.0-cp312-cp312-manylinux_2_17_x86_64.whl",
+            "url": format!("{}/files/basic_package-0.1.0-cp312-cp312-manylinux_2_17_x86_64.whl", server.uri()),
+            "hashes": { "sha512": "ab".repeat(64) }
         }, {
             "filename": "basic_package-0.1.0.tar.gz",
             "url": format!("{}/files/basic_package-0.1.0.tar.gz", server.uri()),
@@ -13650,6 +13825,7 @@ fn lock_prerelease_package_configuration() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Pre-release policy changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -17402,7 +17578,7 @@ fn lock_find_links_http_wheel() -> Result<()> {
     Resolved 2 packages in [TIME]
     ");
 
-    assert!(context.cache_dir.child("flat-index-v7").is_dir());
+    assert!(context.cache_bucket(CacheBucket::FlatIndex).is_dir());
 
     let lock = context.read("uv.lock");
 
@@ -18154,6 +18330,7 @@ fn lock_sources_url_offline_validates_transitive_source_tree() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Package `anyio` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19680,6 +19857,7 @@ fn check_outdated_lock() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Workspace member `project` is missing from the lockfile
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19691,6 +19869,7 @@ fn check_outdated_lock() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Workspace member `project` is missing from the lockfile
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19792,9 +19971,10 @@ fn lock_reuses_newer_exclude_newer_timestamp() -> Result<()> {
         .arg("--check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
+    Resolving despite existing lockfile: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -19900,9 +20080,10 @@ fn lock_check_allows_relaxed_exclude_newer_package() -> Result<()> {
         .arg("--check"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
+    Resolving despite existing lockfile: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Exclude-newer timestamp changed from `2024-03-25T00:00:00Z` to `2024-03-24T00:00:00Z` for package `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20406,6 +20587,7 @@ fn lock_remove_member() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` differ; removed: leaf @ file://[TEMP_DIR]/leaf
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20504,6 +20686,7 @@ fn lock_remove_member() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; removed: `leaf`, `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20640,6 +20823,7 @@ fn lock_add_member_with_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; added: `leaf`, `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20833,6 +21017,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; added: `leaf`, `project`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -20959,6 +21144,7 @@ fn lock_add_member_without_build_system() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace member `leaf` is no longer virtual
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21173,6 +21359,7 @@ fn lock_redundant_add_member() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` differ; added: idna
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21362,6 +21549,7 @@ fn lock_new_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: anyio<4.3
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21563,6 +21751,7 @@ fn lock_remove_member_non_project() -> Result<()> {
     warning: No `requires-python` value found in the workspace. Defaulting to `>=3.12`.
     Resolved in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace members differ; removed: leaf
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -21685,6 +21874,7 @@ fn lock_rename_project() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace member `renamed` is missing from the lockfile
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22056,6 +22246,7 @@ fn lock_without_metadata_conflicting_group_with_extra_and_different_specifiers()
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; added: `httpx==1.0.0`; changed: httpx[http2]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22299,6 +22490,7 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `provider==1.0.0` differ; added: empty
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22342,6 +22534,7 @@ fn lock_metadata_free_frozen_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency group `empty` was added to `provider==1.0.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22406,6 +22599,7 @@ fn lock_removed_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; removed: empty
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22419,6 +22613,7 @@ fn lock_removed_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; removed: empty
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22517,6 +22712,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 9 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; changed: anyio==4.4.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22551,6 +22747,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 9 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: `httpx[http2]==1.0.0`, `six==1.0.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22569,6 +22766,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 9 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: `httpx[http2]==1.0.0`, `six==1.0.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22584,6 +22782,7 @@ fn lock_regenerates_dependencies_without_metadata() -> Result<()> {
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: urllib3==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22858,6 +23057,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==1.0.0` differ; changed: ok[second]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -22906,6 +23106,7 @@ fn lock_metadata_free_nested_group_conditional_registry_constraint() -> Result<(
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints changed from `ok==1 ; sys_platform == 'win32'` to `ok==2 ; sys_platform == 'win32'`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -23077,6 +23278,7 @@ fn lock_regenerates_dynamic_version_scoped_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `provider` differ; removed: anyio==4.4.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -23304,6 +23506,7 @@ fn lock_regenerates_activated_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `dependency==1.0.0` differ
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -24542,6 +24745,7 @@ fn lock_metadata_free_overridden_recursive_extra_source() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; removed: six==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -25069,6 +25273,7 @@ fn lock_regenerates_marker_specific_requested_extras() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Resolved dependencies for `project==0.1.0` differ; changed: httpx[http2]==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -25976,6 +26181,7 @@ fn lock_constrained_environment() -> Result<()> {
     ----- stderr -----
     Resolved 8 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Supported environments changed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -27441,6 +27647,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency group `empty` was added to `project==0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -27516,6 +27723,7 @@ fn lock_add_empty_dependency_group() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency group `empty` was removed from `project==0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -27937,9 +28145,7 @@ fn lock_explicit_default_index() -> Result<()> {
     DEBUG The project environment's Python version satisfies the request: `Python >=3.12`
     DEBUG Using request connect timeout of [TIME] and read timeout of [TIME]
     DEBUG Found static `requires-dist` for: [TEMP_DIR]/
-    DEBUG Resolving despite existing lockfile due to mismatched requirements for: `project==0.1.0`
-      Requested: {Requirement { name: PackageName("anyio"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([]), index: None, conflict: None }, scope: Global, origin: None }}
-      Existing: {Requirement { name: PackageName("iniconfig"), extras: [], groups: [], marker: true, source: Registry { specifier: VersionSpecifiers([VersionSpecifier { operator: Equal, version: "2" }]), index: Some(IndexMetadata { url: Url(VerbatimUrl { url: SafeUrl { scheme: "https", cannot_be_a_base: false, username: "", password: None, host: Some(Domain("test.pypi.org")), port: None, path: "/simple", query: None, fragment: None }, given: None, expanded: false, force_relative: false }), format: Simple }), conflict: None }, scope: Global, origin: None }}
+    DEBUG Resolving despite existing lockfile: Requirements for `project==0.1.0` changed from `iniconfig==2 (index: https://test.pypi.org/simple)` to `anyio`
     DEBUG Found static `pyproject.toml` for: project @ file://[TEMP_DIR]/
     DEBUG Solving with installed Python version: 3.12.[X]
     DEBUG Solving with target Python version: >=3.12
@@ -31115,7 +31321,7 @@ fn lock_unsupported_version() -> Result<()> {
     exit_code: 2 (failure)
     ----- stderr -----
     error: Failed to parse `uv.lock`, which uses an unsupported schema version (v2, but only v1 is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`.
-      cause: Dependency `iniconfig` has missing `source` field but has more than one matching package
+      cause: Dependency `iniconfig` has no matching package entry in the lockfile
     ");
 
     Ok(())
@@ -35887,6 +36093,7 @@ fn lock_dynamic_to_static() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` is expected to have a static version
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -36012,6 +36219,7 @@ fn lock_static_to_dynamic() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` is expected to have a dynamic version
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -36108,6 +36316,7 @@ fn lock_bump_static_version() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -36170,14 +36379,14 @@ fn lock_derivation_chain_prod() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -36220,14 +36429,14 @@ fn lock_derivation_chain_extra() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -36272,14 +36481,14 @@ fn lock_derivation_chain_group() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -36335,14 +36544,14 @@ fn lock_derivation_chain_extended() -> Result<()> {
              [stderr]
              Traceback (most recent call last):
                File "<string>", line 14, in <module>
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 325, in get_requires_for_build_wheel
                  return self._get_build_requires(config_settings, requirements=['wheel'])
                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 295, in _get_build_requires
                  self.run_setup()
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 487, in run_setup
                  super().run_setup(setup_script=setup_script)
-               File "[CACHE_DIR]/builds-v0/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
+               File "[CACHE_DIR]/builds-[VERSION]/[TMP]/[PYTHON-LIB]/site-packages/setuptools/build_meta.py", line 311, in run_setup
                  exec(code, locals())
                File "<string>", line 5, in <module>
                File "[CACHE_DIR]/[TMP]/src/ez_setup/__init__.py", line 170
@@ -38131,6 +38340,7 @@ fn lock_script() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements differ; added: iniconfig
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -38590,9 +38800,9 @@ fn lock_pytorch_cpu() -> Result<()> {
         revision = 5
         requires-python = ">=3.12.[X]"
         resolution-markers = [
-            "(python_full_version >= '3.13' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')",
+            "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux') and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'",
             "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'",
-            "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
+            "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124' or sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
             "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu124')",
             "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu124'",
         ]
@@ -38937,15 +39147,15 @@ fn lock_pytorch_cpu() -> Result<()> {
         [package.optional-dependencies]
         cpu = [
             { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-7-project-cpu' or sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' or extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'" },
             { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torchvision", version = "0.20.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-7-project-cpu' or sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' or extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124'" },
         ]
         cu124 = [
             { name = "torch", version = "2.5.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torch", version = "2.5.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux' or extra == 'extra-7-project-cpu') and extra == 'extra-7-project-cu124'" },
             { name = "torchvision", version = "0.20.1", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
-            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' and extra == 'extra-7-project-cu124') or (platform_machine != 'aarch64' and extra == 'extra-7-project-cu124') or (platform_python_implementation != 'CPython' and extra == 'extra-7-project-cu124') or (sys_platform != 'linux' and extra == 'extra-7-project-cu124') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu124')" },
+            { name = "torchvision", version = "0.20.1+cu124", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu124" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython' or sys_platform != 'linux' or extra == 'extra-7-project-cpu') and extra == 'extra-7-project-cu124'" },
         ]
 
         [package.metadata]
@@ -39026,16 +39236,16 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "2.5.1+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
-            "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+            "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "fsspec", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "jinja2", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "networkx", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "setuptools", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "sympy", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "typing-extensions", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "filelock", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "fsspec", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "jinja2", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "networkx", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "setuptools", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "sympy", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "typing-extensions", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.5.1%2Bcpu-cp312-cp312-linux_x86_64.whl", hash = "sha256:4856f9d6925121d13c2df07aa7580b767f449dfe71ae5acde9c27535d5da4840", upload-time = "2025-01-29T22:50:59.085Z" },
@@ -39116,12 +39326,12 @@ fn lock_pytorch_cpu() -> Result<()> {
         version = "0.20.1+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
-            "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+            "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
         dependencies = [
-            { name = "numpy", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "pillow", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "numpy", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "pillow", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "torch", version = "2.5.1+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torchvision-0.20.1%2Bcpu-cp312-cp312-linux_x86_64.whl", hash = "sha256:5f46c7ac7f00a065cb40bfb1e1bfc4ba16a35f5d46b3fe70cca6b3cea7f822f7", upload-time = "2025-01-29T22:51:00.689Z" },
@@ -39243,7 +39453,7 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         resolution-markers = [
             "sys_platform != 'darwin' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'",
             "sys_platform == 'darwin' and extra != 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'",
-            "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118')",
+            "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118' or sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
             "python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
             "sys_platform == 'darwin' and extra == 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
             "extra != 'extra-7-project-cpu' and extra != 'extra-7-project-cu118'",
@@ -39492,11 +39702,11 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         cpu = [
             { name = "torch", version = "2.2.2", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version < '3.13' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
             { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
-            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-7-project-cpu') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
+            { name = "torch", version = "2.2.2+cpu", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }, marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' and extra == 'extra-7-project-cpu' or sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-7-project-cpu' or extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118'" },
         ]
         cu118 = [
-            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
-            { name = "torch", version = "2.2.2+cu118", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "(sys_platform != 'darwin' and extra == 'extra-7-project-cu118') or (extra == 'extra-7-project-cpu' and extra == 'extra-7-project-cu118')" },
+            { name = "torch", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform == 'darwin' or extra == 'extra-7-project-cpu') and extra == 'extra-7-project-cu118'" },
+            { name = "torch", version = "2.2.2+cu118", source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cu118" }, marker = "(sys_platform != 'darwin' or extra == 'extra-7-project-cpu') and extra == 'extra-7-project-cu118'" },
         ]
 
         [package.metadata]
@@ -39585,15 +39795,15 @@ fn lock_pytorch_index_preferences() -> Result<()> {
         version = "2.2.2+cpu"
         source = { registry = "https://astral-sh.github.io/pytorch-mirror/whl/cpu" }
         resolution-markers = [
-            "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
+            "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'",
         ]
         dependencies = [
-            { name = "filelock", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "fsspec", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "jinja2", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "networkx", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "sympy", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
-            { name = "typing-extensions", marker = "(python_full_version >= '3.13' and sys_platform == 'linux') or (platform_machine != 'aarch64' and sys_platform == 'linux') or (platform_python_implementation != 'CPython' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')" },
+            { name = "filelock", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "fsspec", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "jinja2", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "networkx", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "sympy", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
+            { name = "typing-extensions", marker = "(python_full_version >= '3.13' or platform_machine != 'aarch64' or platform_python_implementation != 'CPython') and sys_platform == 'linux' or sys_platform != 'darwin' and sys_platform != 'linux'" },
         ]
         wheels = [
             { url = "https://download.pytorch.org/whl/cpu/torch-2.2.2%2Bcpu-cp310-cp310-linux_x86_64.whl", hash = "sha256:02c4fac3c964e73f5f49003e0060c697f73b67c10cc23f51c592facb29e1bd53", upload-time = "2025-01-29T22:50:59.083Z" },
@@ -39706,8 +39916,8 @@ fn lock_intel_mac() -> Result<()> {
         revision = 5
         requires-python = ">=3.11"
         resolution-markers = [
-            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform == 'win32')",
-            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform == 'linux') or (python_full_version < '3.12' and sys_platform == 'win32')",
+            "python_full_version >= '3.12' and (platform_machine != 'x86_64' or sys_platform == 'linux' or sys_platform == 'win32')",
+            "python_full_version < '3.12' and (platform_machine != 'x86_64' or sys_platform == 'linux' or sys_platform == 'win32')",
             "platform_machine == 'x86_64' and sys_platform != 'linux' and sys_platform != 'win32'",
         ]
         required-markers = [
@@ -39981,8 +40191,8 @@ fn lock_intel_mac() -> Result<()> {
         version = "2.5.1"
         source = { registry = "https://pypi.org/simple" }
         resolution-markers = [
-            "(python_full_version >= '3.12' and platform_machine != 'x86_64') or (python_full_version >= '3.12' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform == 'win32')",
-            "(python_full_version < '3.12' and platform_machine != 'x86_64') or (python_full_version < '3.12' and sys_platform == 'linux') or (python_full_version < '3.12' and sys_platform == 'win32')",
+            "python_full_version >= '3.12' and (platform_machine != 'x86_64' or sys_platform == 'linux' or sys_platform == 'win32')",
+            "python_full_version < '3.12' and (platform_machine != 'x86_64' or sys_platform == 'linux' or sys_platform == 'win32')",
         ]
         dependencies = [
             { name = "filelock" },
@@ -40687,6 +40897,7 @@ fn lock_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; added: foo
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -40719,6 +40930,7 @@ fn lock_empty_extra() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Provided extras for `project==0.1.0` differ; added: bar
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -41531,6 +41743,7 @@ async fn lock_trailing_slash_index_url_in_lockfile_not_pyproject() -> Result<()>
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio (index: http://[LOCALHOST]/simple/)` to `anyio (index: http://[LOCALHOST]/simple)`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -41624,6 +41837,7 @@ async fn lock_trailing_slash_index_url_in_pyproject_and_not_lockfile() -> Result
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Requirements for `project==0.1.0` changed from `anyio (index: http://[LOCALHOST]/simple)` to `anyio (index: http://[LOCALHOST]/simple/)`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -41809,6 +42023,7 @@ fn lock_trailing_slash_find_links() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: The index for locked package `packaging==23.2` is no longer configured: <https://pypi.org/simple/packaging>
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42248,9 +42463,10 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         .arg("idna=2022-04-04T12:00:00Z"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to remove exclude newer exclusion (now `2022-04-04T12:00:00Z`) for package `idna`
+    Resolving despite existing lockfile: Exclude-newer re-enabled (now `2022-04-04T12:00:00Z`) for package `idna`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Exclude-newer re-enabled (now `2022-04-04T12:00:00Z`) for package `idna`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42262,9 +42478,10 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         .arg("--locked"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of exclude newer for package `idna`
+    Resolving despite existing lockfile: Exclude-newer override removed for package `idna`
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Exclude-newer override removed for package `idna`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42294,9 +42511,10 @@ fn lock_exclude_newer_package_absent() -> Result<()> {
         .arg("idna=2022-04-04T12:00:00Z"), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to removal of global exclude newer
+    Resolving despite existing lockfile: Global exclude-newer cutoff removed
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Global exclude-newer cutoff removed
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -42706,6 +42924,146 @@ async fn lock_exclude_newer_index_value() -> Result<()> {
         url = "{proxy_uri}/no-upload-time/simple"
         explicit = true
         exclude-newer = "2025-01-01T00:00:00Z"
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// An index-local package override must disable the cutoff even without a source pin.
+///
+/// See: <https://github.com/astral-sh/uv/issues/23103>
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_exclude_newer_index_package_disable() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        preview-features = ["index-exclude-newer"]
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/no-upload-time/simple"
+        default = true
+        exclude-newer = "2022-01-01T00:00:00Z"
+        exclude-newer-package = {{ iniconfig = false }}
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    uv_snapshot!(context.filters(), context.lock().arg("--locked"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// Index-local package timestamps override both index and global cutoffs.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_exclude_newer_index_package_timestamp() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        preview-features = ["index-exclude-newer"]
+        exclude-newer = "2000-01-01T00:00:00Z"
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        exclude-newer = "2022-01-01T00:00:00Z"
+        exclude-newer-package = {{ iniconfig = "2024-01-01T00:00:00Z" }}
+        "#,
+        proxy_uri = proxy.uri()
+    ))?;
+
+    uv_snapshot!(context.filters(), context.lock(), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    // A top-level package override takes precedence over the index-local override.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--exclude-newer-package")
+        .arg("iniconfig=2022-01-01T00:00:00Z"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolving despite existing lockfile: Exclude-newer cutoff set to `2022-01-01T00:00:00Z` for package `iniconfig`
+    error: No solution found when resolving dependencies
+      cause: Because iniconfig==2.0.0 was published after the exclude newer time and your project depends on iniconfig==2.0.0, we can conclude that your project's requirements are unsatisfiable.
+    ");
+
+    Ok(())
+}
+
+/// A package override in `[tool.uv]` takes precedence over a package override on the index.
+#[cfg(feature = "test-universal")]
+#[tokio::test]
+async fn lock_exclude_newer_index_package_project_override() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let proxy = crate::pypi_proxy::start().await;
+
+    let pyproject_toml = context.temp_dir.child("pyproject.toml");
+    pyproject_toml.write_str(&format!(
+        r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["iniconfig==2.0.0"]
+
+        [tool.uv]
+        preview-features = ["index-exclude-newer"]
+        exclude-newer-package = {{ iniconfig = false }}
+
+        [tool.uv.sources]
+        iniconfig = {{ index = "internal" }}
+
+        [[tool.uv.index]]
+        name = "internal"
+        url = "{proxy_uri}/simple"
+        explicit = true
+        exclude-newer-package = {{ iniconfig = "2022-01-01T00:00:00Z" }}
         "#,
         proxy_uri = proxy.uri()
     ))?;
@@ -44445,6 +44803,71 @@ fn lock_required_environment_macos_release_python_fork() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "test-universal")]
+const PLATFORM_PIN_INDEX: &str = indoc! {r#"
+    name = "platform-spelling-interval"
+    [root]
+    [expected]
+    satisfiable = true
+    [packages.a.versions."1"]
+    [packages.a.versions."2"]
+"#};
+
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_platform_version_spelling_interval() -> Result<()> {
+    let server = PackseServer::from_toml(PLATFORM_PIN_INDEX)?;
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0"
+        requires-python = ">=3.12"
+        dependencies = ["a==1; platform_version == '1'", "a==2; platform_version > '2.q' and platform_version < '2.s'"]
+    "#})?;
+    context
+        .lock()
+        .arg("--index-url")
+        .arg(server.index_url())
+        .assert()
+        .success();
+    assert_platform_pin_forks(
+        &context.read("uv.lock"),
+        "platform_version == '1'",
+        "platform_version > '2.q' and platform_version < '2.s'",
+    )?;
+    uv_snapshot!(context.filters(), context.export().arg("--index-url").arg(server.index_url()).args(["--locked", "--no-header", "--no-hashes", "--no-annotate", "--no-emit-project"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    a==1 ; platform_version == '1'
+    a==2 ; platform_version > '2.q' and platform_version < '2.s'
+
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+    Ok(())
+}
+
+/// The lock must reproduce both pins and the complement where neither pin applies.
+#[cfg(feature = "test-universal")]
+fn assert_platform_pin_forks(lock: &str, first: &str, second: &str) -> Result<()> {
+    let parsed = uv_lock::Lock::from_toml(lock)?;
+    assert_eq!(parsed.to_toml()?, lock);
+    let first_tree: uv_pep508::MarkerTree = first.parse()?;
+    let second_tree: uv_pep508::MarkerTree = second.parse()?;
+    let expected = [first_tree, second_tree, first_tree.or(second_tree).negate()];
+    let actual = parsed.fork_markers();
+    assert_eq!(actual.len(), expected.len());
+    for tree in expected {
+        assert!(
+            actual
+                .iter()
+                .any(|fork| parsed.simplify_environment(fork.pep508()) == tree)
+        );
+    }
+    Ok(())
+}
+
 /// Generic Python wheel tags cover later minor versions on required platforms.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -44935,6 +45358,7 @@ fn lock_no_locked() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Package `project` has version `0.3.0`, but the lockfile records `0.2.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -45035,6 +45459,7 @@ fn lock_check_overrides_frozen_environment() -> Result<()> {
     warning: Ignoring `UV_FROZEN` because `--check` was provided
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--check` was provided.
+      cause: Package `project` has version `0.2.0`, but the lockfile records `0.1.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -45382,7 +45807,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), lock);
 
-    // Negated extra predicates are dropped during the resolver's package lowering.
+    // The inactive extra makes the negated marker true, so the constraint selects b 2.0.0.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45401,6 +45826,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    Updated b v1.0.0 -> v2.0.0
     ");
 
     let retained_lock = context.read("uv.lock");
@@ -45417,7 +45843,10 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ");
     assert_eq!(context.read("uv.lock"), retained_lock);
 
-    // An inactive positive extra marker is also retained when its bound excludes the lock.
+    // Start the positive marker case from the original lock with b 1.0.0.
+    context.temp_dir.child("uv.lock").write_str(&lock)?;
+
+    // An inactive positive extra marker is retained when its bound excludes the lock.
     pyproject.write_str(indoc! {r#"
         [project]
         name = "project"
@@ -45473,6 +45902,7 @@ fn lock_resolution_inputs_version_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints changed from `b>=2 ; extra == 'inactive'` to `b>=2`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -45756,6 +46186,7 @@ fn lock_resolution_inputs_extra_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: b>=2 ; extra == 'feature'
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -45835,6 +46266,7 @@ fn lock_resolution_inputs_recursive_extra_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: b<2 ; extra == 'sub'
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46197,6 +46629,7 @@ fn lock_resolution_inputs_constraint_markers() -> Result<()> {
     ----- stderr -----
     Resolved 4 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; added: `b<2 ; sys_platform != 'linux'`, `b>=2 ; sys_platform == 'linux'`; removed: `b<2 ; sys_platform == 'linux'`, `b>=2 ; sys_platform != 'linux'`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46433,6 +46866,7 @@ fn lock_resolution_inputs_source_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b @ http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46628,6 +47062,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b==1a1
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -46655,6 +47090,7 @@ fn lock_resolution_inputs_prerelease_constraints() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b==1a1
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47114,6 +47550,7 @@ fn lock_resolution_inputs_shadowed_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `child==9` to `child==8`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47202,6 +47639,7 @@ fn lock_resolution_inputs_new_exclusion() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency exclusions differ; added: child
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47319,6 +47757,7 @@ fn lock_resolution_inputs_empty_scopes() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `project: []` to `project: child>=1`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47613,6 +48052,7 @@ fn lock_resolution_inputs_metadata_declarations() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries changed from `anyio==3.6.0` to `anyio==3.5.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47647,6 +48087,7 @@ fn lock_resolution_inputs_metadata_declarations() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries differ; changed: anyio
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47714,6 +48155,7 @@ fn lock_resolution_inputs_candidate_policy_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency `numpy` is no longer excluded from `absent`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -47740,6 +48182,7 @@ fn lock_resolution_inputs_candidate_policy_override() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `absent: numpy==2.4rc1` to `absent: unrelated==1`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48045,6 +48488,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency overrides changed from `discarded: leaf==1` to `discarded: leaf>=1`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48078,6 +48522,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency `unrelated` is no longer excluded from `discarded`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48111,6 +48556,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries differ; changed: discarded==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48147,6 +48593,7 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries differ; added: a==1.0.0
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48178,9 +48625,10 @@ fn lock_resolution_inputs_backtracking() -> Result<()> {
         .arg(server.index_url()), @"
     exit_code: 1 (failure)
     ----- stderr -----
-    Resolving despite existing lockfile due to change of exclude newer timestamp from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
+    Resolving despite existing lockfile: Exclude-newer timestamp changed from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Exclude-newer timestamp changed from `2025-01-01T00:00:00Z` to `2024-03-25T00:00:00Z` for package `discarded`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48340,6 +48788,7 @@ fn lock_resolution_inputs_metadata_unknown_version() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Configured dependency metadata entries changed from `child==2.0` to `child==3.0`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -48631,6 +49080,7 @@ fn lock_resolution_inputs_package_prerelease_constraint() -> Result<()> {
     ----- stderr -----
     Resolved 3 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Constraints differ; removed: b==2a1
 
     hint: To update the lockfile, run `uv lock`.
     ");

@@ -446,7 +446,6 @@ impl From<ResolverOutput> for uv_distribution_types::Resolution {
                     transformed.add_node(Node::Dist {
                         dist: dist.dist.clone(),
                         hashes: dist.hashes.clone(),
-                        install: true,
                     }),
                 );
             }

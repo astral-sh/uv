@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::{fixture::PathChild, prelude::FileWriteStr};
@@ -941,7 +944,7 @@ fn login_native_auth_url() {
 }
 
 #[tokio::test]
-async fn login_text_store() {
+async fn login_text_store() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let proxy = crate::pypi_proxy::start().await;
 
@@ -958,6 +961,24 @@ async fn login_text_store() {
     "
     );
 
+    #[cfg(unix)]
+    let store_modes = {
+        let dir = context.home_dir.join("data/uv/credentials");
+        [
+            (dir.join("credentials.toml"), 0o600, 0o644),
+            (dir.join("credentials.toml.lock"), 0o600, 0o666),
+            (dir, 0o700, 0o755),
+        ]
+    };
+
+    // Check a fresh store, then give it the permissions used by older versions.
+    #[cfg(unix)]
+    for (path, private, legacy) in &store_modes {
+        let mode = fs_err::metadata(path)?.permissions().mode() & 0o777;
+        assert_eq!(mode, *private, "{path:?}");
+        fs_err::set_permissions(path, std::fs::Permissions::from_mode(*legacy))?;
+    }
+
     // Login with a token
     uv_snapshot!(context.filters(), context.auth_login()
         .arg("https://example.com/simple")
@@ -968,6 +989,12 @@ async fn login_text_store() {
     Stored credentials for https://example.com/
     "
     );
+
+    #[cfg(unix)]
+    for (path, private, _) in store_modes {
+        let mode = fs_err::metadata(&path)?.permissions().mode() & 0o777;
+        assert_eq!(mode, private, "{path:?}");
+    }
 
     // Empty username should fail
     uv_snapshot!(context.filters(), context.auth_login()
@@ -1058,6 +1085,8 @@ async fn login_text_store() {
     ----- stderr -----
     Stored credentials for testuser@http://[::1]:1324/
     ");
+
+    Ok(())
 }
 
 #[test]

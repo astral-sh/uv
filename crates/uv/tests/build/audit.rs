@@ -3,7 +3,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use serde_json::json;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
@@ -2462,6 +2462,115 @@ async fn audit_project_status_quarantined() {
     Resolved 2 packages in [TIME]
     Found no known vulnerabilities and 1 adverse project status in 1 package
     ");
+}
+
+/// Audit both indexes when their URLs differ only in a redacted query value.
+#[tokio::test]
+async fn audit_project_status_redacted_index_query() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let server = MockServer::start().await;
+    let first_index = format!("{}/simple?sig=one", server.uri());
+    let second_index = format!("{}/simple?sig=two", server.uri());
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = [
+            "dep==1.0.0; sys_platform == 'win32'",
+            "dep==2.0.0; sys_platform != 'win32'",
+        ]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(&formatdoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+        resolution-markers = [
+            "sys_platform == 'win32'",
+            "sys_platform != 'win32'",
+        ]
+
+        [[package]]
+        name = "dep"
+        version = "1.0.0"
+        source = {{ registry = "{first_index}" }}
+        resolution-markers = ["sys_platform == 'win32'"]
+
+        [[package]]
+        name = "dep"
+        version = "2.0.0"
+        source = {{ registry = "{second_index}" }}
+        resolution-markers = ["sys_platform != 'win32'"]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = {{ virtual = "." }}
+        dependencies = [
+            {{ name = "dep", version = "1.0.0", source = {{ registry = "{first_index}" }}, marker = "sys_platform == 'win32'" }},
+            {{ name = "dep", version = "2.0.0", source = {{ registry = "{second_index}" }}, marker = "sys_platform != 'win32'" }},
+        ]
+    "#})?;
+
+    Mock::given(method("GET"))
+        .and(path("/simple/dep/"))
+        .and(query_param("sig", "one"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            json!({ "files": [] }).to_string(),
+            "application/vnd.pypi.simple.v1+json",
+        ))
+        .named("index with sig=one")
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/dep/"))
+        .and(query_param("sig", "two"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_raw(
+                json!({
+                    "files": [],
+                    "project-status": { "status": "quarantined", "reason": "suspected-malware" }
+                })
+                .to_string(),
+                "application/vnd.pypi.simple.v1+json",
+            ),
+        )
+        .named("index with sig=two")
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/querybatch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "results": [{ "vulns": [] }, { "vulns": [] }]
+        })))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context
+        .audit()
+        .arg("--frozen")
+        .arg("--preview-features")
+        .arg("audit-command")
+        .arg("--service-url")
+        .arg(server.uri()), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+
+    Adverse statuses:
+
+    - dep is quarantined: suspected-malware
+
+    ----- stderr -----
+    Found no known vulnerabilities and 1 adverse project status in 2 packages
+    ");
+
+    Ok(())
 }
 
 /// An `active` status is not an adverse status and should not be reported.

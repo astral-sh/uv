@@ -195,12 +195,8 @@ impl CachedEnvironment {
                 .graph()
                 .node_weights()
                 .filter_map(|node| match node {
-                    Node::Dist {
-                        dist,
-                        hashes,
-                        install: true,
-                    } => Some((dist, hashes)),
-                    Node::Dist { install: false, .. } | Node::Root => None,
+                    Node::Dist { dist, hashes } => Some((dist, hashes)),
+                    Node::Excluded { .. } | Node::Root => None,
                 })
                 .map(|(dist, hashes)| {
                     Ok(CachedEnvironmentDist {
@@ -236,12 +232,26 @@ impl CachedEnvironment {
             cache_digest(&canonicalize_executable(interpreter.sys_executable())?);
 
         // Search in the content-addressed cache.
-        let cache_entry = cache.entry(CacheBucket::Environments, interpreter_hash, resolution_hash);
+        let cache_entry = cache.entry(
+            CacheBucket::Environments,
+            interpreter_hash,
+            &resolution_hash,
+        );
+        let cached_environment = || {
+            let root = cache.resolve_link(cache_entry.path()).ok()?;
+            PythonEnvironment::from_root(root, cache).ok()
+        };
+        if let Some(environment) = cached_environment() {
+            return Ok(Self(environment));
+        }
 
-        if let Ok(root) = cache.resolve_link(cache_entry.path()) {
-            if let Ok(environment) = PythonEnvironment::from_root(root, cache) {
-                return Ok(Self(environment));
-            }
+        // Another process may have built the environment while we waited for the lock.
+        let _lock = cache_entry
+            .with_file(format!("{resolution_hash}.lock"))
+            .lock()
+            .await?;
+        if let Some(environment) = cached_environment() {
+            return Ok(Self(environment));
         }
 
         // Create the environment in the cache, then relocate it to its content-addressed location.

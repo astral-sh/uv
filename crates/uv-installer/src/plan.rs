@@ -10,7 +10,7 @@ use uv_cache_info::Timestamp;
 use uv_configuration::{BuildOptions, Reinstall};
 use uv_distribution::{
     BuiltWheelIndex, HttpArchivePointer, PathArchivePointer, RegistryWheelIndex,
-    check_supported_wheel_variant,
+    check_supported_wheel_variant, check_wheel_variant_compatibility,
 };
 use uv_distribution_filename::WheelFilename;
 use uv_distribution_types::{
@@ -429,6 +429,21 @@ impl<'a> Planner<'a> {
                 unreachable!("Installed distribution could not be found in site-packages: {dist}");
             };
 
+            // Validate direct URL wheel tags even when refreshing the cache.
+            if let Dist::Built(BuiltDist::DirectUrl(wheel)) = dist.as_ref()
+                && !wheel.filename.tag_compatibility(tags).is_compatible()
+            {
+                return Err(PlanError::IncompatibleWheel(Box::new(
+                    IncompatibleWheelError {
+                        kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
+                        compatibility_hint: generate_wheel_compatibility_hint(
+                            &wheel.filename,
+                            tags,
+                        ),
+                    },
+                )));
+            }
+
             if cache.must_revalidate_package(dist.name())
                 || dist
                     .source_tree()
@@ -449,18 +464,6 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Built(BuiltDist::DirectUrl(wheel)) => {
-                    if !wheel.filename.is_compatible(tags) {
-                        return Err(PlanError::IncompatibleWheel(Box::new(
-                            IncompatibleWheelError {
-                                kind: IncompatibleWheelKind::Url(wheel.url.to_url()),
-                                compatibility_hint: generate_wheel_compatibility_hint(
-                                    &wheel.filename,
-                                    tags,
-                                ),
-                            },
-                        )));
-                    }
-
                     if no_binary {
                         return Err(PlanError::NoBinaryUrl(wheel.url.clone()));
                     }
@@ -496,7 +499,11 @@ impl<'a> Planner<'a> {
                                     build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
-
+                                check_wheel_variant_compatibility(
+                                    &cached_dist.filename,
+                                    &cached_dist.path,
+                                    tags.python_platform(),
+                                )?;
                                 debug!("URL wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;
@@ -519,7 +526,7 @@ impl<'a> Planner<'a> {
                         return Err(Error::NotFound(wheel.url.to_url()).into());
                     }
 
-                    if !wheel.filename.is_compatible(tags) {
+                    if !wheel.filename.tag_compatibility(tags).is_compatible() {
                         return Err(PlanError::IncompatibleWheel(Box::new(
                             IncompatibleWheelError {
                                 kind: IncompatibleWheelKind::Path(wheel.install_path.to_path_buf()),
@@ -563,6 +570,14 @@ impl<'a> Planner<'a> {
                                             build_info,
                                             path: cache.archive(&archive.id).into_boxed_path(),
                                         };
+                                        // TODO(konsti): Recheck installed variants too. A driver
+                                        // change can make a wheel already in the environment
+                                        // incompatible even when its platform tags still match.
+                                        check_wheel_variant_compatibility(
+                                            &cached_dist.filename,
+                                            &cached_dist.path,
+                                            tags.python_platform(),
+                                        )?;
                                         debug!(
                                             "Path wheel requirement already cached: {cached_dist}"
                                         );
@@ -587,7 +602,7 @@ impl<'a> Planner<'a> {
                     }
                 }
                 Dist::Built(BuiltDist::GitPath(wheel)) => {
-                    if !wheel.filename.is_compatible(tags) {
+                    if !wheel.filename.tag_compatibility(tags).is_compatible() {
                         return Err(PlanError::IncompatibleGitPath(wheel.install_path.clone()));
                     }
 
@@ -621,7 +636,11 @@ impl<'a> Planner<'a> {
                                     build_info,
                                     path: cache.archive(&archive.id).into_boxed_path(),
                                 };
-
+                                check_wheel_variant_compatibility(
+                                    &cached_dist.filename,
+                                    &cached_dist.path,
+                                    tags.python_platform(),
+                                )?;
                                 debug!("Git wheel requirement already cached: {cached_dist}");
                                 cached.push(CachedDist::Url(cached_dist));
                                 continue;

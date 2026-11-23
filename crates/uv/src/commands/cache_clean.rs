@@ -10,8 +10,9 @@ use uv_fs::Simplified;
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 
-use crate::commands::human_readable_bytes;
-use crate::commands::reporters::{CleaningDirectoryReporter, CleaningPackageReporter};
+use crate::commands::reporters::{
+    CleaningDirectoryReporter, CleaningPackageReporter, print_removal_summary,
+};
 
 /// Clear the cache, removing all entries or those linked to specific packages.
 pub(crate) async fn cache_clean(
@@ -81,37 +82,6 @@ pub(crate) async fn cache_clean(
         summary
     };
 
-    // Write a summary of the number of files and directories removed.
-    match (summary.num_files, summary.num_dirs) {
-        (0, 0) => {
-            write!(printer.stderr(), "No cache entries found")?;
-        }
-        (0, 1) => {
-            write!(printer.stderr(), "Removed 1 directory")?;
-        }
-        (0, num_dirs_removed) => {
-            write!(printer.stderr(), "Removed {num_dirs_removed} directories")?;
-        }
-        (1, _) => {
-            write!(printer.stderr(), "Removed 1 file")?;
-        }
-        (num_files_removed, _) => {
-            write!(printer.stderr(), "Removed {num_files_removed} files")?;
-        }
-    }
-
-    // Prefer the fine-grained estimate, falling back to coarse accounting.
-    let reported_bytes = summary.fine_bytes.unwrap_or(summary.coarse_bytes);
-    if summary.num_files > 0 || summary.num_dirs > 0 {
-        let bytes = human_readable_bytes(reported_bytes);
-        if summary.fine_bytes_incomplete {
-            write!(printer.stderr(), " (at least {:.1})", bytes.green())?;
-        } else {
-            write!(printer.stderr(), " ({:.1})", bytes.green())?;
-        }
-    }
-
-    writeln!(printer.stderr())?;
-
+    print_removal_summary(&summary, "No cache entries found", printer)?;
     Ok(ExitStatus::Success)
 }

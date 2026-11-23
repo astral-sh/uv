@@ -473,6 +473,13 @@
         }
       ]
     },
+    "proxy-index": {
+      "description": "The proxy indexes to use when resolving and downloading packages.\n\n`proxy-for` names a configured upstream index, `url` sets the proxy's Simple API URL, and\n`artifact-base-url` sets its package download URL prefix. uv records upstream URLs in\nlockfiles.",
+      "type": ["array", "null"],
+      "items": {
+        "$ref": "#/definitions/ProxyIndex"
+      }
+    },
     "publish-url": {
       "description": "The URL for publishing packages to the Python package index (by default:\n<https://upload.pypi.org/legacy/>).",
       "anyOf": [
@@ -1053,6 +1060,17 @@
     "Index": {
       "type": "object",
       "properties": {
+        "artifact-base-url": {
+          "description": "The URL prefix from which this index serves package files.\n\nWhen this index is proxied, uv uses its `artifact-base-url` and the proxy's\n`artifact-base-url` to download packages without changing the URLs recorded in the\nlockfile.\n\nPyPI defaults to `https://files.pythonhosted.org/packages/`.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SafeUrl"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "authenticate": {
           "description": "When uv should use authentication for requests to the index.\n\n```toml\n[[tool.uv.index]]\nname = \"my-index\"\nurl = \"https://<omitted>/simple\"\nauthenticate = \"always\"\n```",
           "allOf": [
@@ -1086,6 +1104,13 @@
               "$ref": "#/definitions/ExcludeNewerOverride"
             }
           ]
+        },
+        "exclude-newer-package": {
+          "description": "Package-specific cutoffs for distributions resolved from this index.\n\nFor each package, accepts the same date, timestamp, and duration values as the global\n`exclude-newer` setting. Set a package's value to `false` to disable `exclude-newer` for that\npackage on this index.\n\nThese override the index's `exclude-newer` value and the global cutoff. Top-level\n`exclude-newer-package` settings take precedence over these overrides.\n\nThis option is in preview and may change in any future release.\n\n```toml\n[[tool.uv.index]]\nname = \"internal\"\nurl = \"https://internal.example.com/simple\"\nexclude-newer = \"7 days\"\nexclude-newer-package = { example = false }\n```",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/ExcludeNewerOverride"
+          }
         },
         "explicit": {
           "description": "Mark the index as explicit.\n\nExplicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]`\ndefinition, as in:\n\n```toml\n[[tool.uv.index]]\nname = \"pytorch\"\nurl = \"https://download.pytorch.org/whl/cu130\"\nexplicit = true\n\n[tool.uv.sources]\ntorch = { index = \"pytorch\" }\n```",
@@ -1883,6 +1908,7 @@
             "check-command",
             "packaged-init",
             "centralized-project-envs",
+            "venv-redirect-files",
             "tool-install-locks",
             "workspace-list-scripts",
             "index-hash-algorithm",
@@ -1900,7 +1926,9 @@
             "build-dependency-check",
             "build-lazy-imports",
             "build-dependency-hashes",
-            "wheel-variants"
+            "wheel-variants",
+            "http2-keep-alive",
+            "proxy-index"
           ]
         },
         {
@@ -1921,6 +1949,76 @@
           }
         }
       ]
+    },
+    "ProxyIndex": {
+      "description": "A proxy for a package index.",
+      "type": "object",
+      "properties": {
+        "artifact-base-url": {
+          "description": "The URL prefix under which the proxy serves package files.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SafeUrl"
+            }
+          ]
+        },
+        "authenticate": {
+          "description": "When to authenticate requests to the proxy's Simple API.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AuthPolicy"
+            }
+          ],
+          "default": "auto"
+        },
+        "cache-control": {
+          "description": "Cache control headers for the proxy's Simple API and package files.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexCacheControl"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ignore-error-codes": {
+          "description": "HTTP status codes to ignore when querying the proxy.",
+          "type": ["array", "null"],
+          "items": {
+            "$ref": "#/definitions/StatusCode"
+          }
+        },
+        "name": {
+          "description": "The proxy's name, used for credential lookup.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/IndexName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proxy-for": {
+          "description": "The upstream index's name.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexName"
+            }
+          ]
+        },
+        "url": {
+          "description": "The proxy's Simple API endpoint.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/IndexUrl"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["url", "proxy-for", "artifact-base-url"]
     },
     "ProxyUrl": {
       "description": "A proxy URL (e.g., `http://proxy.example.com:8080`).",

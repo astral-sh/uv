@@ -1004,32 +1004,18 @@ mod tests {
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "(extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-baz') \
-             or (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-foo') \
-             or (extra != 'extra-3-pkg-baz' and extra != 'extra-3-pkg-foo')",
+            "extra != 'extra-3-pkg-bar' and (extra != 'extra-3-pkg-baz' or extra != 'extra-3-pkg-foo') \
+             or extra != 'extra-3-pkg-baz' and extra != 'extra-3-pkg-foo'",
         );
 
         let conflicts = create_conflicts([create_set(["foo", "bar"]), create_set(["fox", "ant"])]);
         let cm = ConflictMarker::from_conflicts(&conflicts);
         assert_eq!(
             to_str(cm),
-            "(extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-bar') or \
-             (extra != 'extra-3-pkg-ant' and extra != 'extra-3-pkg-foo') or \
-             (extra != 'extra-3-pkg-bar' and extra != 'extra-3-pkg-fox') or \
-             (extra != 'extra-3-pkg-foo' and extra != 'extra-3-pkg-fox')",
+            "extra != 'extra-3-pkg-ant' and (extra != 'extra-3-pkg-bar' or extra != 'extra-3-pkg-foo') \
+             or (extra != 'extra-3-pkg-bar' or extra != 'extra-3-pkg-foo') and extra != 'extra-3-pkg-fox'",
         );
-        // I believe because markers are put into DNF, the marker we get here
-        // is a lot bigger than what we might expect. Namely, this is how it's
-        // constructed:
-        //
-        //     (extra != 'extra-3-pkg-foo' or extra != 'extra-3-pkg-bar')
-        //     and (extra != 'extra-3-pkg-fox' or extra != 'extra-3-pkg-ant')
-        //
-        // In other words, you can't have both `foo` and `bar` active, and you
-        // can't have both `fox` and `ant` active. But any other combination
-        // is valid. So let's step through all of them to make sure the marker
-        // below gives the expected result. (I did this because it's not at all
-        // obvious to me that the above two markers are equivalent.)
+        // A selection is invalid if it activates both `foo` and `bar`, or both `fox` and `ant`.
         let disallowed = [
             vec!["foo", "bar"],
             vec!["fox", "ant"],

@@ -129,7 +129,7 @@ pub(crate) fn required_dist(requirement: &Requirement) -> Result<Option<Dist>, E
         )?,
     };
 
-    // A direct requirement has no index from which to resolve a wheel variant.
+    // Check whether this source supports wheel variants before fetching metadata.
     if let Dist::Built(built) = &dist
         && let Err(err) = check_supported_wheel_variant(built)
     {

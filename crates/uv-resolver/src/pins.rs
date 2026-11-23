@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::FxHashMap;
 
-use uv_distribution_types::{DistributionId, Identifier, ResolvedDist};
+use uv_distribution_types::{DistributionId, Identifier, IndexUrl, ResolvedDist};
 use uv_normalize::PackageName;
 use uv_pep440::Version;
 
@@ -105,18 +105,19 @@ impl<'index> FilePins<'index> {
         }
     }
 
-    /// Return the metadata registered when selecting this package version.
+    /// Return the registered metadata and the index that supplied the selected distribution.
     pub(crate) fn metadata(
         &self,
         name: &PackageName,
         version: &Version,
-    ) -> Option<&RegisteredMetadata<'index>> {
+    ) -> Option<(&RegisteredMetadata<'index>, Option<&IndexUrl>)> {
         match self.0.get(&(name.clone(), version.clone()))? {
             FilePin::Registry {
                 metadata: PinMetadata::Registered(metadata),
+                dist,
                 ..
-            }
-            | FilePin::Url(metadata) => Some(metadata),
+            } => Some((metadata, dist.index())),
+            FilePin::Url(metadata) => Some((metadata, None)),
             FilePin::Registry {
                 metadata: PinMetadata::Unrequested(_),
                 ..

@@ -48,7 +48,7 @@ static TEST_TIMESTAMP: &str = "2024-03-25T00:00:00Z";
 pub const DEFAULT_PYTHON_VERSION: &str = "3.12";
 
 // The expected latest patch version for each Python minor version.
-pub const LATEST_PYTHON_3_16: &str = "3.16.0a1";
+pub const LATEST_PYTHON_3_16: &str = "3.16.0a2";
 const LATEST_PYTHON_3_15: &str = "3.15.2";
 const LATEST_PYTHON_3_14: &str = "3.14.10";
 pub const LATEST_PYTHON_3_13: &str = "3.13.18";
@@ -198,11 +198,15 @@ impl TestContext {
         self
     }
 
+    /// Return the directory for a cache bucket.
+    pub fn cache_bucket(&self, bucket: CacheBucket) -> ChildPath {
+        self.cache_dir.child(bucket.to_string())
+    }
+
     /// Return the sorted paths of all regular files in a cache bucket.
     pub fn cache_files(&self, bucket: CacheBucket) -> anyhow::Result<Vec<PathBuf>> {
-        let cache = Cache::from_path(self.cache_dir.path());
         let mut files = Vec::new();
-        for entry in WalkDir::new(cache.bucket(bucket)).min_depth(1) {
+        for entry in WalkDir::new(self.cache_bucket(bucket)).min_depth(1) {
             let entry = entry?;
             if entry.file_type().is_file() {
                 files.push(entry.path().to_path_buf());
@@ -1194,14 +1198,27 @@ impl TestContext {
         ));
         // Filter environment cache entry hashes
         filters.push((
-            r"environments-v(\d+)[\\/]([\w.\[\]-]+)-[a-f0-9]{16}".to_string(),
-            "environments-v$1/$2-[HASH]".to_string(),
+            format!(
+                r"{}[\\/]([\w.\[\]-]+)-[a-f0-9]{{16}}",
+                CacheBucket::Environments
+            ),
+            "environments-[VERSION]/$1-[HASH]".to_string(),
         ));
         // Filter archive hashes
         filters.push((
-            r"archive-v(\d+)[\\/][A-Za-z0-9\-\_]+".to_string(),
-            "archive-v$1/[HASH]".to_string(),
+            format!(r"{}[\\/][A-Za-z0-9\-\_]+", CacheBucket::Archive),
+            "archive-[VERSION]/[HASH]".to_string(),
         ));
+
+        // Only redact current bucket versions so obsolete buckets stay visible in snapshots.
+        for bucket in CacheBucket::iter() {
+            let bucket = bucket.to_string();
+            let (name, _) = bucket.rsplit_once('-').expect("versioned cache bucket");
+            filters.push((
+                format!(r"\[CACHE_DIR\]/{bucket}[\\/]"),
+                format!("[CACHE_DIR]/{name}-[VERSION]/"),
+            ));
+        }
 
         Self {
             root: ChildPath::new(root.path()),
@@ -1625,7 +1642,6 @@ impl TestContext {
         command
             .arg("python")
             .arg("find")
-            .env(EnvVars::UV_PREVIEW, "1")
             .env(EnvVars::UV_PYTHON_INSTALL_DIR, "");
         self.add_shared_options(&mut command, false);
         command

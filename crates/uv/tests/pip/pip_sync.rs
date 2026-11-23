@@ -10,12 +10,78 @@ use predicates::Predicate;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+use uv_cache::CacheBucket;
 use uv_fs::Simplified;
 use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::PackseServer;
 use uv_test::{copy_dir_ignore, download_to_disk, site_packages_path, uv_snapshot};
+
+/// Require the mismatched wheel's project at another version so that, if it is not rejected,
+/// the wheel can reach installation without a hash for its version.
+#[tokio::test]
+async fn registry_wheel_name_mismatch() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let requirements_txt = context.temp_dir.child("requirements.txt");
+    requirements_txt.write_str(indoc! {r"
+        validation==1.0.0 --hash=sha256:23ee8bda94d44f5480dccca240b37a4de7c823bc4683d00fd8e5eb85cf056ce6
+        ok==2.0.0 --hash=sha256:8163cd4f0477f8e93b856ac6a517fe5fa0f29339291fe2807d5376df685f6697
+    "})?;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/simple/validation/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/ok-1.0.0-py3-none-any.whl">ok-1.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/simple/ok/"))
+        .respond_with(ResponseTemplate::new(200).set_body_raw(
+            r#"<a href="/files/ok-2.0.0-py3-none-any.whl">ok-2.0.0-py3-none-any.whl</a>"#,
+            "text/html",
+        ))
+        .mount(&server)
+        .await;
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/links/ok-1.0.0-py3-none-any.whl"),
+    )?;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-1.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+    let wheel = fs::read(
+        context
+            .workspace_root
+            .join("test/links/ok-2.0.0-py3-none-any.whl"),
+    )?;
+    Mock::given(method("GET"))
+        .and(path("/files/ok-2.0.0-py3-none-any.whl"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .env_remove(EnvVars::UV_EXCLUDE_NEWER)
+        .arg("requirements.txt")
+        .arg("--index-url")
+        .arg(format!("{}/simple", server.uri())), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because there is no version of validation==1.0.0 and you require validation==1.0.0, we can conclude that your requirements are unsatisfiable.
+
+    hint: The index at `http://[LOCALHOST]/simple` listed a wheel for `ok` when queried for `validation`; the wheel was ignored
+    ");
+
+    Ok(())
+}
 
 #[test]
 fn missing_requirements_txt() {
@@ -3985,8 +4051,7 @@ fn require_hashes_wheel_url_mismatch() -> Result<()> {
 
     // A rejected wheel must not be published to the archive cache.
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .assert(predicates::path::missing());
 
     Ok(())
@@ -4249,8 +4314,7 @@ fn require_hashes_wheel_path_mismatch() -> Result<()> {
 
     // A rejected wheel must not be published to the archive cache.
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .assert(predicates::path::missing());
 
     Ok(())
@@ -5016,8 +5080,7 @@ fn index_wheel_hash_mismatch() -> Result<()> {
     ");
 
     context
-        .cache_dir
-        .child("archive-v0")
+        .cache_bucket(CacheBucket::Archive)
         .assert(predicates::path::missing());
     Ok(())
 }
@@ -6910,6 +6973,7 @@ fn pep_751_direct_url_tags() -> Result<()> {
     uv_snapshot!(context.filters(), context.pip_sync()
         .arg("--preview")
         .arg("pylock.toml")
+        .arg("--refresh")
         .arg("--python-platform")
         .arg("linux"), @"
     exit_code: 2 (failure)

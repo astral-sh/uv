@@ -155,7 +155,7 @@ impl FromStr for LinuxOsRelease {
 /// Strip matching single or double quotes from a value.
 fn unquote(s: &str) -> &str {
     for quote in ['"', '\''] {
-        if let Some(inner) = s.strip_prefix(quote).and_then(|s| s.strip_suffix(quote)) {
+        if let Some(inner) = s.strip_circumfix(quote, quote) {
             return inner;
         }
     }

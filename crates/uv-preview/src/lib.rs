@@ -387,6 +387,9 @@ pub enum PreviewFeature {
     /// cached environments that can be reused later. Explicit environment paths and environments
     /// selected with `--active` are not centralized.
     CentralizedProjectEnvs,
+    /// uv supports `.venv` redirect files ([PEP 832](https://peps.python.org/pep-0832/)). Enabling this
+    /// feature silences the preview warning.
+    VenvRedirectFiles,
     /// uv stores a `uv.lock` file alongside each installed tool and reuses it for subsequent
     /// installations and upgrades. The lockfile records the tool's resolved dependencies and also
     /// provides the dependency information used by `uv tool audit`.
@@ -462,6 +465,18 @@ pub enum PreviewFeature {
     BuildDependencyHashes,
     /// Enables experimental support for [wheel variants](https://peps.python.org/pep-0825/).
     WheelVariants,
+    /// On HTTP/2 connections with active requests, uv sends a `PING` after 15 seconds without
+    /// incoming data. If the peer misses the acknowledgement deadline, uv closes the connection,
+    /// interrupting all requests that share it. Some servers limit how often clients may ping.
+    ///
+    /// The acknowledgement timeout is one third of the read timeout, with a minimum of 10 seconds
+    /// and a maximum of 20 seconds. The default 30-second
+    /// [`UV_HTTP_TIMEOUT`](../reference/environment.md#uv_http_timeout) gives the peer 10 seconds
+    /// to respond. Uploads use their [upload timeout](../reference/environment.md#uv_upload_http_timeout).
+    /// A request can still time out waiting for data even when the peer acknowledges pings.
+    Http2KeepAlive,
+    /// Allows using [proxy indexes](./indexes.md#proxy-indexes).
+    ProxyIndex,
 }
 
 impl Display for PreviewFeature {

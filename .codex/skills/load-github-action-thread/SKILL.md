@@ -9,28 +9,31 @@ description:
 # Load GitHub Action Thread
 
 When given an issue instead of a run, find the related issue-triage run first. Resolve the issue
-title and number, then match the run display title:
+number and search for it in the run name.
 
 ```bash
 repository=astral-sh/uv
 issue=20477
-issue_title="$(gh issue view "$issue" --repo "$repository" --json title --jq '.title')"
 issue_number="$(gh issue view "$issue" --repo "$repository" --json number --jq '.number')"
 
 gh run list --repo "$repository" --workflow issue-triage.yml --limit 500 \
   --json databaseId,displayTitle,event,status,conclusion,createdAt,url \
-  | jaq -c --arg title "$issue_title" '.[] | select(.displayTitle == $title)'
+  | jaq -c --arg number "$issue_number" --arg url "https://github.com/$repository/issues/$issue_number" \
+      '.[] | select(
+        .displayTitle == "Issue context for \($number)" or
+        .displayTitle == "Issue context for \($url)"
+      )'
 ```
 
-Use the newest matching run. An issue-triage run can contain both the triage and bug-reproduction
-threads. Also check for directly dispatched bug-reproduction runs; their display title does not
-include the issue title. If the issue title changed or a run was manually dispatched, list recent
-candidates and confirm them from their logs:
+Confirm the issue number in the newest matching run's logs before importing the thread. An
+issue-triage run can contain both the triage and bug-reproduction threads. For older triage runs,
+use the run URL or ID. For manual dispatches with a different URL spelling, check recent triage
+runs. Also check for directly dispatched bug-reproduction runs.
 
 ```bash
 gh run list --repo "$repository" --workflow reproduce-bug.yml --limit 100 \
   --json databaseId,event,status,conclusion,createdAt,url
-gh run view <run-id> --repo "$repository" --log | rg -m 2 "ISSUE: $issue_number|issue: $issue_number"
+gh run view <run-id> --repo "$repository" --log | rg -m 2 "ISSUE_NUMBER: ${issue_number}([[:space:]]|$)"
 ```
 
 When given a pull request, find its security-review run from the pull request checks. The check link

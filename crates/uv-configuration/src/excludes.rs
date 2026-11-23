@@ -37,6 +37,16 @@ impl PackageExclusion {
     pub fn package(&self) -> &PackageName {
         &self.package.name
     }
+
+    /// Return the parent version selected by this exclusion, if any.
+    pub fn version(&self) -> Option<&Version> {
+        self.package.version.as_ref()
+    }
+
+    /// Return the dependencies excluded for this parent.
+    pub fn dependencies(&self) -> &[PackageName] {
+        &self.dependencies
+    }
 }
 
 /// An exclusion, either global or scoped to a specific package version.

@@ -60,6 +60,12 @@ impl DistFilename {
     ) -> Result<Self, DistFilenameError> {
         match DistExtension::from_path(filename) {
             Ok(DistExtension::Wheel) => match WheelFilename::from_hint(filename, package_name) {
+                Ok(filename) if filename.name != *package_name => {
+                    Err(DistFilenameError::WheelNameMismatch {
+                        expected: package_name.clone(),
+                        actual: filename.name,
+                    })
+                }
                 Ok(filename) => Ok(Self::WheelFilename(filename)),
                 Err(err) => Err(DistFilenameError::InvalidWheel(err)),
             },
@@ -144,6 +150,12 @@ pub enum DistFilenameError {
     /// The filename has a `.whl` extension but is otherwise an invalid wheel filename.
     #[error(transparent)]
     InvalidWheel(#[from] WheelFilenameError),
+    /// The wheel filename identifies a different package from the requested registry project.
+    #[error("wheel name `{actual}` does not match expected name `{expected}`")]
+    WheelNameMismatch {
+        expected: PackageName,
+        actual: PackageName,
+    },
     /// The filename has a source distribution extension but is otherwise invalid.
     #[error(transparent)]
     InvalidSourceDist(#[from] SourceDistFilenameError),
@@ -213,5 +225,33 @@ mod tests {
         let name = PackageName::from_str("my-package").unwrap();
         let parsed = DistFilename::try_from_filename("my_package-0.1.0-py3-none-any.whl", &name);
         assert!(parsed.is_some(), "expected wheel to parse successfully");
+    }
+
+    #[test]
+    fn try_from_filename_rejects_mismatched_wheel() {
+        let name = PackageName::from_str("my-package").unwrap();
+        let err = DistFilename::try_from_filename_with_reason(
+            "other_package-0.1.0-py3-none-any.whl",
+            &name,
+        )
+        .unwrap_err();
+        assert_matches!(err, DistFilenameError::WheelNameMismatch { .. });
+        assert_eq!(
+            err.to_string(),
+            "wheel name `other-package` does not match expected name `my-package`"
+        );
+    }
+
+    #[test]
+    fn try_from_filename_accepts_normalized_wheel_name() {
+        let name = PackageName::from_str("my-package").unwrap();
+        for filename in [
+            "My_Package-0.1.0-py3-none-any.whl",
+            "my.package-0.1.0-py3-none-any.whl",
+            "my__package-0.1.0-py3-none-any.whl",
+        ] {
+            let parsed = DistFilename::try_from_filename_with_reason(filename, &name).unwrap();
+            assert_eq!(parsed.name(), &name);
+        }
     }
 }

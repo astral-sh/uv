@@ -558,6 +558,7 @@ impl IndexArgs {
 
         Ok(IndexOptions {
             index: default_index.combine(index),
+            proxy_index: None,
             index_url: index_url.and_then(Maybe::into_option),
             extra_index_url: extra_index_url
                 .map(|indexes| indexes.into_iter().filter_map(Maybe::into_option).collect()),

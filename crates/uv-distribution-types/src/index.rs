@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -6,6 +7,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use uv_auth::{AuthPolicy, Credentials, CredentialsFromUrlError};
+use uv_normalize::PackageName;
 use uv_pypi_types::HashAlgorithm;
 use uv_redacted::SafeUrl;
 use uv_redacted::policy::Stripped;
@@ -15,6 +17,50 @@ use crate::exclude_newer::ExcludeNewerOverride;
 use crate::index_name::{IndexName, IndexNameError};
 use crate::origin::Origin;
 use crate::{IndexStatusCodeStrategy, IndexUrl, IndexUrlError, SerializableStatusCode};
+
+/// HTTP status and cache policies borrowed from a package index.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IndexRequestPolicy<'a> {
+    index: Option<&'a Index>,
+}
+
+impl<'a> IndexRequestPolicy<'a> {
+    /// Return the status codes that let a search continue to the next index.
+    pub fn status_code_strategy(&self) -> IndexStatusCodeStrategy<'a> {
+        let Some(index) = self.index else {
+            return IndexStatusCodeStrategy::Default;
+        };
+        match index.ignore_error_codes.as_deref() {
+            Some(status_codes) => {
+                IndexStatusCodeStrategy::IgnoreConfiguredErrorCodes { status_codes }
+            }
+            None => IndexStatusCodeStrategy::from_index_url(index.raw_url()),
+        }
+    }
+
+    /// Return whether this status code is explicitly ignored, excluding built-in defaults.
+    pub fn ignores_error_code(&self, status_code: StatusCode) -> bool {
+        self.status_code_strategy()
+            .explicitly_ignores_error_code(status_code)
+    }
+
+    /// Return the cache control header for Simple API requests.
+    pub fn simple_api_cache_control(&self) -> Option<HeaderValue> {
+        self.index?.cache_control.as_ref()?.api.clone()
+    }
+
+    /// Return the cache control header for artifact downloads, including index-specific defaults.
+    pub fn artifact_cache_control(&self) -> Option<HeaderValue> {
+        let index = self.index?;
+        self.configured_files_cache_control()
+            .or_else(|| IndexCacheControl::artifact_cache_control(index.raw_url()))
+    }
+
+    /// Return the file cache control header only when the user configured it.
+    pub fn configured_files_cache_control(&self) -> Option<HeaderValue> {
+        self.index?.cache_control.as_ref()?.files.clone()
+    }
+}
 
 /// Cache control configuration for an index.
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Default)]
@@ -29,11 +75,6 @@ pub struct IndexCacheControl {
 }
 
 impl IndexCacheControl {
-    /// Return the default Simple API cache control headers for the given index URL, if applicable.
-    fn simple_api_cache_control(_url: &SafeUrl) -> Option<HeaderValue> {
-        None
-    }
-
     /// Return the default files cache control headers for the given index URL, if applicable.
     fn artifact_cache_control(url: &SafeUrl) -> Option<HeaderValue> {
         let dominated_by_pytorch_or_nvidia = url.host_str().is_some_and(|host| {
@@ -147,6 +188,15 @@ pub struct Index {
     ///
     /// Expects to receive a URL (e.g., `https://pypi.org/simple`) or a local path.
     pub url: IndexUrl,
+    /// The URL prefix from which this index serves package files.
+    ///
+    /// When this index is proxied, uv uses its `artifact-base-url` and the proxy's
+    /// `artifact-base-url` to download packages without changing the URLs recorded in the
+    /// lockfile.
+    ///
+    /// PyPI defaults to `https://files.pythonhosted.org/packages/`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_base_url: Option<SafeUrl<Stripped>>,
     /// Mark the index as explicit.
     ///
     /// Explicit indexes will _only_ be used when explicitly requested via a `[tool.uv.sources]`
@@ -269,6 +319,76 @@ pub struct Index {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "schemars", schemars(with = "ExcludeNewerOverride"))]
     pub exclude_newer: Option<ExcludeNewerOverride>,
+    /// Package-specific cutoffs for distributions resolved from this index.
+    ///
+    /// For each package, accepts the same date, timestamp, and duration values as the global
+    /// `exclude-newer` setting. Set a package's value to `false` to disable `exclude-newer` for that
+    /// package on this index.
+    ///
+    /// These override the index's `exclude-newer` value and the global cutoff. Top-level
+    /// `exclude-newer-package` settings take precedence over these overrides.
+    ///
+    /// This option is in preview and may change in any future release.
+    ///
+    /// ```toml
+    /// [[tool.uv.index]]
+    /// name = "internal"
+    /// url = "https://internal.example.com/simple"
+    /// exclude-newer = "7 days"
+    /// exclude-newer-package = { example = false }
+    /// ```
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
+}
+
+/// A proxy for a package index.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ProxyIndex {
+    /// The proxy's name, used for credential lookup.
+    pub name: Option<IndexName>,
+    /// The proxy's Simple API endpoint.
+    pub url: IndexUrl,
+    /// The upstream index's name.
+    pub proxy_for: IndexName,
+    /// The URL prefix under which the proxy serves package files.
+    pub artifact_base_url: SafeUrl<Stripped>,
+    /// When to authenticate requests to the proxy's Simple API.
+    #[serde(default)]
+    pub authenticate: AuthPolicy,
+    /// HTTP status codes to ignore when querying the proxy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ignore_error_codes: Option<Vec<SerializableStatusCode>>,
+    /// Cache control headers for the proxy's Simple API and package files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<IndexCacheControl>,
+}
+
+impl ProxyIndex {
+    /// Create a proxy for an upstream index.
+    pub fn new(url: IndexUrl, proxy_for: IndexName, artifact_base_url: SafeUrl<Stripped>) -> Self {
+        Self {
+            name: None,
+            url,
+            proxy_for,
+            artifact_base_url,
+            authenticate: AuthPolicy::default(),
+            ignore_error_codes: None,
+            cache_control: None,
+        }
+    }
+
+    /// Promote automatic authentication when configured credentials will be stripped on persistence.
+    #[must_use]
+    pub fn with_promoted_auth_policy(mut self) -> Self {
+        if self.authenticate == AuthPolicy::Auto
+            && index_has_credentials(self.name.as_ref(), &self.url)
+        {
+            self.authenticate = AuthPolicy::Always;
+        }
+        self
+    }
 }
 
 #[derive(Debug, Error)]
@@ -279,11 +399,18 @@ pub struct IndexCredentialsError {
     source: CredentialsFromUrlError,
 }
 
+fn index_has_credentials(name: Option<&IndexName>, url: &IndexUrl) -> bool {
+    name.is_some_and(|name| Credentials::from_env(name.to_env_var()).is_some())
+        || !url.url().username().is_empty()
+        || url.url().password().is_some()
+}
+
 impl PartialEq for Index {
     fn eq(&self, other: &Self) -> bool {
         let Self {
             name,
             url,
+            artifact_base_url,
             explicit,
             default,
             origin: _,
@@ -294,9 +421,11 @@ impl PartialEq for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         *url == other.url
             && *name == other.name
+            && *artifact_base_url == other.artifact_base_url
             && *explicit == other.explicit
             && *default == other.default
             && *format == other.format
@@ -306,6 +435,7 @@ impl PartialEq for Index {
             && *cache_control == other.cache_control
             && *hash_algorithm == other.hash_algorithm
             && *exclude_newer == other.exclude_newer
+            && *exclude_newer_package == other.exclude_newer_package
     }
 }
 
@@ -322,6 +452,7 @@ impl Ord for Index {
         let Self {
             name,
             url,
+            artifact_base_url,
             explicit,
             default,
             origin: _,
@@ -332,9 +463,11 @@ impl Ord for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         url.cmp(&other.url)
             .then_with(|| name.cmp(&other.name))
+            .then_with(|| artifact_base_url.cmp(&other.artifact_base_url))
             .then_with(|| explicit.cmp(&other.explicit))
             .then_with(|| default.cmp(&other.default))
             .then_with(|| format.cmp(&other.format))
@@ -344,6 +477,7 @@ impl Ord for Index {
             .then_with(|| cache_control.cmp(&other.cache_control))
             .then_with(|| hash_algorithm.cmp(&other.hash_algorithm))
             .then_with(|| exclude_newer.cmp(&other.exclude_newer))
+            .then_with(|| exclude_newer_package.cmp(&other.exclude_newer_package))
     }
 }
 
@@ -352,6 +486,7 @@ impl std::hash::Hash for Index {
         let Self {
             name,
             url,
+            artifact_base_url,
             explicit,
             default,
             origin: _,
@@ -362,9 +497,11 @@ impl std::hash::Hash for Index {
             cache_control,
             hash_algorithm,
             exclude_newer,
+            exclude_newer_package,
         } = self;
         url.hash(state);
         name.hash(state);
+        artifact_base_url.hash(state);
         explicit.hash(state);
         default.hash(state);
         format.hash(state);
@@ -374,6 +511,7 @@ impl std::hash::Hash for Index {
         cache_control.hash(state);
         hash_algorithm.hash(state);
         exclude_newer.hash(state);
+        exclude_newer_package.hash(state);
     }
 }
 
@@ -432,6 +570,7 @@ impl Index {
         Self {
             url,
             name: None,
+            artifact_base_url: None,
             explicit: false,
             default: true,
             origin: None,
@@ -442,6 +581,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -450,6 +590,7 @@ impl Index {
         Self {
             url,
             name: None,
+            artifact_base_url: None,
             explicit: false,
             default: false,
             origin: None,
@@ -460,6 +601,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -468,6 +610,7 @@ impl Index {
         Self {
             url,
             name: None,
+            artifact_base_url: None,
             explicit: false,
             default: false,
             origin: None,
@@ -478,6 +621,7 @@ impl Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 
@@ -524,28 +668,17 @@ impl Index {
     /// credentials, since this is used to preserve the authentication policy after credentials are
     /// removed from the stored URL; parsing errors are reported when the credentials are retrieved.
     fn has_credentials(&self) -> bool {
-        if self
-            .name
-            .as_ref()
-            .is_some_and(|name| Credentials::from_env(name.to_env_var()).is_some())
-        {
-            return true;
-        }
-
-        let url = self.url.url();
-        !url.username().is_empty() || url.password().is_some()
+        index_has_credentials(self.name.as_ref(), &self.url)
     }
 
     /// Retrieve the credentials for the index, either from the environment, or from the URL itself.
     pub fn credentials(&self) -> Result<Option<Credentials>, IndexCredentialsError> {
-        // If the index is named, and credentials are provided via the environment, prefer those.
-        if let Some(name) = self.name.as_ref() {
-            if let Some(credentials) = Credentials::from_env(name.to_env_var()) {
-                return Ok(Some(credentials));
-            }
+        if let Some(name) = &self.name
+            && let Some(credentials) = Credentials::from_env(name.to_env_var())
+        {
+            return Ok(Some(credentials));
         }
 
-        // Otherwise, extract the credentials from the URL.
         Credentials::from_url(self.url.url()).map_err(|source| IndexCredentialsError {
             url: self.url.url().clone(),
             source,
@@ -562,43 +695,16 @@ impl Index {
         Ok(self)
     }
 
-    /// Return the [`IndexStatusCodeStrategy`] for this index.
-    pub(crate) fn status_code_strategy(&self) -> IndexStatusCodeStrategy {
-        if let Some(ignore_error_codes) = &self.ignore_error_codes {
-            IndexStatusCodeStrategy::from_ignored_error_codes(ignore_error_codes)
-        } else {
-            IndexStatusCodeStrategy::from_index_url(self.url.url())
-        }
+    /// Borrow the HTTP request policy for this index.
+    pub(crate) fn request_policy(&self) -> IndexRequestPolicy<'_> {
+        IndexRequestPolicy { index: Some(self) }
     }
 
-    /// Return whether the given status code is explicitly ignored for this index.
-    pub(crate) fn ignores_error_code(&self, status_code: StatusCode) -> bool {
-        self.ignore_error_codes.as_ref().is_some_and(|codes| {
-            codes
-                .iter()
-                .any(|ignored_status_code| **ignored_status_code == status_code)
-        })
-    }
-
-    /// Return the cache control header for file requests to this index, if any.
-    pub(crate) fn artifact_cache_control(&self) -> Option<HeaderValue> {
-        self.cache_control
-            .as_ref()
-            .and_then(|cache_control| cache_control.files.clone())
-            .or_else(|| IndexCacheControl::artifact_cache_control(self.url.url()))
-    }
-
-    /// Return the cache control header for API requests to this index, if any.
-    pub(crate) fn simple_api_cache_control(&self) -> Option<HeaderValue> {
-        self.cache_control
-            .as_ref()
-            .and_then(|cache_control| cache_control.api.clone())
-            .or_else(|| IndexCacheControl::simple_api_cache_control(self.url.url()))
-    }
-
-    /// Return the `exclude-newer` setting for this index.
-    pub(crate) fn exclude_newer(&self) -> Option<&ExcludeNewerOverride> {
-        self.exclude_newer.as_ref()
+    /// Return the package-specific cutoff for this index, falling back to its default cutoff.
+    pub(crate) fn exclude_newer(&self, package: &PackageName) -> Option<&ExcludeNewerOverride> {
+        self.exclude_newer_package
+            .get(package)
+            .or(self.exclude_newer.as_ref())
     }
 }
 
@@ -607,6 +713,7 @@ impl From<IndexUrl> for Index {
         Self {
             name: None,
             url: value,
+            artifact_base_url: None,
             explicit: false,
             default: false,
             origin: None,
@@ -617,6 +724,7 @@ impl From<IndexUrl> for Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         }
     }
 }
@@ -634,6 +742,7 @@ impl FromStr for Index {
             return Ok(Self {
                 name: Some(name),
                 url,
+                artifact_base_url: None,
                 explicit: false,
                 default: false,
                 origin: None,
@@ -644,6 +753,7 @@ impl FromStr for Index {
                 cache_control: None,
                 hash_algorithm: None,
                 exclude_newer: None,
+                exclude_newer_package: BTreeMap::new(),
             });
         }
 
@@ -652,6 +762,7 @@ impl FromStr for Index {
         Ok(Self {
             name: None,
             url,
+            artifact_base_url: None,
             explicit: false,
             default: false,
             origin: None,
@@ -662,6 +773,7 @@ impl FromStr for Index {
             cache_control: None,
             hash_algorithm: None,
             exclude_newer: None,
+            exclude_newer_package: BTreeMap::new(),
         })
     }
 }
@@ -741,6 +853,8 @@ struct IndexWire {
     name: Option<IndexName>,
     url: IndexUrl,
     #[serde(default)]
+    artifact_base_url: Option<SafeUrl<Stripped>>,
+    #[serde(default)]
     explicit: bool,
     #[serde(default)]
     default: bool,
@@ -757,6 +871,8 @@ struct IndexWire {
     hash_algorithm: Option<IndexHashAlgorithm>,
     #[serde(default)]
     exclude_newer: Option<ExcludeNewerOverride>,
+    #[serde(default)]
+    exclude_newer_package: BTreeMap<PackageName, ExcludeNewerOverride>,
 }
 
 impl<'de> Deserialize<'de> for Index {
@@ -776,6 +892,7 @@ impl<'de> Deserialize<'de> for Index {
         Ok(Self {
             name: wire.name,
             url: wire.url,
+            artifact_base_url: wire.artifact_base_url,
             explicit: wire.explicit,
             default: wire.default,
             origin: None,
@@ -786,6 +903,7 @@ impl<'de> Deserialize<'de> for Index {
             cache_control: wire.cache_control,
             hash_algorithm: wire.hash_algorithm,
             exclude_newer: wire.exclude_newer,
+            exclude_newer_package: wire.exclude_newer_package,
         })
     }
 }
@@ -807,6 +925,79 @@ mod tests {
 
     use super::*;
     use http::HeaderValue;
+
+    use crate::IndexLocations;
+
+    #[test]
+    fn test_proxy_index_serialization_redacts_artifact_credentials()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let index: ProxyIndex = toml::from_str(
+            r#"
+            name = "socket"
+            url = "https://simple-user:simple-secret@proxy.example.com/simple/"
+            artifact-base-url = "https://artifact-user:artifact-secret@proxy.example.com/files/"
+            proxy-for = "pypi"
+            "#,
+        )?;
+
+        assert_eq!(index.name.as_deref(), Some("socket"));
+        assert_eq!(index.proxy_for.as_ref(), "pypi");
+        assert_eq!(index.url.url().username(), "simple-user");
+        assert_eq!(index.url.url().password(), Some("simple-secret"));
+        assert_eq!(index.artifact_base_url.as_url().username(), "artifact-user");
+        assert_eq!(
+            index.artifact_base_url.as_url().password(),
+            Some("artifact-secret")
+        );
+
+        let serialized = toml::to_string(&index)?;
+        insta::assert_snapshot!(serialized, @r#"
+        name = "socket"
+        url = "https://proxy.example.com/simple/"
+        proxy-for = "pypi"
+        artifact-base-url = "https://proxy.example.com/files/"
+        authenticate = "auto"
+        "#);
+
+        let debug = format!("{index:?}");
+        assert!(!debug.contains("simple-secret"));
+        assert!(!debug.contains("artifact-secret"));
+
+        let restored: ProxyIndex = toml::from_str(&serialized)?;
+        assert_eq!(restored.name.as_deref(), Some("socket"));
+        assert_eq!(restored.proxy_for.as_ref(), "pypi");
+        assert!(restored.url.url().username().is_empty());
+        assert!(restored.url.url().password().is_none());
+        let artifact_base = restored.artifact_base_url;
+        assert!(artifact_base.as_url().username().is_empty());
+        assert!(artifact_base.as_url().password().is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_index_allows_colons_and_at_signs_in_artifact_paths()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let index: ProxyIndex = toml::from_str(
+            r#"
+            name = "socket"
+            url = "https://proxy.example.com/simple/"
+            artifact-base-url = "https://proxy.example.com/files/project:build@nightly/"
+            proxy-for = "pypi"
+            "#,
+        )?;
+
+        assert_eq!(
+            index.artifact_base_url.as_url().as_str(),
+            "https://proxy.example.com/files/project:build@nightly/"
+        );
+        let mut upstream =
+            Index::from_index_url(IndexUrl::parse("https://pypi.org/simple/", None)?);
+        upstream.name = Some("pypi".parse()?);
+        IndexLocations::new(vec![upstream], vec![index], Vec::new(), false)?;
+
+        Ok(())
+    }
 
     #[test]
     fn test_index_cache_control_headers() {

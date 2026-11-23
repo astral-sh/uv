@@ -4,8 +4,8 @@ use tracing::debug;
 use uv_client::{MetadataFormat, RegistryClient, VersionFiles};
 use uv_distribution_filename::DistFilename;
 use uv_distribution_types::{
-    File, IndexCapabilities, IndexEntryFilename, IndexLocations, IndexMetadataRef, IndexUrl,
-    RequiresPython,
+    IndexCapabilities, IndexEntryFilename, IndexLocations, IndexMetadataRef, IndexUrl,
+    RequiresPython, VerbatimFile,
 };
 use uv_normalize::PackageName;
 use uv_platform_tags::Tags;
@@ -33,15 +33,17 @@ impl LatestClient<'_> {
         package: &PackageName,
         index: &IndexUrl,
     ) -> Option<jiff::Timestamp> {
-        self.exclude_newer
-            .exclude_newer_package_for_index(package, self.index_locations.exclude_newer_for(index))
+        self.exclude_newer.exclude_newer_package_for_index(
+            package,
+            self.index_locations.exclude_newer_for(index, package),
+        )
     }
 
     fn consider_candidate(
         &self,
         package: &PackageName,
         filename: &DistFilename,
-        file: &File,
+        file: &VerbatimFile,
         exclude_newer: Option<&jiff::Timestamp>,
     ) -> bool {
         // Respect any exclude-newer cutoffs that were provided.

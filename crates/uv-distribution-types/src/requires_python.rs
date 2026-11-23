@@ -491,11 +491,7 @@ impl RequiresPython {
 
                 // Ex) If the wheel bound is `3.12`, then it doesn't match `<=3.10.`.
                 let wheel_bound = UpperBound(Bound::Included(Version::new([3, u64::from(*minor)])));
-                if wheel_bound > self.range.upper().major_minor() {
-                    return false;
-                }
-
-                true
+                wheel_bound <= self.range.upper().major_minor()
             } else {
                 // Unknown tags are allowed.
                 true
@@ -585,7 +581,10 @@ impl From<RequiresPythonRange> for Ranges<Version> {
 /// a simplified marker, one must re-contextualize it by adding the
 /// `requires-python` constraint back to the marker.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord, serde::Deserialize)]
-pub struct SimplifiedMarkerTree(MarkerTree);
+#[serde(transparent)]
+pub struct SimplifiedMarkerTree(
+    #[serde(deserialize_with = "MarkerTree::deserialize_environment")] MarkerTree,
+);
 
 impl SimplifiedMarkerTree {
     /// Simplifies the given markers by assuming the given `requires-python`

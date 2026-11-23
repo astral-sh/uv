@@ -21,7 +21,7 @@
 3.13.18t
 3.14.10t
 # Pre-release version required for testing
-3.16.0a1
+3.16.0a2
 
 # Pre-releases used to compare interpreter selection with 3.13.0
 3.13.0rc2

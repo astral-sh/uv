@@ -44,7 +44,7 @@ impl RequirementsInput {
             Self::Local(parent) => {
                 let parent = parent
                     .parent()
-                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .filter(|parent| !parent.is_empty())
                     .unwrap_or(working_dir);
                 Some(parent.join(path))
             }

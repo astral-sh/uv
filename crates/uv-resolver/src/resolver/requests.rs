@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
+use tokio::sync::oneshot;
 
 use uv_distribution_types::{
-    Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
+    BuiltDist, Dist, DistributionId, Identifier, IndexMetadata, IndexUrl, Name, ResolutionRecorder,
 };
 use uv_normalize::PackageName;
 use uv_once_map::Registration;
@@ -226,6 +227,20 @@ impl MetadataRequests {
             Registration::Existing(entry) => entry,
         };
         Ok(RegisteredVariantsJson(entry))
+    }
+
+    /// Read embedded variant metadata for a wheel being considered by the solver.
+    pub(crate) fn read_wheel_variant(
+        &self,
+        wheel: BuiltDist,
+    ) -> Result<Option<ParsedVariantsJsonResponse>, ResolveError> {
+        let (send, recv) = oneshot::channel();
+        self.sender.blocking_send(Request::WheelVariant {
+            wheel,
+            response: send,
+        })?;
+        recv.blocking_recv()
+            .map_err(|_| ResolveError::ChannelClosed)
     }
 
     /// Schedule speculative candidate selection using an already-requested package version map.

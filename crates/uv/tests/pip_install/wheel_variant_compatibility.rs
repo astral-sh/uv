@@ -1,11 +1,17 @@
 use std::collections::BTreeMap;
+#[cfg(feature = "test-git")]
+use std::process::Command;
 
 use anyhow::Result;
+#[cfg(feature = "test-git")]
+use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::*;
 use indoc::indoc;
 use insta::{assert_json_snapshot, assert_snapshot};
 use serde_json::{Map, Value, json};
 use uv_distribution_types::PEP_850_SCHEMA;
+#[cfg(feature = "test-git")]
+use uv_redacted::SafeUrl;
 use uv_static::EnvVars;
 use uv_test::find_links::FindLinksServer;
 use uv_test::packse::{PackseServer, WheelBuilder};
@@ -17,6 +23,291 @@ fn null_variant() -> Value {
         "default-priorities": { "namespace": ["x86_64"] },
         "variants": { "null": {} },
     })
+}
+
+fn gpu_variant() -> Value {
+    json!({
+        "$schema": PEP_850_SCHEMA,
+        "default-priorities": { "namespace": ["nvidia"] },
+        "providers": {
+            "nvidia": {
+                "requires": ["nvidia-variant-provider==0.0.1"],
+                "plugin-api": "nvidia_variant_provider.plugin:NvidiaVariantPlugin"
+            }
+        },
+        "variants": {
+            "gpu": {
+                "nvidia": {
+                    "cuda_version_lower_bound": ["12"],
+                    "sm_arch": ["89_real"]
+                }
+            }
+        }
+    })
+}
+
+/// Recheck a local wheel's hardware requirements when compiling after a driver change.
+#[test]
+fn install_local_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = gpu_variant().to_string();
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"gpu".parse()?, &variant)
+        .build();
+    let wheel_path = context.temp_dir.child(&filename);
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(wheel_path.path()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from file://[TEMP_DIR]/ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context
+        .temp_dir
+        .child("requirements.in")
+        .write_str(&format!("./{filename}\n"))?;
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("requirements.in"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// A refreshed local variant wheel must have compatible platform tags.
+#[test]
+fn refresh_incompatible_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .tag("py3-none-win_amd64")
+        .variant(&"null".parse()?, &variant)
+        .build();
+    let wheel_path = context.temp_dir.child(filename);
+    wheel_path.write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--python-platform")
+        .arg("linux")
+        .arg("--refresh")
+        .arg(wheel_path.path()), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has no wheels with a matching platform tag (e.g., `manylinux_2_28_x86_64`), we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
+}
+
+/// Resolve a direct URL wheel against the current driver, including when its metadata is cached.
+#[test]
+fn install_direct_url_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = gpu_variant().to_string();
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"gpu".parse()?, &variant)
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--dry-run")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    // A dependency metadata override still needs the cached wheel's variant requirements.
+    let config = context.temp_dir.child("override.toml");
+    config.write_str(indoc! {r#"
+        [[dependency-metadata]]
+        name = "ok"
+        version = "1.0.0"
+    "#})?;
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--dry-run")
+        .arg("--config-file")
+        .arg(config.path())
+        .arg("--offline")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&url), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&url), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from http://[LOCALHOST]/ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+    Ok(())
+}
+
+/// A core metadata override still leaves the wheel's embedded variant metadata to validate.
+#[test]
+fn direct_url_wheel_with_invalid_variant_metadata() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let config = context.temp_dir.child("override.toml");
+    config.write_str(indoc! {r#"
+        [[dependency-metadata]]
+        name = "ok"
+        version = "1.0.0"
+    "#})?;
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"null".parse()?, "{")
+        .build();
+    context.temp_dir.child(&filename).write_binary(&wheel)?;
+    let server = FindLinksServer::new(context.temp_dir.path());
+    let url = format!("{}/{filename}", server.url());
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--dry-run")
+        .arg("--config-file")
+        .arg(config.path())
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(format!("ok @ {url}")), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has invalid metadata, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+
+    hint: Metadata for `ok` (v1.0.0) could not be parsed:
+      Failed to parse variant metadata `variant.json`: EOF while parsing an object at line 1 column 1
+    ");
+    Ok(())
+}
+
+/// Dry runs reject an incompatible Git wheel whether or not the wheel is cached.
+#[test]
+#[cfg(feature = "test-git")]
+fn install_git_path_variant_wheel() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filter((r"@[0-9a-f]{40}", "@[COMMIT]"));
+    let repository = context.temp_dir.child("repository");
+    repository.create_dir_all()?;
+    let variant = gpu_variant().to_string();
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"gpu".parse()?, &variant)
+        .build();
+    repository.child(&filename).write_binary(&wheel)?;
+    Command::new("git")
+        .arg("init")
+        .arg(repository.path())
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(repository.path())
+        .args(["add", &filename])
+        .assert()
+        .success();
+    Command::new("git")
+        .current_dir(repository.path())
+        .args([
+            "-c",
+            "user.name=ferris",
+            "-c",
+            "user.email=ferris@example.com",
+            "commit",
+            "-m",
+            "Add wheel",
+        ])
+        .assert()
+        .success();
+    let output = Command::new("git")
+        .current_dir(repository.path())
+        .args(["rev-parse", "HEAD"])
+        .output()?;
+    assert!(output.status.success());
+    let commit = String::from_utf8(output.stdout)?;
+    let commit = commit.trim();
+    let repository_url = SafeUrl::from_directory_path(repository.path()).unwrap();
+    let requirement = format!("ok @ git+{repository_url}@{commit}#path={filename}");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--dry-run")
+        .arg(&requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "12")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.9")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg(&requirement), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0 (from git+file://[TEMP_DIR]/repository/@[COMMIT]#path=ok-1.0.0-py3-none-any-gpu.whl)
+    ");
+
+    context.reset_venv();
+    uv_snapshot!(context.filters(), context.pip_install()
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_CUDA_DRIVER_VERSION, "11")
+        .env(EnvVars::NV_VARIANT_PROVIDER_FORCE_SM_ARCH, "8.8")
+        .arg("--preview-features")
+        .arg("wheel-variants")
+        .arg("--dry-run")
+        .arg(&requirement), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies
+      cause: Because only ok==1.0.0 is available and ok==1.0.0 has only unsupported wheel variants, we can conclude that all versions of ok cannot be used.
+             And because you require ok, we can conclude that your requirements are unsatisfiable.
+    ");
+    Ok(())
 }
 
 /// Sync keeps an installed variant even when wheel variants are no longer enabled.

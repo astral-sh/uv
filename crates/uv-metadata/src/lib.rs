@@ -8,10 +8,10 @@ use std::path::Path;
 
 use async_zip::base::read::seek::ZipFileReader;
 use futures::executor::block_on;
-use futures::io::{AllowStdIo, AsyncBufRead, AsyncSeek};
+use futures::io::{AllowStdIo, AsyncBufRead, AsyncSeek, BufReader};
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use uv_distribution_filename::{VariantLabel, WheelFilename};
 use uv_distribution_types::{VariantsJsonContent, VariantsJsonParseError};
 use uv_normalize::InvalidNameError;
@@ -20,6 +20,13 @@ use uv_pypi_types::ResolutionMetadata;
 pub use dist_info_stem::DistInfoStem;
 
 mod dist_info_stem;
+
+/// The contents of `METADATA` and any variant requirements read from a remote wheel.
+#[derive(Debug)]
+pub struct WheelMetadata {
+    pub core: Vec<u8>,
+    pub variant: Option<Box<VariantsJsonContent>>,
+}
 
 /// The caller is responsible for attaching the path or url we failed to read.
 #[derive(Debug, Error)]
@@ -148,7 +155,7 @@ pub fn read_archive_metadata(
         )?;
         if let Some(label) = filename.variant() {
             let path = format!("{dist_info_stem}.dist-info/variant.json");
-            validate_archive_variant(&mut zip_reader, &path, label).await?;
+            read_archive_variant_entry(&mut zip_reader, &path, label).await?;
         }
 
         let mut buffer = Vec::new();
@@ -162,12 +169,32 @@ pub fn read_archive_metadata(
     })
 }
 
-/// Validate the `variant.json` next to the wheel's `METADATA` before using it for resolution.
-pub async fn validate_archive_variant<R: AsyncBufRead + AsyncSeek + Unpin>(
+/// Read the variant metadata from a wheel archive.
+pub async fn read_archive_wheel_variant(
+    filename: &WheelFilename,
+    path: &Path,
+    label: &VariantLabel,
+) -> Result<VariantsJsonContent, Error> {
+    let file = fs_err::tokio::File::open(path).await.map_err(Error::Io)?;
+    let mut reader = ZipFileReader::new(BufReader::new(file.compat())).await?;
+    let ((), dist_info_stem) = find_archive_dist_info(
+        filename,
+        reader
+            .file()
+            .entries()
+            .iter()
+            .filter_map(|entry| Some(((), entry.filename().as_str().ok()?))),
+    )?;
+    let path = format!("{dist_info_stem}.dist-info/variant.json");
+    read_archive_variant_entry(&mut reader, &path, label).await
+}
+
+/// Read and validate the `variant.json` next to the wheel's `METADATA`.
+pub async fn read_archive_variant_entry<R: AsyncBufRead + AsyncSeek + Unpin>(
     reader: &mut ZipFileReader<R>,
     path: &str,
     label: &VariantLabel,
-) -> Result<(), Error> {
+) -> Result<VariantsJsonContent, Error> {
     let index = reader
         .file()
         .entries()
@@ -180,8 +207,7 @@ pub async fn validate_archive_variant<R: AsyncBufRead + AsyncSeek + Unpin>(
         .await?
         .read_to_end_checked(&mut contents)
         .await?;
-    VariantsJsonContent::from_wheel(&contents, label)?;
-    Ok(())
+    Ok(VariantsJsonContent::from_wheel(&contents, label)?)
 }
 
 /// Find the `.dist-info` directory in an unzipped wheel.
@@ -229,17 +255,17 @@ fn read_dist_info_metadata(
     fs_err::read(metadata_file).map_err(Error::Io)
 }
 
-/// Read `METADATA` and, for a variant wheel, validate `variant.json` in the same pass.
+/// Read `METADATA` and the embedded `variant.json` in the same pass.
 pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
     filename: &WheelFilename,
-    debug_path: &str,
     reader: R,
-) -> Result<ResolutionMetadata, Error> {
+) -> Result<WheelMetadata, Error> {
     let reader = futures::io::BufReader::with_capacity(128 * 1024, reader);
     let mut zip = async_zip::base::read::stream::ZipFileReader::new(reader);
     let mut dist_info = None;
     let mut metadata = None;
     let mut pending_variant = filename.variant();
+    let mut variant = None;
 
     while let Some(mut entry) = zip.next_with_entry().await? {
         let path = entry.reader().entry().filename().as_str()?.to_owned();
@@ -288,7 +314,7 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             }
 
             if let Some(label) = variant_label {
-                VariantsJsonContent::from_wheel(&contents, label)?;
+                variant = Some(Box::new(VariantsJsonContent::from_wheel(&contents, label)?));
                 pending_variant = None;
             } else {
                 metadata = Some(contents);
@@ -296,8 +322,10 @@ pub async fn read_metadata_async_stream<R: futures::AsyncRead + Unpin>(
             if pending_variant.is_none()
                 && let Some(metadata) = metadata.take()
             {
-                return ResolutionMetadata::parse_metadata(&metadata)
-                    .map_err(|err| Error::InvalidMetadata(debug_path.to_string(), Box::new(err)));
+                return Ok(WheelMetadata {
+                    core: metadata,
+                    variant,
+                });
             }
         }
 

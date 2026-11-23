@@ -42,13 +42,14 @@ use uv_metadata::read_archive_metadata;
 use uv_normalize::PackageName;
 use uv_pep440::{Version, release_specifiers_to_ranges};
 use uv_platform_tags::Tags;
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
+use uv_pypi_types::{HashDigest, HashDigests, PyProjectToml, ResolutionMetadata};
 use uv_redacted::SafeUrl;
 use uv_types::{BuildContext, BuildKey, BuildStack, SourceBuildTrait};
 use uv_workspace::pyproject::ToolUvSources;
 
-use crate::distribution_database::ManagedClient;
+use crate::distribution_database::{ManagedClient, RegistryArtifactRequest};
 use crate::error::Error;
+use crate::hash::{ArtifactHashPolicy, HTTP_DEFAULT_HASH_ALGORITHMS};
 use crate::metadata::{ArchiveMetadata, GitWorkspaceMember, Metadata};
 use crate::source::built_wheel_metadata::{BuiltWheelFile, BuiltWheelMetadata};
 use crate::source::revision::Revision;
@@ -289,27 +290,32 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<BuiltWheelMetadata, Error> {
         let built_wheel_metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let request = RegistryArtifactRequest::new(
+                    &dist.index,
+                    &dist.file.location,
+                    client.index_locations(),
+                )?;
+
                 // For registry source distributions, shard by package, then version, for
                 // convenience in debugging.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(&dist.index)
+                    WheelCache::Index(request.index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.url.to_url()?;
-
                 // If the URL is a file URL, use the local path directly.
-                if url.scheme() == "file" {
-                    let path = url
+                if request.url.scheme() == "file" {
+                    let path = request
+                        .url
                         .to_file_path()
-                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                        .map_err(|()| Error::NonFileUrl(request.url.clone()))?;
                     return self
                         .archive(
                             source,
                             &PathSourceUrl {
-                                url: &url,
+                                url: &request.url,
                                 path: Cow::Owned(path),
                                 ext: dist.ext,
                             },
@@ -323,13 +329,17 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url(
                     source,
-                    &url,
-                    Some(&dist.index),
+                    &request.url,
+                    Some(request.index),
                     &cache_shard,
                     None,
                     dist.ext,
                     tags,
-                    hashes,
+                    ArtifactHashPolicy::for_registry(
+                        hashes,
+                        request.is_proxy,
+                        dist.file.hashes.as_slice(),
+                    ),
                     client,
                 )
                 .boxed_local()
@@ -350,7 +360,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     dist.subdirectory.as_deref(),
                     dist.ext,
                     tags,
-                    hashes,
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -407,7 +417,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     resource.subdirectory,
                     resource.ext,
                     tags,
-                    hashes,
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -453,26 +463,31 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
     ) -> Result<ArchiveMetadata, Error> {
         let metadata = match &source {
             BuildableSource::Dist(SourceDist::Registry(dist)) => {
+                let request = RegistryArtifactRequest::new(
+                    &dist.index,
+                    &dist.file.location,
+                    client.index_locations(),
+                )?;
+
                 // For registry source distributions, shard by package, then version.
                 let cache_shard = self.build_context.cache().shard(
                     CacheBucket::SourceDistributions,
-                    WheelCache::Index(&dist.index)
+                    WheelCache::Index(request.index)
                         .wheel_dir(dist.name.as_ref())
                         .join(dist.version.to_string()),
                 );
 
-                let url = dist.file.url.to_url()?;
-
                 // If the URL is a file URL, use the local path directly.
-                if url.scheme() == "file" {
-                    let path = url
+                if request.url.scheme() == "file" {
+                    let path = request
+                        .url
                         .to_file_path()
-                        .map_err(|()| Error::NonFileUrl(url.clone()))?;
+                        .map_err(|()| Error::NonFileUrl(request.url.clone()))?;
                     return self
                         .archive_metadata(
                             source,
                             &PathSourceUrl {
-                                url: &url,
+                                url: &request.url,
                                 path: Cow::Owned(path),
                                 ext: dist.ext,
                             },
@@ -485,12 +500,16 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
                 self.url_metadata(
                     source,
-                    &url,
-                    Some(&dist.index),
+                    &request.url,
+                    Some(request.index),
                     &cache_shard,
                     None,
                     dist.ext,
-                    hashes,
+                    ArtifactHashPolicy::for_registry(
+                        hashes,
+                        request.is_proxy,
+                        dist.file.hashes.as_slice(),
+                    ),
                     client,
                 )
                 .boxed_local()
@@ -510,7 +529,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     dist.subdirectory.as_deref(),
                     dist.ext,
-                    hashes,
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -565,7 +584,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     &cache_shard,
                     resource.subdirectory,
                     resource.ext,
-                    hashes,
+                    ArtifactHashPolicy::required(hashes),
                     client,
                 )
                 .boxed_local()
@@ -654,7 +673,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
         tags: &Tags,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<BuiltWheelMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -663,15 +682,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let revision = self
             .url_revision(source, ext, url, index, cache_shard, hashes, client)
             .await?;
-
-        // Before running the build, check that the hashes match.
-        if !revision.satisfies(hashes) {
-            return Err(Error::hash_mismatch(
-                source.to_string(),
-                hashes.digests(),
-                revision.hashes(),
-            ));
-        }
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -787,7 +797,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         cache_shard: &CacheShard,
         subdirectory: Option<&'data Path>,
         ext: SourceDistExtension,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<ArchiveMetadata, Error> {
         let _lock = cache_shard.lock().await.map_err(Error::CacheLock)?;
@@ -796,15 +806,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         let revision = self
             .url_revision(source, ext, url, index, cache_shard, hashes, client)
             .await?;
-
-        // Before running the build, check that the hashes match.
-        if !revision.satisfies(hashes) {
-            return Err(Error::hash_mismatch(
-                source.to_string(),
-                hashes.digests(),
-                revision.hashes(),
-            ));
-        }
 
         // Scope all operations to the revision. Within the revision, there's no need to check for
         // freshness, since entries have to be fresher than the revision itself.
@@ -971,7 +972,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         url: &SafeUrl,
         index: Option<&IndexUrl>,
         cache_shard: &CacheShard,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         let cache_entry = cache_shard.entry(HTTP_REVISION);
@@ -982,7 +983,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
-                        .artifact_cache_control_for(index)
+                        .request_policy(index)
+                        .artifact_cache_control()
                 }) =>
             {
                 CacheControl::Override(header)
@@ -1005,12 +1007,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 // Download the source distribution.
                 debug!("Downloading source distribution: {source}");
                 let entry = cache_shard.shard(revision.id()).entry(SOURCE);
-                let (hashes, size) = self
+                let (computed_hashes, size) = self
                     .download_archive(response, source, ext, entry.path(), hashes, &[])
                     .await?;
 
                 Ok(revision
-                    .with_hashes(HashDigests::from(hashes))
+                    .with_hashes(HashDigests::from(computed_hashes))
                     .with_size(size))
             }
             .boxed_local()
@@ -1049,8 +1051,11 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             });
         }
 
-        // If the archive is missing the required hashes or size, force a refresh.
-        if revision.has_digests(hashes) && (expected_size.is_none() || revision.size().is_some()) {
+        // Refresh if the cached revision fails verification or lacks a required size.
+        if hashes.can_reuse(&revision, source_index_hashes(source))
+            && (expected_size.is_none() || revision.size().is_some())
+        {
+            hashes.verify_required(source, revision.hashes())?;
             Ok(revision)
         } else {
             client
@@ -1358,12 +1363,12 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         // If the revision already exists, return it. There's no need to check for freshness, since
         // we use an exact timestamp.
-        if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)? {
-            if *pointer.cache_info() == cache_info {
-                if pointer.revision().has_digests(hashes) {
-                    return Ok(pointer);
-                }
-            }
+        if let Some(pointer) = LocalRevisionPointer::read_from(&revision_entry)?
+            && *pointer.cache_info() == cache_info
+            && ArtifactHashPolicy::required(hashes)
+                .can_reuse(pointer.revision(), source_index_hashes(source))
+        {
+            return Ok(pointer);
         }
 
         // Otherwise, we need to create a new revision.
@@ -2642,7 +2647,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             return Ok(None);
         }
 
-        let Some(GitHubRepository { owner, repo }) = GitHubRepository::parse(git.repository())
+        let Some(GitHubRepository { owner, repo }) =
+            GitHubRepository::parse(git.repository().as_url())
         else {
             return Ok(None);
         };
@@ -2764,7 +2770,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         index: Option<&IndexUrl>,
         entry: &CacheEntry,
         revision: Revision,
-        hashes: ArchiveHashPolicy<'_>,
+        hashes: ArtifactHashPolicy<'_>,
         client: &ManagedClient<'_>,
     ) -> Result<Revision, Error> {
         warn!("Re-downloading missing source distribution: {source}");
@@ -2776,7 +2782,8 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                 if let Some(header) = index.and_then(|index| {
                     self.build_context
                         .locations()
-                        .artifact_cache_control_for(index)
+                        .request_policy(index)
+                        .artifact_cache_control()
                 }) =>
             {
                 CacheControl::Override(header)
@@ -2792,7 +2799,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
 
         let download = |response, _: &mut RetryState| {
             async {
-                let (hashes, size) = self
+                let (computed_hashes, size) = self
                     .download_archive(
                         response,
                         source,
@@ -2804,7 +2811,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
                     .await?;
                 Ok(revision
                     .clone()
-                    .with_hashes(HashDigests::from(hashes))
+                    .with_hashes(HashDigests::from(computed_hashes))
                     .with_size(size))
             }
             .boxed_local()
@@ -2836,7 +2843,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
         source: &BuildableSource<'_>,
         ext: SourceDistExtension,
         target: &Path,
-        hash_policy: ArchiveHashPolicy<'_>,
+        hash_policy: ArtifactHashPolicy<'_>,
         existing_hashes: &[HashDigest],
     ) -> Result<(Vec<HashDigest>, u64), Error> {
         let reader = response
@@ -2858,7 +2865,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.cache(),
             self.build_context.tar_backend(),
             ArchiveValidation {
-                extra_algorithms: &[HashAlgorithm::Sha256],
+                extra_algorithms: &HTTP_DEFAULT_HASH_ALGORITHMS,
                 hash_policy,
                 existing_hashes,
                 expected_size,
@@ -2892,7 +2899,7 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[],
-                hash_policy,
+                hash_policy: ArtifactHashPolicy::required(hash_policy),
                 existing_hashes,
                 expected_size: None,
             },
@@ -3409,6 +3416,14 @@ impl StaticMetadata {
         }
 
         Ok(Self::None)
+    }
+}
+
+fn source_index_hashes<'a>(source: &'a BuildableSource<'_>) -> &'a [HashDigest] {
+    if let BuildableSource::Dist(SourceDist::Registry(dist)) = source {
+        dist.file.hashes.as_slice()
+    } else {
+        &[]
     }
 }
 

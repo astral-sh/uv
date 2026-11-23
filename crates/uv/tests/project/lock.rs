@@ -203,6 +203,7 @@ fn member_default_groups_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 5 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Default groups differ for workspace members: custom
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -394,6 +395,7 @@ fn member_group_python_requirements_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 2 packages in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Dependency group metadata differs for workspace members: root
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -517,6 +519,7 @@ fn non_project_group_python_requirements_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace default groups changed from the `dev` group to the `combined` group
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -550,6 +553,7 @@ fn non_project_group_python_requirements_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace dependency group metadata differs for: `base`, `combined`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -613,6 +617,7 @@ fn non_project_group_python_requirements_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace dependency group metadata differs for: `base`, `combined`
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -769,6 +774,7 @@ fn non_project_default_groups_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace default groups changed from no groups to all groups
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -779,6 +785,29 @@ fn non_project_default_groups_in_lockfile() -> Result<()> {
     ");
     let lock = Lock::from_canonical_toml(&context.read("uv.lock"))?;
     assert_eq!(lock.workspace_default_groups(), Some(DefaultGroups::All));
+
+    pyproject.write_str(indoc! {r#"
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [tool.uv]
+        default-groups = ["all"]
+
+        [dependency-groups]
+        all = []
+        docs = []
+        lint = []
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--offline", "--locked"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace default groups changed from all groups to the `all` group
+
+    hint: To update the lockfile, run `uv lock`.
+    ");
 
     // The implicit dev default is omitted, even when the root has no dev group.
     pyproject.write_str(indoc! {r#"
@@ -846,6 +875,7 @@ fn non_project_default_groups_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Workspace default groups changed from the `dev` group to the `docs` group
 
     hint: To update the lockfile, run `uv lock`.
     ");
@@ -1177,6 +1207,7 @@ fn metadata_free_default_groups_in_lockfile() -> Result<()> {
     ----- stderr -----
     Resolved 1 package in [TIME]
     error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+      cause: Default groups differ for workspace members: root
 
     hint: To update the lockfile, run `uv lock`.
     ");

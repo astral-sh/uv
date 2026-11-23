@@ -338,7 +338,7 @@ pub struct ResolverOptions {
     pub python_platform: Option<TargetTriple>,
 
     /// Required environments (platform markers).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "MarkerTree::deserialize_environment_list")]
     pub required_environments: Vec<MarkerTree>,
 }
 

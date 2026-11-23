@@ -508,8 +508,18 @@ pub async fn write_atomic_preserve(
     path: impl AsRef<Path>,
     data: impl AsRef<[u8]>,
 ) -> std::io::Result<()> {
-    let mut path = path.as_ref().to_path_buf();
-    let permissions = loop {
+    write_atomic_with_permissions(path.as_ref(), data.as_ref(), None).await
+}
+
+/// Like [`write_atomic_preserve`], with optional permissions that override the target's mode.
+#[cfg(feature = "tokio")]
+pub async fn write_atomic_with_permissions(
+    path: &Path,
+    data: &[u8],
+    permissions: Option<std::fs::Permissions>,
+) -> io::Result<()> {
+    let mut path = path.to_path_buf();
+    let existing_permissions = loop {
         match fs_err::tokio::symlink_metadata(&path).await {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 path = match fs_err::tokio::canonicalize(&path).await {
@@ -540,13 +550,14 @@ pub async fn write_atomic_preserve(
         }
     };
     let parent = path.parent().expect("Write path must have a parent");
+    let permissions = permissions.or(existing_permissions);
     let temp_file = tempfile_in_with_permissions(parent, permissions.clone())?;
     // Write through the open handle: the umask may prevent reopening the temporary file.
     let mut file = fs_err::tokio::File::from_std(fs_err::File::from_parts(
         temp_file.as_file().try_clone()?,
         temp_file.as_ref(),
     ));
-    file.write_all(data.as_ref()).await?;
+    file.write_all(data).await?;
     file.flush().await?;
     if let Some(permissions) = permissions {
         temp_file.as_file().set_permissions(permissions)?;
@@ -958,6 +969,27 @@ pub fn is_virtualenv_base(path: impl AsRef<Path>) -> bool {
     path.as_ref().join("pyvenv.cfg").is_file()
 }
 
+/// Read the path in a `.venv` redirect file (PEP 832), relative to the file's directory.
+pub fn read_venv_redirect(path: &Path) -> io::Result<PathBuf> {
+    let contents = fs_err::read_to_string(path)?;
+    let line = contents
+        .strip_suffix("\r\n")
+        .or_else(|| contents.strip_suffix('\n'))
+        .unwrap_or(&contents);
+
+    if line.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Virtual environment redirect file at `{}` is empty",
+                path.user_display()
+            ),
+        ));
+    }
+
+    Ok(path.parent().unwrap_or(Path::new("")).join(line))
+}
+
 /// Whether the error is due to a lock being held.
 #[cfg(feature = "tokio")]
 fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
@@ -965,10 +997,7 @@ fn is_known_already_locked_error(err: &std::fs::TryLockError) -> bool {
         std::fs::TryLockError::WouldBlock => true,
         std::fs::TryLockError::Error(err) => {
             // On Windows, we've seen: Os { code: 33, kind: Uncategorized, message: "The process cannot access the file because another process has locked a portion of the file." }
-            if cfg!(windows) && err.raw_os_error() == Some(33) {
-                return true;
-            }
-            false
+            cfg!(windows) && err.raw_os_error() == Some(33)
         }
     }
 }
@@ -1118,6 +1147,40 @@ mod tests {
             .expect_err("A socket cannot be atomically replaced");
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
         assert!(fs_err::metadata(&path)?.file_type().is_socket());
+        Ok(())
+    }
+
+    #[test]
+    fn read_venv_redirect_file() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join(".venv");
+        for contents in [
+            "other environment",
+            "other environment\n",
+            "other environment\r\n",
+        ] {
+            fs_err::write(&path, contents)?;
+            assert_eq!(
+                read_venv_redirect(&path)?,
+                tempdir.path().join("other environment")
+            );
+        }
+
+        let target = tempdir.path().join("environments/default");
+        fs_err::write(&path, format!("{}\n", target.display()))?;
+        assert_eq!(read_venv_redirect(&path)?, target);
+        Ok(())
+    }
+
+    #[test]
+    fn read_venv_redirect_rejects_empty_path() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join(".venv");
+        for contents in ["", "\n", "\r\n"] {
+            fs_err::write(&path, contents)?;
+            let error = read_venv_redirect(&path).expect_err("A redirect must contain a path");
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        }
         Ok(())
     }
 

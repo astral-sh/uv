@@ -290,6 +290,73 @@ fn python_find_cached_launcher_override() {
     ");
 }
 
+/// Removing `pyvenv.cfg` makes a Unix venv executable run as its base interpreter.
+#[test]
+#[cfg(unix)]
+fn python_find_refreshes_interpreter_after_pyvenv_cfg_removal() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_python_sources();
+    let bin = venv_bin_path(&context.venv);
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    fs_err::remove_file(context.venv.child("pyvenv.cfg"))?;
+
+    // Exploit Python being unable to tell a system interpreter from a venv without `pyvenv.cfg`.
+    // Once a fresh query sees the file is gone, the executable shows up in `uv python find --system`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12.[X]
+    ");
+
+    Ok(())
+}
+
+/// Creating `pyvenv.cfg` makes the same Unix executable report a virtual environment.
+#[test]
+#[cfg(unix)]
+fn python_find_refreshes_interpreter_after_pyvenv_cfg_creation() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_filtered_python_sources();
+    let bin = venv_bin_path(&context.venv);
+    let config = context.venv.child("pyvenv.cfg");
+    let saved_config = context.venv.child("pyvenv.cfg.saved");
+    fs_err::rename(&config, &saved_config)?;
+
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    3.12.[X]
+    ");
+
+    fs_err::rename(&saved_config, &config)?;
+
+    // The cache entry recorded the config as missing. A fresh query sees the restored config,
+    // identifies the executable as a virtual environment, and excludes it from `--system`.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system")
+        .arg("--show-version")
+        .env(EnvVars::UV_PYTHON_SEARCH_PATH, &bin), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: No interpreter found in [PYTHON SOURCES]
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn python_find_pin() {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
@@ -778,6 +845,80 @@ fn python_find_venv() {
 }
 
 #[test]
+fn python_find_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"])
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+
+    context.venv().arg("external").assert().success();
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str("external\r\n")?;
+
+    // A redirect is usable without enabling preview.
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/external/[BIN]/[PYTHON]
+
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    ");
+
+    // Enabling the feature silences the warning.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/external/[BIN]/[PYTHON]
+    ");
+
+    // An explicit system selection overrides the redirect.
+    uv_snapshot!(context.filters(), context.python_find()
+        .arg("--system"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    // `uv pip` uses the same discovery when no virtual environment is activated.
+    uv_snapshot!(context.filters(), context.pip_list().env_remove(EnvVars::VIRTUAL_ENV), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning.
+    Using Python 3.12.[X] environment at: external
+    ");
+
+    // A redirect in a child directory can point to a sibling environment using `..`.
+    let child = context.temp_dir.child("child");
+    child.create_dir_all()?;
+    context.venv().arg("other").assert().success();
+    child.child(".venv").write_str("../other\n")?;
+    uv_snapshot!(context.filters(), context.python_find()
+        .current_dir(&child).arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/other/[BIN]/[PYTHON]
+    ");
+
+    // A missing target is ignored when searching for Python.
+    redirect.write_str("missing\n")?;
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    // A missing target is an error when a virtual environment is required.
+    uv_snapshot!(context.filters(), context.pip_install().arg("--no-index").arg("anyio")
+        .env_remove(EnvVars::VIRTUAL_ENV), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Broken virtual environment `[TEMP_DIR]/missing`: missing `pyvenv.cfg`
+    ");
+    Ok(())
+}
+
+#[test]
 #[cfg(unix)]
 fn python_find_venv_executable_precedence() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -1048,7 +1189,7 @@ fn python_find_script() {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("foo.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/foo-[HASH]
     Resolved in [TIME]
     Checked in [TIME]
     ");
@@ -1056,7 +1197,7 @@ fn python_find_script() {
     uv_snapshot!(context.filters(), context.python_find().arg("--script").arg("foo.py"), @"
     exit_code: 0 (success)
     ----- stdout -----
-    [CACHE_DIR]/environments-v2/foo-[HASH]/[BIN]/[PYTHON]
+    [CACHE_DIR]/environments-[VERSION]/foo-[HASH]/[BIN]/[PYTHON]
     ");
 }
 
@@ -1162,7 +1303,7 @@ fn python_find_script_no_such_version() {
     uv_snapshot!(context.filters(), context.sync().arg("--script").arg("foo.py"), @"
     exit_code: 0 (success)
     ----- stderr -----
-    Creating script environment at: [CACHE_DIR]/environments-v2/foo-[HASH]
+    Creating script environment at: [CACHE_DIR]/environments-[VERSION]/foo-[HASH]
     Resolved in [TIME]
     Checked in [TIME]
     ");

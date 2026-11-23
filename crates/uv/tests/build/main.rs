@@ -25,3 +25,6 @@ mod cache_prune;
 mod cache_size;
 
 mod extract;
+
+#[cfg(feature = "test-python")]
+mod streaming_zip;

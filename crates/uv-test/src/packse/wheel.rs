@@ -87,7 +87,7 @@ impl<'a> WheelBuilder<'a> {
     }
 
     /// Include variant metadata and append its label to the wheel filename.
-    pub(super) fn variant(mut self, label: &'a VariantLabel, metadata: &'a str) -> Self {
+    pub fn variant(mut self, label: &'a VariantLabel, metadata: &'a str) -> Self {
         self.variant = Some((label, metadata));
         self
     }
@@ -525,7 +525,7 @@ mod tests {
         );
         assert!(
             metadata.contains(
-                "Requires-Dist: dep ; (sys_platform == 'darwin' and extra == 'compat') or (sys_platform == 'linux' and extra == 'compat')"
+                "Requires-Dist: dep ; (sys_platform == 'darwin' or sys_platform == 'linux') and extra == 'compat'"
             ),
             "metadata should preserve the original or-marker semantics:\n{metadata}"
         );

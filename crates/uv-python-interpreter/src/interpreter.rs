@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::{BTreeSet, HashMap};
 use std::env::consts::ARCH;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, trace, warn};
 
-use uv_cache::{Cache, CacheBucket, CacheEntry, CachedByTimestamp, Freshness};
+use uv_cache::{Cache, CacheBucket, CacheEntry, Freshness};
 use uv_cache_info::Timestamp;
 use uv_cache_key::cache_digest;
 use uv_errors::Hints;
@@ -78,7 +79,10 @@ impl Interpreter {
         let InterpreterInfo {
             platform,
             metadata: info,
-        } = InterpreterInfo::query_cached(executable, cache)?;
+            ..
+        } = InterpreterInfo::query_cached(executable, cache, || {
+            InterpreterInfo::query(executable, cache)
+        })?;
 
         debug_assert!(
             info.sys_executable.is_absolute(),
@@ -1104,6 +1108,8 @@ enum InterpreterInfoResult {
 #[derive(Debug, Deserialize)]
 struct InterpreterInfoWire {
     os: uv_platform_tags::Os,
+    /// Absolute paths to file inputs discovered by the probe.
+    file_inputs: BTreeSet<PathBuf>,
     arch: uv_platform_tags::Arch,
     cpu_info: CpuProbe,
     #[serde(flatten)]
@@ -1156,10 +1162,16 @@ pub enum InterpreterInfoError {
     EmscriptenNotPyodide,
 }
 
+#[cfg(target_os = "macos")]
+const SYSTEM_VERSION_PLIST: &str = "/System/Library/CoreServices/SystemVersion.plist";
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct InterpreterInfo {
     platform: Platform,
     metadata: InterpreterMetadata,
+    /// Timestamps of the probe's file inputs, including the symlinks used to reach them.
+    /// A missing optional input is recorded as `None` so its creation invalidates the cache.
+    file_timestamps: HashMap<PathBuf, Option<Timestamp>>,
 }
 
 #[expect(clippy::struct_excessive_bools)]
@@ -1186,7 +1198,10 @@ struct InterpreterMetadata {
 
 impl InterpreterInfo {
     /// Query the given Python executable for its interpreter information.
-    fn query(interpreter: &Path, cache: &Cache) -> Result<InterpreterInfoWire, Error> {
+    fn query(
+        interpreter: &Path,
+        cache: &Cache,
+    ) -> Result<(InterpreterInfoWire, Option<Timestamp>), Error> {
         let tempdir = tempfile::tempdir_in(cache.root())?;
         Self::setup_python_query_files(tempdir.path())?;
 
@@ -1219,6 +1234,13 @@ impl InterpreterInfo {
         #[cfg(target_os = "macos")]
         command.env("SYSTEM_VERSION_COMPAT", "0");
 
+        // Use a filesystem timestamp as the cutoff. On Unix, ctime can have coarser
+        // resolution than the wall clock. On other platforms, mtime can predate replacement.
+        let probe_start = if cfg!(unix) {
+            Timestamp::from_path(tempdir.path()).ok()
+        } else {
+            None
+        };
         let output = command.output().map_err(|err| {
             match err.kind() {
                 io::ErrorKind::NotFound => return Error::NotFound(interpreter.to_path_buf()),
@@ -1306,7 +1328,7 @@ impl InterpreterInfo {
                 err,
                 path: interpreter.to_path_buf(),
             }),
-            InterpreterInfoResult::Success(data) => Ok(*data),
+            InterpreterInfoResult::Success(data) => Ok((*data, probe_start)),
         }
     }
 
@@ -1379,12 +1401,61 @@ impl InterpreterInfo {
         )
     }
 
-    /// A wrapper around [`markers::query_interpreter_info`] to cache the computed markers.
-    ///
-    /// Running a Python script is (relatively) expensive, and the markers won't change
-    /// unless the Python executable changes, so we use the executable's last modified
-    /// time as a cache key.
-    fn query_cached(executable: &Path, cache: &Cache) -> Result<Self, Error> {
+    /// Read a cached probe result if its file inputs are still fresh.
+    fn read_cached(cache: &Cache, entry: &CacheEntry, executable: &Path) -> Option<Self> {
+        if !cache
+            .freshness(entry, None, None)
+            .is_ok_and(Freshness::is_fresh)
+        {
+            return None;
+        }
+
+        let data = fs::read(entry.path()).ok()?;
+        let cached: Self = match rmp_serde::from_slice(&data) {
+            Ok(cached) => cached,
+            Err(err) => {
+                warn!(
+                    "Broken interpreter cache entry at `{}`, removing: {err}",
+                    entry.path().user_display()
+                );
+                let _ = fs::remove_file(entry.path());
+                return None;
+            }
+        };
+
+        // Compare timestamps for equality. A Windows executable can be replaced by a file
+        // with an older modification time. A macOS update can activate a system snapshot whose
+        // plist was stamped before installation. Note(KS): This last one we actually observed on
+        // a real Mac.
+        for (path, timestamp) in &cached.file_timestamps {
+            let unchanged = match fs::symlink_metadata(path) {
+                Ok(metadata) => Some(Timestamp::from_metadata(&metadata)) == *timestamp,
+                Err(err) => err.kind() == io::ErrorKind::NotFound && timestamp.is_none(),
+            };
+            if !unchanged {
+                trace!(
+                    "Ignoring cached interpreter markers for {} due to changed file metadata at {}",
+                    executable.user_display(),
+                    path.user_display()
+                );
+                return None;
+            }
+        }
+
+        trace!(
+            "Found cached interpreter info for Python {}, skipping query of: {}",
+            cached.metadata.markers.python_full_version(),
+            executable.user_display()
+        );
+        Some(cached)
+    }
+
+    /// Cache the probe result until one of its file inputs changes.
+    fn query_cached(
+        executable: &Path,
+        cache: &Cache,
+        probe: impl FnOnce() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error>,
+    ) -> Result<Self, Error> {
         let absolute = std::path::absolute(executable)?;
 
         // Provide a better error message if the link is broken or the file does not exist. Since
@@ -1413,50 +1484,29 @@ impl InterpreterInfo {
 
         let canonical = canonicalize_executable(&absolute).map_err(handle_io_error)?;
         let cache_entry = Self::cache_entry(&absolute, &canonical, cache);
-
-        // We check the timestamp of the canonicalized executable to check if an underlying
-        // interpreter has been modified.
-        let modified = Timestamp::from_path(canonical).map_err(handle_io_error)?;
-
-        // Read from the cache.
-        if cache
-            .freshness(&cache_entry, None, None)
-            .is_ok_and(Freshness::is_fresh)
-        {
-            if let Ok(data) = fs::read(cache_entry.path()) {
-                match rmp_serde::from_slice::<CachedByTimestamp<Self>>(&data) {
-                    Ok(cached) => {
-                        if cached.timestamp == modified {
-                            trace!(
-                                "Found cached interpreter info for Python {}, skipping query of: {}",
-                                cached.data.metadata.markers.python_full_version(),
-                                executable.user_display()
-                            );
-                            return Ok(cached.data);
-                        }
-
-                        trace!(
-                            "Ignoring stale interpreter markers for: {}",
-                            executable.user_display()
-                        );
-                    }
-                    Err(err) => {
-                        warn!(
-                            "Broken interpreter cache entry at `{}`, removing: {err}",
-                            cache_entry.path().user_display()
-                        );
-                        let _ = fs_err::remove_file(cache_entry.path());
-                    }
-                }
-            }
+        if let Some(info) = Self::read_cached(cache, &cache_entry, executable) {
+            return Ok(info);
         }
 
-        // Otherwise, run the Python script.
+        let mut file_timestamps =
+            Self::cache_file_timestamps(&absolute, &canonical, &BTreeSet::new())
+                .map_err(handle_io_error)?;
+
         trace!(
             "Querying interpreter executable at `{}`",
             executable.display()
         );
-        let wire = Self::query(executable, cache)?;
+        let (wire, probe_start) = probe()?;
+
+        let cacheable = Self::determine_cacheability(
+            executable,
+            &absolute,
+            &canonical,
+            &wire,
+            probe_start,
+            &mut file_timestamps,
+        );
+
         let cpu_info = match wire.cpu_info {
             CpuProbe::Detected(info) => Some(info),
             CpuProbe::UnsupportedArchitecture(architecture) => {
@@ -1492,23 +1542,156 @@ impl InterpreterInfo {
         let info = Self {
             platform: Platform::from_interpreter(wire.os, wire.arch, cpu_info),
             metadata: wire.metadata,
+            file_timestamps,
         };
 
-        // If `executable` is a pyenv shim, a bash script that redirects to the activated
-        // python executable at another path, we're not allowed to cache the interpreter info.
-        if is_same_file(executable, &info.metadata.sys_executable).unwrap_or(false) {
+        if cacheable {
             fs::create_dir_all(cache_entry.dir())?;
-            write_atomic_sync(
-                cache_entry.path(),
-                rmp_serde::to_vec(&CachedByTimestamp {
-                    timestamp: modified,
-                    data: &info,
-                })?,
-            )?;
+            write_atomic_sync(cache_entry.path(), rmp_serde::to_vec(&info)?)?;
         }
 
         Ok(info)
     }
+
+    /// Determine whether the probe result can be cached and record any discovered file inputs.
+    fn determine_cacheability(
+        executable: &Path,
+        absolute: &Path,
+        canonical: &Path,
+        wire: &InterpreterInfoWire,
+        probe_start: Option<Timestamp>,
+        file_timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
+    ) -> bool {
+        // Shims such as pyenv can redirect to a different interpreter without changing the shim.
+        if !is_same_file(executable, &wire.metadata.sys_executable).unwrap_or(false) {
+            return false;
+        }
+
+        let Ok(current) = Self::cache_file_timestamps(absolute, canonical, &wire.file_inputs)
+        else {
+            return false;
+        };
+
+        if wire.file_inputs.is_empty() {
+            return current == *file_timestamps;
+        }
+        let Some(probe_start) = probe_start else {
+            return false;
+        };
+
+        // A discovered file could have been replaced between the probe and this snapshot.
+        // Require the known inputs to match and all timestamps to predate the probe.
+        let known_inputs_unchanged = file_timestamps
+            .iter()
+            .all(|(path, timestamp)| current.get(path) == Some(timestamp));
+        if !known_inputs_unchanged
+            || current
+                .values()
+                .flatten()
+                .any(|timestamp| *timestamp >= probe_start)
+        {
+            return false;
+        }
+
+        *file_timestamps = current;
+        true
+    }
+
+    /// The paths that went into the interpreter discovery and when they last changed.
+    fn cache_file_timestamps(
+        absolute: &Path,
+        canonical: &Path,
+        file_inputs: &BTreeSet<PathBuf>,
+    ) -> Result<HashMap<PathBuf, Option<Timestamp>>, io::Error> {
+        let mut file_timestamps = HashMap::new();
+        record_file_timestamps(absolute, &mut file_timestamps)?;
+        if !file_timestamps.contains_key(canonical) {
+            // On Windows the canonical path can come from a trampoline executable.
+            record_file_timestamps(canonical, &mut file_timestamps)?;
+        }
+        for path in file_inputs {
+            record_file_timestamps(path, &mut file_timestamps)?;
+        }
+        // Python's `platform.mac_ver()` reads the product version from this plist. The cache
+        // key tracks the Darwin kernel release, which can stay the same when the plist changes.
+        #[cfg(target_os = "macos")]
+        record_file_timestamps(Path::new(SYSTEM_VERSION_PLIST), &mut file_timestamps)?;
+        record_pyvenv_cfg_timestamps(absolute, &mut file_timestamps)?;
+        Ok(file_timestamps)
+    }
+}
+
+/// Snapshot the `pyvenv.cfg` files that can affect Python startup.
+///
+/// See CPython's path initialization and `site` startup for the launcher overrides
+/// and config lookup locations.
+///
+/// - <https://github.com/python/cpython/blob/v3.15.2/Modules/getpath.py#L302-L362>
+/// - <https://github.com/python/cpython/blob/v3.15.2/Lib/site.py#L967-L984>
+fn record_pyvenv_cfg_timestamps(
+    executable: &Path,
+    timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
+) -> io::Result<()> {
+    let launcher_paths = [EnvVars::PYTHONEXECUTABLE, EnvVars::PYVENV_LAUNCHER]
+        .into_iter()
+        .filter_map(env::var_os)
+        .filter(|path| !path.is_empty())
+        .map(std::path::absolute)
+        .collect::<io::Result<Vec<_>>>()?;
+    // Python can look beside the executable and one directory above it. Launcher
+    // overrides can supply another executable path for that lookup.
+    for executable in std::iter::once(executable).chain(launcher_paths.iter().map(PathBuf::as_path))
+    {
+        let parent_directories = executable.ancestors().skip(1);
+        for directory in parent_directories.take(2) {
+            let path = directory.join("pyvenv.cfg");
+            match record_file_timestamps(&path, timestamps) {
+                Ok(()) => {}
+                Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err),
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Record the timestamp of a file and each symlink followed to reach it.
+fn record_file_timestamps(
+    path: &Path,
+    timestamps: &mut HashMap<PathBuf, Option<Timestamp>>,
+) -> io::Result<()> {
+    if !path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Expected an absolute path for an interpreter file input",
+        ));
+    }
+
+    let mut path = Cow::Borrowed(path);
+    // Bound the walk at some number to guard against getting stuck in cyclic links.
+    for _ in 0..=40 {
+        let metadata = match fs::symlink_metadata(path.as_ref()) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                if err.kind() == io::ErrorKind::NotFound {
+                    timestamps.insert(path.as_ref().to_path_buf(), None);
+                }
+                return Err(err);
+            }
+        };
+        timestamps.insert(
+            path.as_ref().to_path_buf(),
+            Some(Timestamp::from_metadata(&metadata)),
+        );
+        if !metadata.is_symlink() {
+            return Ok(());
+        }
+        let target = fs::read_link(path.as_ref())?;
+        path.to_mut().set_file_name(target);
+    }
+    Err(io::Error::other(
+        "Too many symlinks for an interpreter file input",
+    ))
 }
 
 /// Find the Python executable that should be considered the "base" for a virtual environment.
@@ -1608,27 +1791,31 @@ fn python_home(interpreter: &Path) -> Option<PathBuf> {
 #[cfg(unix)]
 #[cfg(test)]
 mod tests {
+    use std::io;
+    use std::path::Path;
     use std::str::FromStr;
     use std::time::{Duration, UNIX_EPOCH};
 
     use anyhow::Result;
     use fs_err as fs;
-    use indoc::{formatdoc, indoc};
-    use serde_json::Value;
+    use indoc::indoc;
     use tempfile::tempdir;
 
-    use uv_cache::{Cache, CacheBucket, CachedByTimestamp};
+    use uv_cache::{Cache, CacheBucket};
     use uv_cache_info::Timestamp;
     use uv_pep440::Version;
     use uv_platform_tags::CpuInfo;
 
     use crate::Interpreter;
-    use crate::interpreter::{InterpreterInfo, canonicalize_executable};
+    use crate::interpreter::{
+        Error, InterpreterInfo, InterpreterInfoResult, InterpreterInfoWire, canonicalize_executable,
+    };
 
-    fn mocked_interpreter_response() -> &'static str {
-        indoc! {r##"
+    fn mocked_interpreter_response(executable: &Path) -> Result<InterpreterInfoWire> {
+        let InterpreterInfoResult::Success(mut response) = serde_json::from_str(indoc! {r##"
         {
             "result": "success",
+            "file_inputs": [],
             "os": {
                 "name": "manylinux",
                 "major": 2,
@@ -1654,7 +1841,7 @@ mod tests {
             "sys_base_exec_prefix": "/home/ferris/.pyenv/versions/3.12.0",
             "sys_base_prefix": "/home/ferris/.pyenv/versions/3.12.0",
             "sys_prefix": "/home/ferris/projects/uv/.venv",
-            "sys_executable": "{sys_executable}",
+            "sys_executable": "",
             "sys_path": [
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/lib/python3.12",
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
@@ -1682,117 +1869,98 @@ mod tests {
             "gil_disabled": true,
             "debug_enabled": false
         }
-    "##}
+    "##})?
+        else {
+            anyhow::bail!("expected a successful interpreter response");
+        };
+        response.metadata.sys_executable = executable.to_path_buf();
+        Ok(*response)
+    }
+
+    fn unexpected_probe() -> Result<(InterpreterInfoWire, Option<Timestamp>), Error> {
+        Err(io::Error::other("expected an interpreter cache hit").into())
     }
 
     #[tokio::test]
     async fn test_cache_invalidation() -> Result<()> {
         let mock_dir = tempdir()?;
         let mocked_interpreter = mock_dir.path().join("python");
-        let query_log = mock_dir.path().join("queries");
-        let json = mocked_interpreter_response().replace(
-            "{sys_executable}",
-            &mocked_interpreter.display().to_string(),
-        );
+        fs::write(&mocked_interpreter, [])?;
 
         let cache = Cache::temp()?.init().await?;
+        let original_version = Version::from_str("3.12")?;
+        let updated_version = Version::from_str("3.13")?;
+        let response = mocked_interpreter_response(&mocked_interpreter)?;
 
-        fs::write(
-            &mocked_interpreter,
-            formatdoc! {r"
-        #!/bin/sh
-        echo queried >> '{}'
-        echo '{json}'
-        ", query_log.display()},
-        )?;
-
-        fs::set_permissions(
-            &mocked_interpreter,
-            std::os::unix::fs::PermissionsExt::from_mode(0o770),
-        )?;
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, || Ok((response, None)))?;
         assert_eq!(
-            interpreter.markers.python_version().version,
-            Version::from_str("3.12")?
+            interpreter.metadata.markers.python_version().version,
+            original_version
         );
         assert!(cache.bucket(CacheBucket::Interpreter).is_dir());
-        assert_eq!(fs::read_to_string(&query_log)?, "queried\n");
 
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
-        let Some(CpuInfo::Flags { flags }) = interpreter.platform().cpu_info() else {
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, unexpected_probe)?;
+        let Some(CpuInfo::Flags { flags }) = interpreter.platform.cpu_info() else {
             anyhow::bail!("CPU flags missing from cached platform");
         };
         assert_eq!(flags.as_ref(), "pni ssse3");
         assert_eq!(
-            interpreter.markers.python_version().version,
-            Version::from_str("3.12")?
+            interpreter.metadata.markers.python_version().version,
+            original_version
         );
-        assert_eq!(fs::read_to_string(&query_log)?, "queried\n");
 
         let absolute = std::path::absolute(&mocked_interpreter)?;
         let canonical = canonicalize_executable(&absolute)?;
         let cache_entry = InterpreterInfo::cache_entry(&absolute, &canonical, &cache);
-        let mut cached: CachedByTimestamp<InterpreterInfo> =
-            rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
-        assert_eq!(cached.timestamp, Timestamp::from_path(&canonical)?);
+        let mut cached: InterpreterInfo = rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
         assert_eq!(
-            cached.data.metadata.markers.python_version().version,
-            Version::from_str("3.12")?
+            cached.file_timestamps.get(&canonical),
+            Some(&Some(Timestamp::from_path(&canonical)?))
         );
 
-        fs::write(
-            &mocked_interpreter,
-            formatdoc! {r"
-        #!/bin/sh
-        echo queried >> '{}'
-        echo '{}'
-        ", query_log.display(), json.replace("3.12", "3.13")},
-        )?;
+        fs::write(&mocked_interpreter, b"updated")?;
+        let mut response = mocked_interpreter_response(&mocked_interpreter)?;
+        let updated_full_version = Version::from_str("3.13.0")?;
+        response.metadata.markers = response
+            .metadata
+            .markers
+            .with_implementation_version(updated_full_version.clone())
+            .with_python_full_version(updated_full_version)
+            .with_python_version(updated_version.clone());
 
         // Back-to-back writes can share a Unix `ctime`. Store a well-formed entry with a
         // different timestamp to exercise stale-cache rejection deterministically.
         let modified = Timestamp::from_path(&canonical)?;
-        cached.timestamp = if modified == Timestamp::from(UNIX_EPOCH) {
+        let stale = if modified == Timestamp::from(UNIX_EPOCH) {
             Timestamp::from(UNIX_EPOCH + Duration::from_secs(1))
         } else {
             Timestamp::from(UNIX_EPOCH)
         };
+        cached
+            .file_timestamps
+            .insert(canonical.clone(), Some(stale));
         fs::write(cache_entry.path(), rmp_serde::to_vec(&cached)?)?;
-        assert_ne!(cached.timestamp, Timestamp::from_path(&canonical)?);
 
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, || Ok((response, None)))?;
         assert_eq!(
-            interpreter.markers.python_version().version,
-            Version::from_str("3.13")?
+            interpreter.metadata.markers.python_version().version,
+            updated_version
         );
         assert_eq!(
-            fs::read_to_string(&query_log)?,
-            indoc! {"
-                queried
-                queried
-            "}
+            interpreter.file_timestamps.get(&canonical),
+            Some(&Some(Timestamp::from_path(&canonical)?))
         );
 
-        let refreshed: CachedByTimestamp<InterpreterInfo> =
-            rmp_serde::from_slice(&fs::read(cache_entry.path())?)?;
-        assert_eq!(refreshed.timestamp, Timestamp::from_path(&canonical)?);
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, unexpected_probe)?;
         assert_eq!(
-            refreshed.data.metadata.markers.python_version().version,
-            Version::from_str("3.13")?
+            interpreter.metadata.markers.python_version().version,
+            updated_version
         );
 
-        let interpreter = Interpreter::query(&mocked_interpreter, &cache)?;
-        assert_eq!(
-            interpreter.markers.python_version().version,
-            Version::from_str("3.13")?
-        );
-        assert_eq!(
-            fs::read_to_string(&query_log)?,
-            indoc! {"
-                queried
-                queried
-            "}
-        );
         Ok(())
     }
 
@@ -1800,64 +1968,45 @@ mod tests {
     async fn test_cache_eviction_with_unchanged_executable() -> Result<()> {
         let mock_dir = tempdir()?;
         let mocked_interpreter = mock_dir.path().join("python");
-        let response_file = mock_dir.path().join("response.json");
-        let query_count = mock_dir.path().join("queries");
-
-        let mut response = serde_json::from_str::<Value>(mocked_interpreter_response())?;
-        response["sys_executable"] = serde_json::to_value(&mocked_interpreter)?;
-        fs::write(&response_file, serde_json::to_vec(&response)?)?;
-        fs::write(
-            &mocked_interpreter,
-            formatdoc! {r#"
-                #!/bin/sh
-                printf '.' >> "{}"
-                cat "{}"
-            "#, query_count.display(), response_file.display()},
-        )?;
-        fs::set_permissions(
-            &mocked_interpreter,
-            std::os::unix::fs::PermissionsExt::from_mode(0o770),
-        )?;
+        fs::write(&mocked_interpreter, [])?;
 
         let cache = Cache::temp()?.init().await?;
         let original_version = Version::from_str("3.12.0")?;
         let updated_version = Version::from_str("3.12.13")?;
+        let response = mocked_interpreter_response(&mocked_interpreter)?;
 
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, || Ok((response, None)))?;
         assert_eq!(
-            Interpreter::query(&mocked_interpreter, &cache)?.python_version(),
-            &original_version
+            interpreter.metadata.markers.python_full_version().version,
+            original_version
         );
-
-        response["markers"]["implementation_version"] = "3.12.13".into();
-        response["markers"]["python_full_version"] = "3.12.13".into();
-        fs::write(&response_file, serde_json::to_vec(&response)?)?;
-
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, unexpected_probe)?;
         assert_eq!(
-            Interpreter::query(&mocked_interpreter, &cache)?.python_version(),
-            &original_version,
-            "an unchanged executable should retain its cached interpreter metadata"
+            interpreter.metadata.markers.python_full_version().version,
+            original_version
         );
 
         Interpreter::clear_cache(&mocked_interpreter, &cache)?;
+        let mut response = mocked_interpreter_response(&mocked_interpreter)?;
+        response.metadata.markers = response
+            .metadata
+            .markers
+            .with_implementation_version(updated_version.clone())
+            .with_python_full_version(updated_version.clone());
+
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, || Ok((response, None)))?;
         assert_eq!(
-            fs::read_to_string(&query_count)?,
-            ".",
-            "clearing cached metadata should not query the interpreter"
+            interpreter.metadata.markers.python_full_version().version,
+            updated_version
         );
+        let interpreter =
+            InterpreterInfo::query_cached(&mocked_interpreter, &cache, unexpected_probe)?;
         assert_eq!(
-            Interpreter::query(&mocked_interpreter, &cache)?.python_version(),
-            &updated_version,
-            "clearing the cache should force the next query to run the interpreter"
-        );
-        assert_eq!(
-            Interpreter::query(&mocked_interpreter, &cache)?.python_version(),
-            &updated_version,
-            "the next query should persist the updated interpreter metadata"
-        );
-        assert_eq!(
-            fs::read_to_string(&query_count)?,
-            "..",
-            "the updated interpreter metadata should be cached again"
+            interpreter.metadata.markers.python_full_version().version,
+            updated_version
         );
 
         Ok(())

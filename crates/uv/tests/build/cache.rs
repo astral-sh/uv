@@ -3,22 +3,23 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result};
+use assert_cmd::prelude::*;
 use assert_fs::prelude::*;
 use async_zip::base::write::ZipFileWriter;
 use async_zip::{Compression, ZipEntryBuilder};
 use futures::executor::block_on;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use predicates::prelude::predicate;
 use sha2::{Digest, Sha256};
 
 use uv_cache::CacheBucket;
-use uv_fs::PortablePath;
 #[cfg(unix)]
 use uv_fs::create_symlink;
 use uv_test::archive::generate_source_archive;
 use uv_test::package_server::PackageServer;
-use uv_test::{TestContext, get_bin, uv_snapshot};
+use uv_test::packse::WheelBuilder;
+use uv_test::{TestContext, apply_filters, get_bin, uv_snapshot};
 
 /// A custom cache directory must configure commands and snapshot filters together.
 #[test]
@@ -397,6 +398,15 @@ async fn index_source_hashes() -> Result<()> {
     let name = "ok".parse()?;
     let server = PackageServer::new(&name).await;
     let index_url = server.index_url();
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(&formatdoc! {r#"
+        [[index]]
+        url = "{index_url}"
+        default = true
+        cache-control = {{ api = "no-cache", files = "max-age=3600, immutable" }}
+    "#})?;
     let filename = "ok-1.0.0.tar.gz";
     let marker = context.temp_dir.child("backend-marker");
     context
@@ -413,7 +423,7 @@ async fn index_source_hashes() -> Result<()> {
     server.serve(filename, &archive, Some(&wrong_hash)).await;
 
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt").arg("--index-url").arg(&index_url), @"
+        .arg("requirements.txt"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -427,7 +437,7 @@ async fn index_source_hashes() -> Result<()> {
                sha256:[SOURCE_HASH]
     ");
     uv_snapshot!(context.filters(), context.pip_compile()
-        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--no-header").arg("--generate-hashes"), @"
+        .arg("requirements.txt").arg("--no-header").arg("--generate-hashes"), @"
     exit_code: 1 (failure)
     ----- stderr -----
     error: Failed to download and build `ok==1.0.0`
@@ -444,7 +454,7 @@ async fn index_source_hashes() -> Result<()> {
     // The same source is usable once the index supplies its actual hash.
     server.serve(filename, &archive, Some(&source_hash)).await;
     uv_snapshot!(context.filters(), context.pip_sync()
-        .arg("requirements.txt").arg("--index-url").arg(&index_url).arg("--refresh"), @"
+        .arg("requirements.txt").arg("--refresh"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
@@ -454,6 +464,147 @@ async fn index_source_hashes() -> Result<()> {
     ");
     marker.assert(predicate::path::is_file());
     context.assert_installed("ok", "1.0.0");
+
+    // The index changes while the source revision and its built wheel are both fresh.
+    context.reset_venv();
+    fs_err::remove_file(marker.path())?;
+    server.serve(filename, &archive, Some(&wrong_hash)).await;
+
+    // New build settings require fresh metadata from the cached source revision.
+    uv_snapshot!(context.filters(), context.pip_compile()
+        .arg("requirements.txt").arg("--no-header").arg("--generate-hashes")
+        .arg("--config-setting").arg("probe=1"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[SOURCE_HASH]
+    ");
+    marker.assert(predicate::path::missing());
+
+    uv_snapshot!(context.filters(), context.pip_sync().arg("requirements.txt"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download and build `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[SOURCE_HASH]
+    ");
+    marker.assert(predicate::path::missing());
+    context.assert_not_installed("ok");
+    Ok(())
+}
+
+/// A cached build whose sdist hash changed must give way to a published wheel of the same name.
+#[test]
+fn published_wheel_wins_over_stale_source_build() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let name = "ok".parse()?;
+    let version = "1.0.0".parse()?;
+    let sdist_filename = "ok-1.0.0.tar.gz";
+    let sdist = generate_source_archive(&name, &version, "", None)?;
+    let sdist_hash = hex::encode(Sha256::digest(&sdist));
+    context
+        .temp_dir
+        .child(sdist_filename)
+        .write_binary(&sdist)?;
+    let index = context.temp_dir.child("index.html");
+    index.write_str(&format!(
+        r#"<a href="{sdist_filename}#sha256={sdist_hash}">{sdist_filename}</a>"#
+    ))?;
+
+    context
+        .pip_install()
+        .args(["--no-index", "--find-links", "index.html", "ok==1.0.0"])
+        .assert()
+        .success();
+    let published_file = context.site_packages().join("ok/published.txt");
+    assert!(!published_file.exists());
+    context.reset_venv();
+
+    let (wheel_filename, wheel) = WheelBuilder::new(&name, &version)
+        .files(&[("ok/published.txt", "published")])
+        .build();
+    let wheel_hash = hex::encode(Sha256::digest(&wheel));
+    context
+        .temp_dir
+        .child(&wheel_filename)
+        .write_binary(&wheel)?;
+    let wrong_hash = "0".repeat(64);
+    index.write_str(&formatdoc! {r#"
+        <a href="{sdist_filename}#sha256={wrong_hash}">{sdist_filename}</a>
+        <a href="{wheel_filename}#sha256={wheel_hash}">{wheel_filename}</a>
+    "#})?;
+
+    context
+        .pip_install()
+        .args(["--no-index", "--find-links", "index.html", "ok==1.0.0"])
+        .assert()
+        .success();
+    assert_snapshot!(context.read(published_file), @"published");
+    Ok(())
+}
+
+/// Reject a cached wheel when the `--find-links` listing advertises a different
+/// hash for it, even if the file on disk still matches the cached digest.
+#[test]
+fn cached_index_wheel_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let filename = "ok-1.0.0-py3-none-any.whl";
+    let wheel = context.read_bytes(context.workspace_root.join("test/links").join(filename));
+    let wheel_hash = hex::encode(Sha256::digest(&wheel));
+    let wrong_hash = "0".repeat(64);
+    let context = context
+        .with_filter((wheel_hash.clone(), "[WHEEL_HASH]"))
+        .with_filter((wrong_hash.clone(), "[WRONG_HASH]"));
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("requirements.txt")
+        .write_str("ok==1.0.0")?;
+    let index = context.temp_dir.child("index.html");
+    index.write_str(&format!(
+        r#"<a href="{filename}#sha256={wheel_hash}">{filename}</a>"#
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--no-index").arg("--find-links").arg("index.html"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + ok==1.0.0
+    ");
+
+    context.reset_venv();
+    index.write_str(&format!(
+        r#"<a href="{filename}#sha256={wrong_hash}">{filename}</a>"#
+    ))?;
+    uv_snapshot!(context.filters(), context.pip_sync()
+        .arg("requirements.txt").arg("--no-index").arg("--find-links").arg("index.html"), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Failed to download `ok==1.0.0`
+      cause: Hash mismatch for `ok==1.0.0`
+
+             Expected:
+               sha256:[WRONG_HASH]
+
+             Computed:
+               sha256:[WHEEL_HASH]
+    ");
+    context.assert_not_installed("ok");
     Ok(())
 }
 
@@ -471,7 +622,7 @@ fn binary_payloads_stay_in_archive_without_preview_local() -> Result<()> {
      + binary-payload==0.1.0 (from file://[TEMP_DIR]/binary_payload-0.1.0-py3-none-any.whl)
     ");
 
-    assert!(!context.cache_dir.child("files-v0").exists());
+    assert!(!context.cache_bucket(CacheBucket::Files).exists());
     let archive_files = context.cache_files(CacheBucket::Archive)?;
     let archive_binary = archive_files
         .iter()
@@ -504,7 +655,7 @@ async fn binary_payloads_stay_in_archive_without_preview_streaming() -> Result<(
      + binary-payload==0.1.0 (from http://[LOCALHOST]/binary_payload-0.1.0-py3-none-any.whl)
     ");
 
-    assert!(!context.cache_dir.child("files-v0").exists());
+    assert!(!context.cache_bucket(CacheBucket::Files).exists());
     let archive_files = context.cache_files(CacheBucket::Archive)?;
     let archive_binary = archive_files
         .iter()
@@ -535,20 +686,16 @@ fn all_files_except_record_use_archive_file_store_local_serial() -> Result<()> {
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -585,20 +732,16 @@ fn all_files_except_record_use_archive_file_store_local_concurrent() -> Result<(
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -640,20 +783,16 @@ async fn all_files_except_record_use_archive_file_store_streaming_serial() -> Re
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -695,20 +834,16 @@ async fn all_files_except_record_use_archive_file_store_streaming_concurrent() -
     // Identical contents still need separate executable and non-executable objects.
     let mut snapshot = String::new();
     for object in &objects {
-        writeln!(
-            snapshot,
-            "{}",
-            PortablePath::from(object.strip_prefix(context.cache_dir.path())?)
-        )?;
+        writeln!(snapshot, "{}", object.display())?;
     }
-    assert_snapshot!(snapshot, @"
-    files-v0/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
-    files-v0/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
-    files-v0/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
-    files-v0/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
-    files-v0/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
-    files-v0/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
-    files-v0/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
+    assert_snapshot!(apply_filters(snapshot, context.filters()), @"
+    [CACHE_DIR]/files-[VERSION]/0c/0c8d68fa16e023b913e926be9b281c5a133c33291b3e60a54c310376f5602a45
+    [CACHE_DIR]/files-[VERSION]/2f/2f4d468b80be8a639ba0bdcfc738be8d912c35dd686a1eb15272e8f56096358c
+    [CACHE_DIR]/files-[VERSION]/4a/4a3f63865c29c673794f181932bc0e2c4779275f22e03a896d3d6ca3ac447332
+    [CACHE_DIR]/files-[VERSION]/80/8043c55c494befd8bb44cf59c112ae6a944da98d04b550ff4fd055e2ebfabeb8
+    [CACHE_DIR]/files-[VERSION]/92/920a0fbc7cd79a94ab2adabfaa8b93804bf6e3e858c454d45958cc9902554248
+    [CACHE_DIR]/files-[VERSION]/bf/bf13d7b1c373edcb8588b94aae048664a6684f665fa4a7e8cd814360e537a049
+    [CACHE_DIR]/files-[VERSION]/fa/fad1ac6fba02614a6ee120fbb397cd676f48c101afee95ab29d146c76df03596
     ");
     let paths = context.cache_files(CacheBucket::Archive)?;
     let shared_paths = paths
@@ -749,7 +884,7 @@ fn binary_payloads_use_archive_file_store() -> Result<()> {
     ");
 
     let objects = context.cache_files(CacheBucket::Files)?;
-    let archive = fs_err::read_dir(context.cache_dir.child("archive-v0").path())?
+    let archive = fs_err::read_dir(context.cache_bucket(CacheBucket::Archive).path())?
         .next()
         .transpose()?
         .context("missing cached archive")?
