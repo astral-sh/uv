@@ -134,7 +134,7 @@ impl Launcher {
                 return Ok(None);
             };
             let mut read_resource = |name| read_resource(module, &mut file, metadata.len(), name);
-            let Some(kind_data) = read_resource(RESOURCE_TRAMPOLINE_KIND) else {
+            let Ok(Some(kind_data)) = read_resource(RESOURCE_TRAMPOLINE_KIND) else {
                 return Ok(None);
             };
             let Some(&kind_value) = kind_data.first() else {
@@ -144,14 +144,16 @@ impl Launcher {
                 return Err(Error::UnprocessableMetadata);
             };
 
-            let Some(path_data) = read_resource(RESOURCE_PYTHON_PATH) else {
+            let Ok(Some(path_data)) = read_resource(RESOURCE_PYTHON_PATH) else {
                 return Ok(None);
             };
             let python_path = PathBuf::from(
                 String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
             );
 
-            let script_data = read_resource(RESOURCE_SCRIPT_DATA);
+            let Ok(script_data) = read_resource(RESOURCE_SCRIPT_DATA) else {
+                return Ok(None);
+            };
 
             Ok(Some(Self {
                 kind,
@@ -364,14 +366,15 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     Ok(image.data().to_vec())
 }
 
-/// Locate a named resource in a PE data-file mapping and read it from the file.
+/// Distinguish a missing resource from an unreadable one so that rewriting
+/// a launcher cannot silently discard a malformed script payload.
 #[cfg(windows)]
 fn read_resource(
     handle: windows::Win32::Foundation::HMODULE,
     file: &mut File,
     file_size: u64,
     name: &str,
-) -> Option<Vec<u8>> {
+) -> io::Result<Option<Vec<u8>>> {
     use std::io::{Read, Seek, SeekFrom};
     use windows::Win32::System::LibraryLoader::{
         FindResourceW, LoadResource, LockResource, SizeofResource,
@@ -393,35 +396,35 @@ fn read_resource(
             windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
         );
         if resource.is_invalid() {
-            return None;
+            return Ok(None);
         }
 
         // Get resource size and data
         let size = SizeofResource(Some(handle), resource);
         if size == 0 {
-            return Some(Vec::new());
+            return Ok(Some(Vec::new()));
         }
 
-        let data = LoadResource(Some(handle), resource).ok()?;
-        let pointer = LockResource(data).cast::<u8>();
-        if pointer.is_null() {
-            return None;
-        }
-
-        (pointer, size)
+        let data = LoadResource(Some(handle), resource)?;
+        (LockResource(data), size)
     };
 
     // A data-file handle is the mapping's base address with the low bit set.
     // Check the untrusted size before allocating, including in the padded last page.
     let base = handle.0.addr() & !1;
-    let offset = pointer.addr().checked_sub(base)? as u64;
-    if offset.checked_add(u64::from(size))? > file_size {
-        return None;
+    let offset = pointer
+        .addr()
+        .checked_sub(base)
+        .ok_or(io::ErrorKind::InvalidData)? as u64;
+    if u64::from(size) > file_size.saturating_sub(offset) {
+        return Err(io::ErrorKind::UnexpectedEof.into());
     }
-    file.seek(SeekFrom::Start(offset)).ok()?;
-    let mut bytes = vec![0; size as usize];
-    file.read_exact(&mut bytes).ok()?;
-    Some(bytes)
+    file.seek(SeekFrom::Start(offset))?;
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(size as usize)?;
+    bytes.resize(size as usize, 0);
+    file.read_exact(&mut bytes)?;
+    Ok(Some(bytes))
 }
 
 /// Construct a Windows script launcher.
