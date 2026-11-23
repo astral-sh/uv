@@ -19,5 +19,7 @@ jobs:
           persist-credentials: false
 
       - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        env:
+          PYTHONSAFEPATH: "1"
         with:
           advanced-security: ${{ github.repository == 'astral-sh/uv' }}
