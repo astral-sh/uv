@@ -347,54 +347,48 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     Ok(image.data().to_vec())
 }
 
-/// Compare the names of the two open objects without resolving the input path
-/// again. Reopening a resolved name can redirect a native system file under WOW64.
+/// Compare the backing files directly. A replacement can have the same name as
+/// the file we opened while referring to a different set of resource offsets.
 #[cfg(windows)]
 #[expect(unsafe_code)]
 fn mapping_matches_file(module: windows::Win32::Foundation::HMODULE, file: &File) -> bool {
+    use std::ffi::c_void;
     use std::os::windows::io::AsRawHandle;
-    use windows::Win32::Foundation::{HANDLE, MAX_PATH};
-    use windows::Win32::Storage::FileSystem::{
-        FILE_NAME_OPENED, GETFINALPATHNAMEBYHANDLE_FLAGS, GetFinalPathNameByHandleW,
-        VOLUME_NAME_DOS, VOLUME_NAME_NT,
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, NTSTATUS};
+    use windows::Win32::System::Memory::{
+        CreateFileMappingW, FILE_MAP_READ, MapViewOfFile, PAGE_READONLY, SEC_IMAGE_NO_EXECUTE,
+        UnmapViewOfFile,
     };
-    use windows::Win32::System::ProcessStatus::K32GetMappedFileNameW;
-    use windows::Win32::System::Threading::GetCurrentProcess;
 
-    let mut mapped = vec![0; MAX_PATH as usize];
-    loop {
-        // SAFETY: The module remains loaded and the slice is a writable output buffer.
-        let len =
-            unsafe { K32GetMappedFileNameW(GetCurrentProcess(), module.0, &mut mapped) } as usize;
-        if len == 0 {
-            return false;
-        }
-        if len < mapped.len() {
-            mapped.truncate(len);
-            break;
-        }
-        mapped.resize(mapped.len() * 2, 0);
+    // This NT API compares an image view with a data view of the same file.
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtAreMappedFilesTheSame(image: *const c_void, data: *const c_void) -> NTSTATUS;
     }
 
-    // Windows returns a native device name, even on volumes without drive letters.
-    // Wine can return a DOS device path in the NT namespace (\??\).
-    let volume = if mapped.iter().copied().take(4).eq(r"\??\".encode_utf16()) {
-        mapped[1] = u16::from(b'\\');
-        VOLUME_NAME_DOS
-    } else {
-        VOLUME_NAME_NT
-    };
-    let mut opened = vec![0; mapped.len() + 1];
-    // FILE_NAME_OPENED avoids requiring directory listing permission on SMB.
-    // SAFETY: The file owns the handle and the slice is a writable output buffer.
-    let len = unsafe {
-        GetFinalPathNameByHandleW(
+    // SAFETY: The file and data-file module remain open. The temporary image
+    // view is read-only and non-executable, and stays mapped through the comparison.
+    unsafe {
+        let Ok(section) = CreateFileMappingW(
             HANDLE(file.as_raw_handle()),
-            &mut opened,
-            GETFINALPATHNAMEBYHANDLE_FLAGS(volume.0 | FILE_NAME_OPENED.0),
-        )
-    } as usize;
-    len == mapped.len() && opened[..len] == mapped
+            None,
+            PAGE_READONLY | SEC_IMAGE_NO_EXECUTE,
+            0,
+            0,
+            None,
+        ) else {
+            return false;
+        };
+        let image = MapViewOfFile(section, FILE_MAP_READ, 0, 0, 0);
+        let _ = CloseHandle(section);
+        if image.Value.is_null() {
+            return false;
+        }
+        let data = module.0.map_addr(|addr| addr & !1);
+        let status = NtAreMappedFilesTheSame(image.Value, data);
+        let _ = UnmapViewOfFile(image);
+        status.0 == 0
+    }
 }
 
 /// Distinguish a missing resource from an unreadable one so that rewriting
