@@ -95,14 +95,13 @@ where
     ///
     /// This can fail if creating an archive for the given type fails.
     /// Currently, this, at minimum, includes cases where an `A` contains a
-    /// `PathBuf` that is not valid UTF-8.
+    /// `PathBuf` that is not valid UTF-8. This can also fail if validation
+    /// fails, which can generally only occur with a misbehaving `Serialize`
+    /// implementation.
     pub(crate) fn from_unarchived(unarchived: &A) -> Result<Self, Error> {
         let raw = rkyv::to_bytes::<rancor::Error>(unarchived)
             .map_err(|e| ErrorKind::ArchiveWrite(e.to_string()))?;
-        Ok(Self {
-            raw,
-            archive: std::marker::PhantomData,
-        })
+        Self::new(raw)
     }
 
     /// Returns the raw underlying bytes of this owned archive value.
@@ -136,9 +135,9 @@ where
 
     fn deref(&self) -> &A::Archived {
         // SAFETY: We've validated that our underlying buffer is a valid
-        // archive for SimpleDetailMetadata in the constructor, so we can skip
-        // validation here. Since we don't mutate the buffer, this conversion
-        // is guaranteed to be correct.
+        // archive in the constructor, so we can skip validation here. Since
+        // we don't mutate the buffer, this conversion is guaranteed to be
+        // correct.
         #[allow(unsafe_code)]
         unsafe {
             rkyv::access_unchecked::<A::Archived>(&self.raw)
