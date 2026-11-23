@@ -399,6 +399,11 @@ pub enum ProjectEnvironmentRoot {
         reference: PathBuf,
         target: Option<PathBuf>,
     },
+    /// Replace the redirect while retaining its external target.
+    RedirectReference {
+        reference: PathBuf,
+        target: PathBuf,
+    },
 }
 
 impl ProjectEnvironmentRoot {
@@ -436,6 +441,7 @@ impl ProjectEnvironmentRoot {
         match self {
             Self::Directory(path) => Some(path),
             Self::CacheReference { target, .. } => target.as_deref(),
+            Self::RedirectReference { target, .. } => Some(target),
         }
     }
 }
@@ -482,7 +488,10 @@ pub fn resolve_project_env(
             target: Some(target),
         }
     } else {
-        ProjectEnvironmentRoot::Directory(target)
+        ProjectEnvironmentRoot::RedirectReference {
+            reference: path.to_path_buf(),
+            target,
+        }
     })
 }
 
@@ -696,7 +705,8 @@ impl ProjectInterpreter {
         };
         let centralized = centralized_environments_enabled(&selection, cache)
             || match &root {
-                ProjectEnvironmentRoot::Directory(_) => false,
+                ProjectEnvironmentRoot::Directory(_)
+                | ProjectEnvironmentRoot::RedirectReference { .. } => false,
                 ProjectEnvironmentRoot::CacheReference { .. } => true,
             };
         let path = if centralized {
@@ -1047,7 +1057,10 @@ impl ProjectEnvironment {
                 };
                 let (root, environment_reference) = match root {
                     ProjectEnvironmentRoot::Directory(root) => (root, false),
-                    ProjectEnvironmentRoot::CacheReference { reference, .. } => (reference, true),
+                    ProjectEnvironmentRoot::CacheReference { reference, .. }
+                    | ProjectEnvironmentRoot::RedirectReference { reference, .. } => {
+                        (reference, true)
+                    }
                 };
 
                 // Avoid removing things that are not virtual environments and are outside the

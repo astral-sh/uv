@@ -677,17 +677,19 @@ fn sync_replaces_cached_venv_redirect_without_removing_target() -> Result<()> {
 fn sync_venv_redirect_file() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
     write_project(&context, ">=3.11", &[])?;
+    let external = context.root.child("external");
     context
         .venv()
-        .arg("external")
+        .arg(external.path())
         .arg("--python")
         .arg("3.12")
         .arg("-q")
         .assert()
         .success();
-    context.temp_dir.child("external/keep").touch()?;
+    let keep = external.child("keep");
+    keep.write_str("preserve")?;
     let redirect = context.temp_dir.child(".venv");
-    redirect.write_str("external\n")?;
+    redirect.write_str("../external\n")?;
 
     // uv uses the external environment and keeps the other tool's redirect file.
     uv_snapshot!(context.filters(), context.sync(), @"
@@ -697,45 +699,86 @@ fn sync_venv_redirect_file() -> Result<()> {
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
-    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
-    assert!(uv_fs::is_virtualenv_base(
-        context.temp_dir.child("external").path()
-    ));
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "../external\n");
+    assert!(uv_fs::is_virtualenv_base(external.path()));
 
     // Activation of the selected environment does not produce a mismatch warning.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features").arg("venv-redirect-files")
-        .env(EnvVars::VIRTUAL_ENV, context.temp_dir.child("external").path()), @"
+        .env(EnvVars::VIRTUAL_ENV, external.path()), @"
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
 
-    // Changing interpreter rebuilds the target without replacing the redirect file.
+    // Changing interpreters replaces only the redirect with a local environment, preserving the
+    // external environment and any data it contains.
     uv_snapshot!(context.filters(), context.sync()
         .arg("--preview-features").arg("venv-redirect-files")
         .arg("--python").arg("3.11"), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    Removed virtual environment at: external
-    Creating virtual environment at: external
+    Removed link to project environment at: .venv
+    Creating virtual environment at: .venv
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
-    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
-    assert_path_missing(context.temp_dir.child("external/keep"));
-    let python = if cfg!(windows) {
-        context.temp_dir.child("external/Scripts/python.exe")
-    } else {
-        context.temp_dir.child("external/bin/python")
-    };
-    uv_snapshot!(context.filters(), Command::new(python.path()).arg("--version"), @"
+    assert!(fs_err::symlink_metadata(redirect.path())?.is_dir());
+    assert!(uv_fs::is_virtualenv_base(redirect.path()));
+    assert!(uv_fs::is_virtualenv_base(external.path()));
+    assert_eq!(fs_err::read_to_string(keep.path())?, "preserve");
+
+    let external_python = virtualenv_python_executable(external.path());
+    uv_snapshot!(context.filters(), Command::new(external_python).arg("--version"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Python 3.12.[X]
+    ");
+    let local_python = virtualenv_python_executable(redirect.path());
+    uv_snapshot!(context.filters(), Command::new(local_python).arg("--version"), @"
     exit_code: 0 (success)
     ----- stdout -----
     Python 3.11.[X]
     ");
+    Ok(())
+}
+
+/// An incompatible absolute redirect must not remove its target outside the project.
+#[test]
+fn sync_venv_redirect_file_absolute_path() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+    write_project(&context, ">=3.11", &[])?;
+    let external = context.root.child("external");
+    context
+        .venv()
+        .arg(external.path())
+        .arg("--python")
+        .arg("3.12")
+        .arg("-q")
+        .assert()
+        .success();
+    let keep = external.child("keep");
+    keep.write_str("preserve")?;
+    let redirect = context.temp_dir.child(".venv");
+    redirect.write_str(&format!("{}\n", external.path().to_string_lossy()))?;
+
+    uv_snapshot!(context.filters(), context.sync()
+        .arg("--preview-features").arg("venv-redirect-files")
+        .arg("--python").arg("3.11"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
+    Removed link to project environment at: .venv
+    Creating virtual environment at: .venv
+    Resolved 1 package in [TIME]
+    Checked in [TIME]
+    ");
+    assert!(fs_err::symlink_metadata(redirect.path())?.is_dir());
+    assert!(uv_fs::is_virtualenv_base(redirect.path()));
+    assert!(uv_fs::is_virtualenv_base(external.path()));
+    assert_eq!(fs_err::read_to_string(keep.path())?, "preserve");
     Ok(())
 }
 
@@ -751,6 +794,8 @@ fn sync_venv_redirect_file_override() -> Result<()> {
         .arg("-q")
         .assert()
         .success();
+    let keep = context.temp_dir.child("environments/external/keep");
+    keep.write_str("preserve")?;
     let redirect = context.temp_dir.child("environments/redirect");
     redirect.write_str("external\n")?;
 
@@ -765,7 +810,7 @@ fn sync_venv_redirect_file_override() -> Result<()> {
     Checked in [TIME]
     ");
 
-    // An explicit override rebuilds its target even when centralized environments are enabled.
+    // An explicit override replaces its redirect even when centralized environments are enabled.
     uv_snapshot!(context.filters(), context.sync()
         .env(EnvVars::UV_PROJECT_ENVIRONMENT, "environments/redirect")
         .arg("--preview-features").arg("venv-redirect-files,centralized-project-envs")
@@ -773,15 +818,17 @@ fn sync_venv_redirect_file_override() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.11.[X] interpreter at: [PYTHON-3.11]
-    Removed virtual environment at: environments/external
-    Creating virtual environment at: environments/external
+    Removed link to project environment at: environments/redirect
+    Creating virtual environment at: environments/redirect
     Resolved 1 package in [TIME]
     Checked in [TIME]
     ");
-    assert_eq!(fs_err::read_to_string(redirect.path())?, "external\n");
+    assert!(fs_err::symlink_metadata(redirect.path())?.is_dir());
+    assert!(uv_fs::is_virtualenv_base(redirect.path()));
     assert!(uv_fs::is_virtualenv_base(
         context.temp_dir.child("environments/external").path()
     ));
+    assert_eq!(fs_err::read_to_string(keep.path())?, "preserve");
     assert_path_missing(context.temp_dir.child(".venv"));
     assert_path_missing(context.cache_dir.child("environments-v2"));
     Ok(())
