@@ -6,7 +6,7 @@ use assert_fs::prelude::*;
 use indoc::{formatdoc, indoc};
 use insta::assert_snapshot;
 use serde_json::json;
-use wiremock::matchers::{body_string_contains, method, path};
+use wiremock::matchers::{basic_auth, body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use uv_static::EnvVars;
@@ -2433,12 +2433,8 @@ fn check_script_workspace_ty_no_project() -> Result<()> {
     Ok(())
 }
 
-/// A `3.12` pin selects production `ty` when `dev` requires Python 3.13+ and its checker is PyPy-only.
-#[test]
-fn check_script_workspace_ty_uses_applicable_production_dependency() -> Result<()> {
-    let context = uv_test::test_context_with_versions!(&["3.12"]);
-    let wheels = context.temp_dir.child("wheels");
-    let (filename, wheel) = WheelBuilder::new(&"ty".parse()?, &"1.2.3".parse()?)
+fn mock_ty_wheel() -> Result<(String, Vec<u8>)> {
+    Ok(WheelBuilder::new(&"ty".parse()?, &"1.2.3".parse()?)
         .files(&[
             (
                 "ty-1.2.3.dist-info/entry_points.txt",
@@ -2454,7 +2450,91 @@ fn check_script_workspace_ty_uses_applicable_production_dependency() -> Result<(
                 "#},
             ),
         ])
-        .build();
+        .build())
+}
+
+/// Even without `--locked`, a check from outside the workspace needs the index name
+/// from the workspace's `uv.toml` to authenticate the first download of the `ty` wheel.
+#[tokio::test]
+async fn check_script_workspace_ty_named_index() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let server = MockServer::start().await;
+    let (filename, wheel) = mock_ty_wheel()?;
+    Mock::given(path(format!("/files/{filename}")))
+        .and(basic_auth("public", "heron"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(wheel))
+        .mount(&server)
+        .await;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [tool.uv.workspace]
+
+        [dependency-groups]
+        dev = ["ty"]
+    "#})?;
+    let url = server.uri();
+    context
+        .temp_dir
+        .child("uv.toml")
+        .write_str(&formatdoc! {r#"
+        [[index]]
+        name = "my-index"
+        url = "{url}/simple"
+        default = true
+        authenticate = "always"
+    "#})?;
+    context
+        .temp_dir
+        .child("uv.lock")
+        .write_str(&formatdoc! {r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.12"
+
+        [manifest.dependency-groups]
+        dev = [{{ name = "ty" }}]
+
+        [[package]]
+        name = "ty"
+        version = "1.2.3"
+        source = {{ registry = "{url}/simple" }}
+        wheels = [{{ url = "{url}/files/{filename}" }}]
+    "#})?;
+    let script = context.temp_dir.child("script.py");
+    script.write_str(indoc! {r#"
+        # /// script
+        # requires-python = ">=3.12"
+        # dependencies = []
+        # ///
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.check()
+        .current_dir(context.home_dir.path())
+        .arg("--script")
+        .arg(script.path())
+        .env(EnvVars::UV_INDEX_MY_INDEX_USERNAME, "public")
+        .env(EnvVars::UV_INDEX_MY_INDEX_PASSWORD, "heron"), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    All checks passed!
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]
+    Installed 1 package in [TIME]
+    ");
+    Ok(())
+}
+
+/// A `3.12` pin selects production `ty` when `dev` requires Python 3.13+ and its checker is PyPy-only.
+#[test]
+fn check_script_workspace_ty_uses_applicable_production_dependency() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let wheels = context.temp_dir.child("wheels");
+    let (filename, wheel) = mock_ty_wheel()?;
     wheels.child(filename).write_binary(&wheel)?;
     let (filename, wheel) = WheelBuilder::new(&"ty".parse()?, &"1.2.4".parse()?).build();
     wheels.child(filename).write_binary(&wheel)?;

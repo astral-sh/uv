@@ -240,6 +240,7 @@ impl LockedToolInstaller<'_> {
             );
             return Ok(None);
         };
+        let workspace_settings = workspace_resolver_settings(workspace.install_path())?;
         if let LockCheck::Enabled(source) = lock_check {
             // Once the workspace supplies the tool, validate its lock against all members.
             // TODO(zsol): Limit validation to the selected tool and its dependencies.
@@ -250,7 +251,6 @@ impl LockedToolInstaller<'_> {
                 workspace_cache,
             )
             .await?;
-            let workspace_settings = workspace_resolver_settings(workspace.install_path())?;
             let validated = Box::pin(
                 LockOperation::new(
                     LockMode::Locked(&interpreter, source),
@@ -274,7 +274,15 @@ impl LockedToolInstaller<'_> {
                 .into());
             }
         }
-        let (environment, _) = self
+        // Use the workspace's index names to look up credentials for locked URLs.
+        // Copy only the index locations to retain the build policy of `uv check`.
+        let mut settings = self.settings.clone();
+        settings.resolver.index_locations = workspace_settings.index_locations;
+        let installer = LockedToolInstaller {
+            settings: &settings,
+            ..*self
+        };
+        let (environment, _) = installer
             .install(target, tool.dependency(), &interpreter)
             .await?;
         Ok(Some(environment))
