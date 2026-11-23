@@ -375,6 +375,56 @@ fn workspace_list_scripts() -> Result<()> {
     Ok(())
 }
 
+/// A bare negation in a nested ignore file must not re-include scripts ignored by its parent.
+#[test]
+fn workspace_list_scripts_gitignore_bare_negation() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.init().arg("project").assert().success();
+    let project = context.temp_dir.child("project");
+    let script = "# /// script\n# dependencies = []\n# ///\n";
+
+    project
+        .child(".gitignore")
+        .write_str("*.py\n!visible.py\n")?;
+    project.child("nested/.gitignore").write_str("!\n")?;
+    project.child("nested/ignored.py").write_str(script)?;
+    project.child("visible.py").write_str(script)?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .args(["--scripts", "--preview-features", "workspace-list-scripts"])
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    visible.py
+    ");
+
+    Ok(())
+}
+
+/// Ignore patterns preserve an escaped trailing space even when unescaped spaces follow it.
+#[cfg(unix)]
+#[test]
+fn workspace_list_scripts_gitignore_escaped_trailing_space() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.init().arg("project").assert().success();
+    let project = context.temp_dir.child("project");
+    let script = "# /// script\n# dependencies = []\n# ///\n";
+
+    project.child(".gitignore").write_str("ignored\\   \n")?;
+    project.child("ignored /script.py").write_str(script)?;
+    project.child("visible.py").write_str(script)?;
+
+    uv_snapshot!(context.filters(), context.workspace_list()
+        .args(["--scripts", "--preview-features", "workspace-list-scripts"])
+        .current_dir(&project), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    visible.py
+    ");
+
+    Ok(())
+}
+
 /// Script discovery should warn about invalid metadata and continue listing valid scripts.
 #[test]
 fn workspace_list_scripts_invalid_metadata() -> Result<()> {
