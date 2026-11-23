@@ -76,7 +76,7 @@ platform contract, or deliberate tradeoff. For design findings, distinguish guar
 the API from required call ordering. Traits, clones, globals, duplication, and small helpers are
 contextual choices, not automatic findings.
 
-Before dismissing a possible defect as pre-existing or out of scope, trace the same input or
+If the PR could introduce, expose, worsen, or fix a suspected defect, trace the same input or
 sequence from the same starting state at the merge base (`base` in `revisions.json`) and head.
 Report newly broken behavior, new exposure to an existing defect, and incomplete intended fixes,
 even in unchanged code. Explain what changes for the user. If the defect exists on the base, say so.
