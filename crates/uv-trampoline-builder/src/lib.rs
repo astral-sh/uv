@@ -358,11 +358,9 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
 #[cfg(windows)]
 #[expect(unsafe_code)]
 fn open_backing_file(module: HMODULE, path: &Path) -> Option<(File, u64)> {
-    use fs_err::os::windows::fs::OpenOptionsExt;
     use std::ffi::c_void;
     use std::os::windows::io::AsRawHandle;
     use windows::Win32::Foundation::{CloseHandle, HANDLE, NTSTATUS};
-    use windows::Win32::Storage::FileSystem::FILE_SHARE_READ;
     use windows::Win32::System::Memory::{
         CreateFileMappingW, FILE_MAP_READ, MapViewOfFile, PAGE_READONLY, SEC_IMAGE_NO_EXECUTE,
         UnmapViewOfFile,
@@ -374,11 +372,7 @@ fn open_backing_file(module: HMODULE, path: &Path) -> Option<(File, u64)> {
         fn NtAreMappedFilesTheSame(image: *const c_void, data: *const c_void) -> NTSTATUS;
     }
 
-    let file = File::options()
-        .read(true)
-        .share_mode(FILE_SHARE_READ.0)
-        .open(path)
-        .ok()?;
+    let file = File::open(path).ok()?;
 
     // SAFETY: The file and data-file module remain open. The temporary image
     // view is read-only and non-executable, and stays mapped through the comparison.
