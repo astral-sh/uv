@@ -778,7 +778,7 @@ dependencies = [
  "miow",
  "portable-atomic",
  "same-file",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "shell-escape",
  "tempfile",
  "tracing",
@@ -3947,7 +3947,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "windows-sys 0.61.2",
 ]
 
@@ -4598,9 +4598,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4"
+checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
@@ -5686,7 +5686,7 @@ dependencies = [
  "self-replace",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "tar-codec",
  "tempfile",
  "textwrap",
@@ -5879,7 +5879,7 @@ dependencies = [
  "jiff",
  "rustc-hash",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "tar-codec",
  "tempfile",
  "tokio",
@@ -5985,7 +5985,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "spdx",
  "tar-codec",
  "tempfile",
@@ -6658,7 +6658,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "tar-codec",
  "tempfile",
  "thiserror",
@@ -6836,7 +6836,7 @@ dependencies = [
  "self-replace",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "thiserror",
  "tracing",
  "uv-distribution-filename",
@@ -7982,7 +7982,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "similar 3.2.0",
  "tar-codec",
  "tempfile",
