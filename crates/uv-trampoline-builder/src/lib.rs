@@ -76,7 +76,9 @@ impl Launcher {
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
         use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW};
+        use windows::Win32::System::LibraryLoader::{
+            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE, LoadLibraryExW,
+        };
 
         let path_wide = path
             .as_os_str()
@@ -90,7 +92,8 @@ impl Launcher {
             LoadLibraryExW(
                 windows::core::PCWSTR(path_wide.as_ptr()),
                 None,
-                LOAD_LIBRARY_AS_DATAFILE,
+                // Exclude writers before looking up offsets that we later read from the file.
+                LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE,
             )
             .ok()
         }) else {
