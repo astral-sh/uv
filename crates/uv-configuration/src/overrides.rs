@@ -156,8 +156,7 @@ impl Overrides {
     pub fn from_requirements(requirements: Vec<Requirement>) -> Self {
         let mut global: FxHashMap<PackageName, Vec<Requirement>> =
             FxHashMap::with_capacity_and_hasher(requirements.len(), FxBuildHasher);
-        for mut requirement in requirements {
-            requirement.marker = requirement.marker.resolve_variants_false();
+        for requirement in requirements {
             global
                 .entry(requirement.name.clone())
                 .or_default()
@@ -180,10 +179,7 @@ impl Overrides {
 
         for entry in entries {
             match entry {
-                Override::Requirement(mut requirement) => {
-                    // A global override has no declaring wheel, even when applied to a wheel
-                    // dependency.
-                    requirement.marker = requirement.marker.resolve_variants_false();
+                Override::Requirement(requirement) => {
                     global
                         .entry(requirement.name.clone())
                         .or_default()

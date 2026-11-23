@@ -7,6 +7,7 @@ use uv_distribution_types::{
     NameRequirementSpecification, Requirement, RequirementSource, ResolutionRecorder,
 };
 use uv_normalize::PackageName;
+use uv_pep508::MarkerTree;
 
 /// A set of constraints for a set of requirements.
 #[derive(Debug, Default, Clone)]
@@ -52,8 +53,6 @@ impl Constraints {
                 .push(Requirement {
                     // We add and apply constraints independent of their extras.
                     extras: Box::new([]),
-                    // Constraints have no declaring wheel, even when applied to a wheel dependency.
-                    marker: requirement.marker.resolve_variants_false(),
                     ..requirement.clone()
                 });
         }
@@ -82,20 +81,6 @@ impl Constraints {
         self.requirements.get(name)
     }
 
-    /// Apply constraints to root requirements, which have no declaring wheel.
-    pub fn apply_to_root<'a>(
-        &'a self,
-        requirements: impl IntoIterator<Item = Cow<'a, Requirement>>,
-    ) -> impl Iterator<Item = Cow<'a, Requirement>> {
-        self.apply(requirements.into_iter().map(|mut requirement| {
-            let marker = requirement.marker.resolve_variants_false();
-            if marker != requirement.marker {
-                requirement.to_mut().marker = marker;
-            }
-            requirement
-        }))
-    }
-
     /// Apply the constraints to a set of requirements.
     ///
     /// NB: Change this method together with `Overrides::apply_for_package`.
@@ -109,16 +94,13 @@ impl Constraints {
                 return Either::Left(std::iter::once(requirement));
             };
 
-            // TODO(konsti): Should we allow variant markers in constraints?
-            let marker = requirement.marker.resolve_variants_false();
-            if marker.is_false() {
-                // An inactive dependency cannot select a source through a constraint.
-                return Either::Left(std::iter::once(requirement));
-            }
-
             // Constraints must retain the requirement's full extra condition, including
-            // alternatives and negative conditions.
-            let extra_marker = marker.only_extras();
+            // alternatives and negative conditions. A false marker has no extras to retain.
+            let extra_marker = if requirement.marker.is_false() {
+                MarkerTree::TRUE
+            } else {
+                requirement.marker.only_extras()
+            };
             if extra_marker.is_true() {
                 // Case 2: A non-optional dependency with constraint(s).
                 return Either::Right(Either::Right(

@@ -504,11 +504,7 @@ impl SitePackages {
         for requirement in requirements.flat_map(|requirement| {
             modifiers.apply(DependencyModifierScope::Global, once(requirement))
         }) {
-            if requirement
-                .marker
-                .resolve_variants_false()
-                .evaluate(markers, &[])
-            {
+            if requirement.evaluate_markers(Some(markers), &[]) {
                 let requirement = requirement.into_owned();
                 if seen.insert(requirement.clone()) {
                     stack.push(requirement);
@@ -546,11 +542,7 @@ impl SitePackages {
 
                     // Validate that the installed version satisfies the constraints.
                     for constraint in constraints.get(name).into_iter().flatten() {
-                        if constraint
-                            .marker
-                            .resolve_variants_false()
-                            .evaluate(markers, &[])
-                        {
+                        if constraint.evaluate_markers(Some(markers), &[]) {
                             match RequirementSatisfaction::check(
                                 name,
                                 distribution,
