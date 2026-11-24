@@ -1,6 +1,7 @@
 //! Generate a Markdown-compatible listing of configuration options for `pyproject.toml`.
 //!
 //! Based on: <https://github.com/astral-sh/ruff/blob/dc8db1afb08704ad6a788c497068b01edf8b460d/crates/ruff_dev/src/generate_options.rs>
+use std::collections::HashSet;
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -102,6 +103,11 @@ enum OptionType {
 fn generate() -> String {
     let mut output = String::new();
 
+    // Track top-level field names that have already been emitted, so a name that
+    // appears in both `## Project metadata` and `## Configuration` (e.g. `index`)
+    // can be disambiguated with a section prefix on the second occurrence.
+    let mut seen_top_level_anchors = HashSet::new();
+
     generate_set(
         &mut output,
         Set::Global {
@@ -109,6 +115,7 @@ fn generate() -> String {
             option_type: OptionType::ProjectMetadata,
         },
         &mut Vec::new(),
+        &mut seen_top_level_anchors,
     );
 
     generate_set(
@@ -118,12 +125,18 @@ fn generate() -> String {
             option_type: OptionType::Configuration,
         },
         &mut Vec::new(),
+        &mut seen_top_level_anchors,
     );
 
     output
 }
 
-fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
+fn generate_set(
+    output: &mut String,
+    set: Set,
+    parents: &mut Vec<Set>,
+    seen_top_level_anchors: &mut HashSet<String>,
+) {
     match &set {
         Set::Global { option_type, .. } => {
             let header = match option_type {
@@ -160,7 +173,13 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
 
     // Generate the fields.
     for (name, field) in &fields {
-        emit_field(output, name, field, parents.as_slice());
+        emit_field(
+            output,
+            name,
+            field,
+            parents.as_slice(),
+            seen_top_level_anchors,
+        );
         output.push_str("---\n\n");
     }
 
@@ -173,6 +192,7 @@ fn generate_set(output: &mut String, set: Set, parents: &mut Vec<Set>) {
                 set: *sub_set,
             },
             parents,
+            seen_top_level_anchors,
         );
     }
 
@@ -207,13 +227,28 @@ impl Set {
 }
 
 #[expect(clippy::format_push_string)]
-fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[Set]) {
+fn emit_field(
+    output: &mut String,
+    name: &str,
+    field: &OptionField,
+    parents: &[Set],
+    seen_top_level_anchors: &mut HashSet<String>,
+) {
     let header_level = if parents.len() > 1 { "####" } else { "###" };
     let parents_anchor = parents.iter().filter_map(|parent| parent.name()).join("_");
 
     if parents_anchor.is_empty() {
+        // The first top-level field with a given name keeps the bare anchor so existing
+        // deep links remain stable. Any later occurrence (e.g. `index` in both `## Project
+        // metadata` and `## Configuration`) is prefixed with the section name so each one
+        // gets a unique `id`.
+        let anchor = if seen_top_level_anchors.insert(name.to_owned()) {
+            name.to_owned()
+        } else {
+            format!("{}_{}", section_anchor_prefix(parents), name)
+        };
         output.push_str(&format!(
-            "{header_level} [`{name}`](#{name}) {{: #{name} }}\n"
+            "{header_level} [`{name}`](#{anchor}) {{: #{anchor} }}\n"
         ));
     } else {
         output.push_str(&format!(
@@ -323,6 +358,22 @@ fn emit_field(output: &mut String, name: &str, field: &OptionField, parents: &[S
     output.push('\n');
 }
 
+/// Anchor prefix used to disambiguate a top-level field name that appears in more than
+/// one global section.
+fn section_anchor_prefix(parents: &[Set]) -> &'static str {
+    match parents.first() {
+        Some(Set::Global {
+            option_type: OptionType::Configuration,
+            ..
+        }) => "configuration",
+        Some(Set::Global {
+            option_type: OptionType::ProjectMetadata,
+            ..
+        }) => "project_metadata",
+        _ => "global",
+    }
+}
+
 fn format_tab(tab_name: &str, header: &str, content: &str) -> String {
     if header.is_empty() {
         format!(
@@ -399,5 +450,45 @@ impl Visit for CollectOptionsVisitor {
 
     fn record_field(&mut self, name: &str, field: OptionField) {
         self.fields.push((name.to_owned(), field));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::generate;
+
+    /// The settings reference renders both [`WorkspaceOptions`](super::WorkspaceOptions) and
+    /// [`SettingsOptions`](super::SettingsOptions), and any field name shared between the two
+    /// global sections used to collide on the same anchor (see `astral-sh/uv#18789`). Make sure
+    /// every `{: #anchor }` attribute in the generated output is unique so the sidebar entries
+    /// resolve to distinct sections.
+    #[test]
+    fn anchors_are_unique() {
+        let reference = generate();
+
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for line in reference.lines() {
+            // Lines look like: `### [`name`](#anchor) {: #anchor }`
+            if let Some(start) = line.find("{: #")
+                && let Some(end) = line[start + 4..].find(' ')
+            {
+                let anchor = &line[start + 4..start + 4 + end];
+                *counts.entry(anchor).or_default() += 1;
+            }
+        }
+
+        let duplicates: Vec<_> = counts
+            .iter()
+            .filter(|(_, count)| **count > 1)
+            .map(|(anchor, count)| format!("`#{anchor}` ({count} times)"))
+            .collect();
+
+        assert!(
+            duplicates.is_empty(),
+            "duplicate anchors in the generated settings reference: {}",
+            duplicates.join(", ")
+        );
     }
 }
