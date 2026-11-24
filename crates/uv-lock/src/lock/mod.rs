@@ -3286,17 +3286,7 @@ impl Lock {
         requirement: &Requirement,
         package: &Package,
     ) -> Option<MarkerTree> {
-        let marker = if package.fork_markers.is_empty() {
-            requirement.marker
-        } else {
-            let mut combined = MarkerTree::FALSE;
-            for fork_marker in &package.fork_markers {
-                combined = combined.or(fork_marker.pep508());
-            }
-            combined = combined.and(requirement.marker);
-            combined
-        };
-
+        let marker = package.root_requirement_marker(requirement);
         (!marker.is_false()).then(|| self.simplify_environment(marker))
     }
 
@@ -7598,6 +7588,19 @@ impl Package {
     /// Return the fork markers for this package, if any.
     pub fn fork_markers(&self) -> &[UniversalMarker] {
         self.fork_markers.as_slice()
+    }
+
+    /// Intersect a root requirement with the forks that contain this package.
+    fn root_requirement_marker(&self, requirement: &Requirement) -> MarkerTree {
+        let marker = requirement.marker;
+        if self.fork_markers.is_empty() {
+            return marker;
+        }
+        let forks = self
+            .fork_markers
+            .iter()
+            .fold(MarkerTree::FALSE, |markers, fork| markers.or(fork.pep508()));
+        marker.and(forks)
     }
 
     /// Returns whether this package is included by the given PEP 508 marker.
