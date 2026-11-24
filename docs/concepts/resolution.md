@@ -523,6 +523,11 @@ In this example, requirements for `foo` declared by `bar==0.0.5` are removed, wh
 the scoped exclusions to all versions of `bar`. A version-specific entry takes precedence over an
 all-versions entry.
 
+With `--preview-features reject-dynamic-version-exact`, uv rejects version-specific overrides and
+exclusions for local packages whose dynamic versions are omitted from `uv.lock`. A later build
+could select a different rule without invalidating the lockfile. Omit `version` from the scope
+to apply the rule to every version, or declare a static version for the local package.
+
 Scoped exclusions can be combined with scoped overrides to replace one dependency with another:
 
 ```toml

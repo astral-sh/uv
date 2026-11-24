@@ -839,13 +839,13 @@ async fn do_lock(
         None
     };
 
-    match existing_lock {
+    let (result, reason) = match existing_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.
             logger.on_complete(lock.len(), start, printer)?;
 
-            Ok((LockResult::Unchanged(lock), None))
+            (LockResult::Unchanged(lock), None)
         }
 
         // The lockfile did not contain enough information to obtain a resolution, fallback
@@ -1043,10 +1043,15 @@ async fn do_lock(
             };
 
             if unchanged {
-                Ok((LockResult::Unchanged(lock), None))
+                (LockResult::Unchanged(lock), None)
             } else {
-                Ok((LockResult::Changed(previous, lock), reason))
+                (LockResult::Changed(previous, lock), reason)
             }
         }
+    };
+
+    if preview.is_enabled(PreviewFeature::RejectDynamicVersionExact) {
+        result.lock().validate_dynamic_version_scopes()?;
     }
+    Ok((result, reason))
 }

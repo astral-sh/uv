@@ -24535,6 +24535,55 @@ fn lock_metadata_free_shared_dynamic_direct_source() -> Result<()> {
     Ok(())
 }
 
+/// A scope that does not match today can match a later build without changing the lock.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_dynamic_version_scoped_override_preview() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        dynamic = ["version"]
+        requires-python = ">=3.12"
+
+        [tool.uv]
+        override-dependencies = [
+            { package = { name = "project", version = "2.0.0" }, dependencies = ["leaf==1"] },
+        ]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    context.temp_dir.child("backend.py").write_str(indoc! {r#"
+        import pathlib
+
+        def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
+            dist_info = pathlib.Path(metadata_directory, "project-1.0.0.dist-info")
+            dist_info.mkdir()
+            dist_info.joinpath("METADATA").write_text(
+                "Metadata-Version: 2.1\nName: project\nVersion: 1.0.0\n"
+            )
+            return dist_info.name
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("reject-dynamic-version-exact")
+        .arg("--offline"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Cannot scope `override-dependencies` to `project==2.0.0` because the local package has a dynamic version that is omitted from the lockfile. Remove `version` from the scope or declare a static version for `project`.
+    ");
+
+    Ok(())
+}
+
 /// A version-scoped exclusion must not authorize a dynamic package's direct source.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -24612,6 +24661,19 @@ fn lock_metadata_free_dynamic_version_excluded_source() -> Result<()> {
     exit_code: 0 (success)
     ----- stderr -----
     Resolved 3 packages in [TIME]
+    ");
+
+    // Enabling the restriction must also reject an otherwise reusable lock.
+    uv_snapshot!(context.filters(), context.lock()
+        .arg("--preview-features")
+        .arg("lock-without-metadata,reject-dynamic-version-exact")
+        .arg("--check")
+        .arg("--offline")
+        .arg("--no-index"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    error: Cannot scope `exclude-dependencies` to `provider==1.0.0` because the local package has a dynamic version that is omitted from the lockfile. Remove `version` from the scope or declare a static version for `provider`.
     ");
 
     uv_snapshot!(context.filters(), context.lock()
