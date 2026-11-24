@@ -1973,6 +1973,8 @@ fn copy_entrypoint(
     use std::os::unix::fs::PermissionsExt;
 
     use fs_err::os::unix::fs::OpenOptionsExt;
+    use uv_install_wheel::format_shebang;
+    use uv_shell::escape_posix_for_single_quotes;
 
     let mut file = fs_err::File::open(source)?;
     let mut buffer = [0u8; 2];
@@ -2010,6 +2012,11 @@ fn copy_entrypoint(
         Err(err) => return Err(err.into()),
     }
 
+    let sh_wrapper = format!(
+        "#!/bin/sh\n'''exec' '{}' \"$0\" \"$@\"\n' '''\n",
+        escape_posix_for_single_quotes(&previous_executable.simplified_display().to_string())
+    );
+
     let Some(contents) = contents
         // Check for a relative path or relocatable shebang
         .strip_prefix(
@@ -2020,6 +2027,8 @@ fn copy_entrypoint(
         )
         // Or, an absolute path shebang
         .or_else(|| contents.strip_prefix(&format!("#!{}\n", previous_executable.display())))
+        // Or, an absolute path wrapped in `/bin/sh`
+        .or_else(|| contents.strip_prefix(sh_wrapper.as_str()))
         // If the previous executable ends with `python3`, check for a shebang with `python` too
         .or_else(|| {
             previous_executable
@@ -2036,7 +2045,10 @@ fn copy_entrypoint(
         return Ok(());
     };
 
-    let contents = format!("#!{}\n{}", python_executable.display(), contents);
+    let contents = format!(
+        "{}\n{contents}",
+        format_shebang(python_executable, "posix", false)
+    );
     let mode = fs_err::metadata(source)?.permissions().mode();
     let mut file = fs_err::OpenOptions::new()
         .create_new(true)
