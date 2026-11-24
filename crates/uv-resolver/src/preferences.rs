@@ -59,6 +59,11 @@ impl Preference {
             return Ok(None);
         }
 
+        // A false marker cannot select this pin, even during universal resolution.
+        if requirement.marker.is_false() {
+            return Ok(None);
+        }
+
         Ok(Some(Self {
             name: requirement.name,
             version: specifier.version().clone(),
