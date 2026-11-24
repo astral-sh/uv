@@ -38,7 +38,11 @@ def train(binary: Path, directory: Path) -> list[str]:
         '[project]\nname = "startup"\nversion = "1.0"\nrequires-python = ">=3.11"\n'
     )
     subprocess.run(
-        [binary, "sync"], cwd=directory, env=environment, check=True, timeout=60
+        [binary, "sync", "--quiet"],
+        cwd=directory,
+        env=environment,
+        check=True,
+        timeout=60,
     )
 
     trace = directory / "trace"
@@ -49,6 +53,7 @@ def train(binary: Path, directory: Path) -> list[str]:
             ["qemu-x86_64", "-d", "in_asm", "-D", trace, binary, *args],
             cwd=directory,
             env=environment,
+            stdout=subprocess.DEVNULL,
             check=True,
             timeout=120,
         )
