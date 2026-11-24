@@ -977,6 +977,7 @@ async fn do_lock(
                 recorder.clone(),
                 Box::new(SummaryResolveLogger),
                 printer,
+                false,
             )
             .await?;
 
