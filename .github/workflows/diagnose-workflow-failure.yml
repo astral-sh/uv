@@ -33,6 +33,7 @@ jobs:
       issues: read
       pull-requests: read
     outputs:
+      attempt: ${{ steps.context.outputs.attempt }}
       result: ${{ steps.diagnose.outputs.final-message }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,6 +97,7 @@ jobs:
             cat agents/prompts/diagnose-workflow-failure.md
           } > "$RUNNER_TEMP/diagnose-workflow-failure-prompt.md"
 
+          jaq -r '"attempt=\(.attempt)"' .workflow-failure-event.json >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: "Diagnose workflow failure"
@@ -157,6 +159,7 @@ jobs:
 
       - name: "Retry flaky workflow failures"
         env:
+          DIAGNOSED_ATTEMPT: ${{ needs.diagnose.outputs.attempt }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ inputs.head_sha }}
           RUN_ID: ${{ inputs.run }}
@@ -165,6 +168,10 @@ jobs:
             > "$RUNNER_TEMP/workflow-run.json"
 
           run_attempt="$(jaq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
+          if [ "$run_attempt" != "$DIAGNOSED_ATTEMPT" ]; then
+            echo "The diagnosis is for a different attempt of this workflow run."
+            exit 0
+          fi
           if [ "$run_attempt" -ge "$MAX_FLAKE_RERUN_ATTEMPTS" ]; then
             echo "The workflow run has exhausted its automatic retry budget."
             exit 0
