@@ -1,0 +1,25 @@
+name = "python-scoped-build"
+description = "A nested build tool only supports Python 3.12, just like the root that needs it."
+
+[root]
+requires = ["modern; python_version >= '3.12'"]
+
+[expected]
+satisfiable = true
+
+[testgen]
+disable = true
+
+[packages.modern.versions."1"]
+requires_python = ">=3.11"
+wheel = false
+build_requires = ["hatchling", "bridge"]
+
+[packages.bridge.versions."1"]
+wheel = false
+requires_python = ">=3.11"
+build_requires = ["hatchling", "modern-tool"]
+
+[packages.modern-tool.versions."1"]
+requires_python = ">=3.12"
+sdist = false

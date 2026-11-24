@@ -554,10 +554,9 @@ impl ToolLock {
             .cloned()
             .map(Override::Requirement)
             .collect::<Vec<_>>();
-        let Self { root, lock } = self;
         let validated = ValidatedLock::validate(
-            lock,
-            &root,
+            &self.lock,
+            &self.root,
             &BTreeMap::new(),
             &[],
             &BTreeMap::new(),
@@ -582,6 +581,7 @@ impl ToolLock {
             &hasher,
             state.index(),
             &database,
+            None,
             preview,
             printer,
         )
@@ -590,10 +590,7 @@ impl ToolLock {
         let usable = validated.is_usable();
 
         Ok(ValidatedToolLock {
-            lock: Self {
-                root,
-                lock: validated.into_lock(),
-            },
+            lock: self,
             satisfied,
             usable,
         })

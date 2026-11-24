@@ -279,7 +279,7 @@ impl<'lock> LockEvent<'lock> {
         // Identify the package-versions in the existing lockfile.
         let mut existing_packages: FxHashMap<&PackageName, BTreeSet<LockEventVersion>> =
             if let Some(existing_lock) = existing_lock {
-                existing_lock.packages().iter().fold(
+                existing_lock.all_packages().fold(
                     FxHashMap::with_capacity_and_hasher(
                         existing_lock.packages().len(),
                         FxBuildHasher,
@@ -297,7 +297,7 @@ impl<'lock> LockEvent<'lock> {
 
         // Identify the package-versions in the updated lockfile.
         let mut new_packages: FxHashMap<&PackageName, BTreeSet<LockEventVersion>> =
-            new_lock.packages().iter().fold(
+            new_lock.all_packages().fold(
                 FxHashMap::with_capacity_and_hasher(new_lock.packages().len(), FxBuildHasher),
                 |mut acc, package| {
                     acc.entry(package.name())

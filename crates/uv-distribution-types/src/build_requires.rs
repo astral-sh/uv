@@ -82,9 +82,21 @@ impl CacheKey for ExtraBuildRequirement {
 impl ExtraBuildRequires {
     /// Apply runtime constraints from a resolution to the extra build requirements.
     pub fn match_runtime(self, resolution: &Resolution) -> Result<Self, ExtraBuildRequiresError> {
+        self.match_runtime_for(resolution, |_| false)
+    }
+
+    /// Apply runtime pins to runtime packages and any additional owners built from the lock.
+    pub fn match_runtime_for(
+        self,
+        resolution: &Resolution,
+        include_build_owner: impl Fn(&PackageName) -> bool,
+    ) -> Result<Self, ExtraBuildRequiresError> {
         self.into_iter()
             .filter(|(_, requirements)| !requirements.is_empty())
-            .filter(|(name, _)| resolution.distributions().any(|dist| dist.name() == name))
+            .filter(|(name, _)| {
+                include_build_owner(name)
+                    || resolution.distributions().any(|dist| dist.name() == name)
+            })
             .map(|(name, requirements)| {
                 let requirements = requirements
                     .into_iter()

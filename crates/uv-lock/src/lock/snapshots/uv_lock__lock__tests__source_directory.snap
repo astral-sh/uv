@@ -62,6 +62,7 @@ Ok(
                         "path/to/dir",
                     ),
                 },
+                build: None,
                 sdist: None,
                 wheels: [],
                 fork_markers: [],
@@ -77,6 +78,7 @@ Ok(
                 },
             },
         ],
+        build: None,
         by_id: {
             PackageId {
                 name: PackageName(

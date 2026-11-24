@@ -1891,7 +1891,7 @@ fn test_path_hopping() -> Result<()> {
     // ... that depends on bar, a stub project.
     make_project(&context.temp_dir.join("libs").join("bar"), "bar", "")?;
 
-    uv_snapshot!(context.filters(), context.lock().arg("--preview").current_dir(&main_project_dir), @"
+    uv_snapshot!(context.filters(), context.lock().current_dir(&main_project_dir), @"
     exit_code: 0 (success)
     ----- stderr -----
     Using CPython 3.12.[X] interpreter at: [PYTHON-3.12]

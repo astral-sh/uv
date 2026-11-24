@@ -32,9 +32,8 @@ impl Lock {
         self.manifest
             .dependency_metadata
             .retain(|entry| filter.includes_metadata(entry));
-        self.options.exclude_newer = self.options.exclude_newer.filter_packages(
-            self.packages
-                .iter()
+        self.options.exclude_newer = mem::take(&mut self.options.exclude_newer).filter_packages(
+            self.all_packages()
                 .map(Package::name)
                 .chain(&filter.lookups.exclude_newer),
         );
@@ -122,8 +121,7 @@ impl ManifestFilter {
         }
         Self {
             packages: lock
-                .packages
-                .iter()
+                .all_packages()
                 .map(|package| package.name().clone())
                 .collect(),
             lookups,
@@ -137,8 +135,7 @@ impl ManifestFilter {
     pub(super) fn from_lock(lock: &Lock) -> Self {
         let mut filter = Self {
             packages: lock
-                .packages
-                .iter()
+                .all_packages()
                 .map(|package| package.name().clone())
                 .collect(),
             lookups: ResolutionLookups {

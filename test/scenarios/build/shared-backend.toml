@@ -1,0 +1,32 @@
+name = "shared-backend"
+description = "The same backend wheel needs different outgoing edges at runtime and in the build."
+
+[root]
+requires = ["build-dependency==1.0.0", "shared-helper==1"]
+
+[expected]
+satisfiable = true
+
+[expected.packages]
+build-dependency = "1.0.0"
+shared-helper = "1"
+
+# This case also needs a local project with an executable PEP 517 backend, set up in sync.rs.
+[testgen]
+disable = true
+
+[packages.build-dependency.versions."1.0.0"]
+requires = ["shared-helper>=1,<3"]
+sdist = false
+
+[packages.shared-helper.versions."1"]
+sdist = false
+
+# This version is reachable only from the build. Inspect its sdist to discover the next level,
+# even though installation on the test platform can use its wheel.
+[packages.shared-helper.versions."2"]
+build_requires = ["recursive-helper"]
+build_backend = "recursive_helper"
+
+[packages.recursive-helper.versions."1"]
+sdist = false

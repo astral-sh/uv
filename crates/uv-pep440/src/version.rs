@@ -759,8 +759,14 @@ impl Version {
     #[inline]
     #[must_use]
     pub fn with_min(mut self, value: Option<u64>) -> Self {
-        debug_assert!(!self.is_pre(), "min is not allowed on pre-release versions");
-        debug_assert!(!self.is_dev(), "min is not allowed on dev versions");
+        debug_assert!(
+            value.is_none() || !self.is_pre(),
+            "min is not allowed on pre-release versions"
+        );
+        debug_assert!(
+            value.is_none() || !self.is_dev(),
+            "min is not allowed on dev versions"
+        );
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_min(value) {
                 return self;
@@ -779,10 +785,13 @@ impl Version {
     #[must_use]
     pub fn with_max(mut self, value: Option<u64>) -> Self {
         debug_assert!(
-            !self.is_post(),
+            value.is_none() || !self.is_post(),
             "max is not allowed on post-release versions"
         );
-        debug_assert!(!self.is_dev(), "max is not allowed on dev versions");
+        debug_assert!(
+            value.is_none() || !self.is_dev(),
+            "max is not allowed on dev versions"
+        );
         if let VersionInner::Small { small } = &mut self.inner {
             if small.set_max(value) {
                 return self;

@@ -1,5 +1,6 @@
 //! Lockfile discovery, validation, and resolution for project and workspace workflows.
 
+mod build;
 mod discovery;
 mod error;
 mod lock;

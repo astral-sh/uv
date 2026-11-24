@@ -1410,6 +1410,13 @@ impl MarkerTree {
         Self::from_operation(|interner| interner.without_extras(self.0))
     }
 
+    /// Keep only restrictions on the Python version. The result matches a Python version if
+    /// *any* choice of the other environment markers could satisfy the original expression.
+    #[must_use]
+    pub fn only_python_version(self) -> Self {
+        Self::from_operation(|interner| interner.only_python_version(self.0))
+    }
+
     /// Replace extras with the conditions under which they are enabled.
     ///
     /// Extras absent from `known_extras` are false. Substitution is simultaneous: extras in a
@@ -3134,6 +3141,20 @@ mod test {
             }"##,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn project_markers_onto_python_versions() {
+        let marker = MarkerTree::from_str(
+            "(sys_platform == 'win32' and python_version < '3.11') or \
+             (implementation_version >= '3.9' and python_version >= '3.13')",
+        )
+        .expect("valid marker");
+        assert_eq!(
+            marker.only_python_version(),
+            MarkerTree::from_str("python_version < '3.11' or python_version >= '3.13'")
+                .expect("valid marker"),
+        );
     }
 
     #[test]

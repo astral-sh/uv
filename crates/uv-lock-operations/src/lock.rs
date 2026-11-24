@@ -28,7 +28,8 @@ use uv_resolve_operations::locked_requirements::{LockedRequirements, read_lock_r
 use uv_resolve_operations::loggers::{ResolveLogger, SummaryResolveLogger};
 use uv_resolve_operations::reporters::ResolverReporter;
 use uv_resolver::{
-    FlatIndex, OptionsBuilder, PythonRequirement, ResolverEnvironment, UniversalMarker,
+    FlatIndex, InMemoryIndex, OptionsBuilder, PythonRequirement, ResolverEnvironment,
+    UniversalMarker,
 };
 use uv_settings::{LockedSource, ResolverSettings};
 use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
@@ -169,7 +170,14 @@ impl<'env> LockOperation<'env> {
         match self.mode {
             LockMode::Frozen(source) => {
                 // Read the existing lockfile, but don't attempt to lock the project.
-                Ok(LockResult::Unchanged(target.read_frozen(source).await?))
+                let lock = target.read_frozen(source).await?;
+                if self
+                    .preview
+                    .is_enabled(PreviewFeature::LockBuildDependencies)
+                {
+                    lock.require_locked_builds()?;
+                }
+                Ok(LockResult::Unchanged(lock))
             }
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
@@ -180,6 +188,13 @@ impl<'env> LockOperation<'env> {
                         lock_filename,
                     ));
                 };
+
+                if self
+                    .preview
+                    .is_enabled(PreviewFeature::LockBuildDependencies)
+                {
+                    existing.require_locked_builds()?;
+                }
 
                 if self.preview.is_enabled(PreviewFeature::LockfileFormatCheck)
                     && let Some(line) = find_lock_format_error(&existing_contents)
@@ -677,20 +692,36 @@ async fn do_lock(
         (HashStrategy::default(), HashStrategy::default())
     };
     // Re-resolving an outdated lock does not authorize replacing known artifacts. Only an
-    // explicit unlocked upgrade releases the selected packages' hashes.
-    let hash_upgrade = match mode {
+    // explicit unlocked upgrade releases the selected packages' hashes and Git commits.
+    let artifact_upgrade = match mode {
         LockMode::Locked(..) => &Upgrade::default(),
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => upgrade,
     };
-    let resolution_hasher = if hash_upgrade.is_none() {
-        locked_hasher.clone()
-    } else if let Some(existing_lock) = existing_lock.as_ref() {
-        // An explicit upgrade allows replacing the selected packages' files, so do not require
-        // them to match the hashes recorded in the lockfile.
-        let upgrade_packages = existing_lock.upgrade_packages(hash_upgrade);
-        existing_lock.hash_strategy(target.install_path(), &upgrade_packages)?
+    let upgrade_packages = existing_lock
+        .as_ref()
+        .map_or_else(FxHashSet::default, |lock| {
+            lock.upgrade_packages(artifact_upgrade)
+        });
+    let enforced_lock = existing_lock
+        .as_ref()
+        .filter(|lock| lock.locks_build_dependencies());
+    if let Some(lock) = enforced_lock {
+        // Validation itself can run metadata hooks. Pin Git sources before any build, even
+        // when version preferences are unusable or the build uses the caller's environment.
+        for package in lock.all_packages() {
+            if !upgrade_packages.contains(package.name())
+                && let Some(pin) = package.as_git_ref()?
+            {
+                state.git().insert(pin.reference, pin.sha);
+            }
+        }
+    }
+    let resolution_hasher = if let Some(lock) = &existing_lock
+        && !upgrade_packages.is_empty()
+    {
+        lock.hash_strategy(target.install_path(), &upgrade_packages)?
     } else {
-        HashStrategy::default()
+        locked_hasher.clone()
     };
     let hasher = HashStrategy::collect(HashCollection::Url)
         .with_verification(resolution_hasher.verification().clone());
@@ -770,9 +801,20 @@ async fn do_lock(
         preview,
     );
 
+    let lock_build_dependencies =
+        preview.is_enabled(PreviewFeature::LockBuildDependencies) || enforced_lock.is_some();
+    let build_dispatch = match (&mode, enforced_lock) {
+        (LockMode::Locked(..), Some(lock)) => {
+            build_dispatch.with_build_lock(lock, target.install_path())
+        }
+        _ => build_dispatch,
+    };
+
     // If any of the resolution-determining settings changed, invalidate the lock.
-    let existing_lock = if let Some(existing_lock) = existing_lock {
-        let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
+    let validation = if let Some(existing_lock) = &existing_lock {
+        let validation_build_dispatch = build_dispatch
+            .fork(&locked_build_hasher)
+            .with_build_lock(existing_lock, target.install_path());
         let database = DistributionDatabase::new(
             &client,
             &validation_build_dispatch,
@@ -806,6 +848,7 @@ async fn do_lock(
             &hasher,
             state.index(),
             &database,
+            lock_build_dependencies.then_some((&validation_build_dispatch, &extra_build_requires)),
             preview,
             printer,
         ))
@@ -839,9 +882,10 @@ async fn do_lock(
         None
     };
 
-    match existing_lock {
+    match validation {
         // Resolution from the lockfile succeeded.
-        Some(ValidatedLock::Satisfies(lock)) => {
+        Some(ValidatedLock::Satisfies) => {
+            let lock = existing_lock.expect("validated a lockfile");
             // Print the success message after completing resolution.
             logger.on_complete(lock.len(), start, printer)?;
 
@@ -870,12 +914,9 @@ async fn do_lock(
             .with_first_party_packages(&first_party_packages);
 
             // Determine whether we can reuse the existing package versions.
-            let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
-                ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock, _) => Some(lock),
-                ValidatedLock::Versions(lock, _) => Some(lock),
-                ValidatedLock::Unusable(..) => None,
-            });
+            let versions_lock = existing_lock
+                .as_ref()
+                .filter(|_| validation.as_ref().is_some_and(ValidatedLock::is_usable));
 
             // If an existing lockfile exists, build up a set of preferences.
             let LockedRequirements { preferences, git } = versions_lock
@@ -890,11 +931,10 @@ async fn do_lock(
             }
 
             // Determine whether we can reuse the existing package forks.
-            let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
-                ValidatedLock::Satisfies(lock) => Some(lock),
-                ValidatedLock::Preferable(lock, _) => Some(lock),
-                ValidatedLock::Versions(..) => None,
-                ValidatedLock::Unusable(..) => None,
+            let forks_lock = existing_lock.as_ref().filter(|_| {
+                validation
+                    .as_ref()
+                    .is_some_and(ValidatedLock::can_reuse_forks)
             });
 
             // When we run the same resolution from the lockfile again, we could get a different result the
@@ -965,7 +1005,7 @@ async fn do_lock(
                 upgrade,
                 None,
                 resolver_env,
-                python_requirement,
+                python_requirement.clone(),
                 interpreter.markers(),
                 conflicts.clone(),
                 &client,
@@ -973,15 +1013,16 @@ async fn do_lock(
                 state.index(),
                 &build_dispatch,
                 concurrency,
-                options,
+                options.clone(),
                 recorder.clone(),
                 Box::new(SummaryResolveLogger),
                 printer,
             )
             .await?;
 
-            // Print the success message after completing resolution.
-            logger.on_complete(resolution.len(), start, printer)?;
+            if !lock_build_dependencies {
+                logger.on_complete(resolution.len(), start, printer)?;
+            }
 
             // Notify the user of any resolution diagnostics.
             uv_resolve_operations::diagnose_resolution(resolution.diagnostics(), printer)?;
@@ -998,10 +1039,6 @@ async fn do_lock(
             )
             .relative_to(target.install_path())?;
 
-            let (previous, reason) = existing_lock.map_or((None, None), |lock| {
-                let (lock, reason) = lock.into_parts();
-                (Some(lock), reason)
-            });
             let lock = Lock::from_resolution(
                 &resolution,
                 manifest,
@@ -1028,6 +1065,42 @@ async fn do_lock(
             .with_member_group_metadata(packages)?
             .with_workspace_group_metadata(workspace_group_metadata);
 
+            let lock = if lock_build_dependencies {
+                // A universal solve may run metadata hooks for packages on other platforms.
+                // Don't reuse the host's marker-filtered hashes or its in-memory metadata.
+                let build_hashes =
+                    HashStrategy::from_constraints(&build_constraints, None, *build_hash_checking)?;
+                let hasher = hasher.with_constraint_hashes(&build_hashes)?;
+                let resolver = crate::build::BuildResolver {
+                    root: target.install_path(),
+                    client: &client,
+                    dispatch: &build_dispatch.fork(&hasher),
+                    index_locations,
+                    flat_index: &flat_index,
+                    index: InMemoryIndex::default(),
+                    interpreter,
+                    python: python_requirement,
+                    options,
+                    environments: lock_supported_environments,
+                    constraints: &build_constraints,
+                    hasher: &hasher,
+                    extra: &extra_build_requires,
+                    concurrency,
+                    printer,
+                };
+                // Validation decides whether to prefer old versions, not whether an existing
+                // artifact hash is trusted. Only an explicit upgrade can release that hash.
+                Box::pin(resolver.resolve(
+                    lock,
+                    &resolution,
+                    existing_lock.as_ref(),
+                    versions_lock.is_some(),
+                    artifact_upgrade,
+                ))
+                .await?
+            } else {
+                lock
+            };
             let lock = if let Some(recorder) = recorder {
                 lock.prune_unused(recorder.take())
             } else if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
@@ -1036,6 +1109,14 @@ async fn do_lock(
                 lock
             };
 
+            if lock_build_dependencies {
+                logger.on_complete(lock.len(), start, printer)?;
+            }
+
+            let (previous, reason) = match validation {
+                Some(status) => (existing_lock, status.into_mismatch()),
+                None => (None, None),
+            };
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
                 previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
             } else {

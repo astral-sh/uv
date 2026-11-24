@@ -9,7 +9,9 @@ use uv_command_support::Printer;
 use uv_configuration::{Constraints, ExcludeDependency, Override, Upgrade};
 use uv_dispatch::BuildDispatch;
 use uv_distribution::DistributionDatabase;
-use uv_distribution_types::{DependencyMetadata, IndexLocations, Requirement, RequiresPython};
+use uv_distribution_types::{
+    DependencyMetadata, ExtraBuildRequires, IndexLocations, Requirement, RequiresPython,
+};
 use uv_lock::{GroupMetadata, Lock, LockSatisfaction};
 use uv_normalize::{DefaultGroups, GroupName, PackageName};
 use uv_preview::{Preview, PreviewFeature};
@@ -26,21 +28,21 @@ use crate::{LockMismatchReason, LockValidationError};
 #[derive(Debug)]
 pub enum ValidatedLock {
     /// An existing lockfile was provided, but its contents should be ignored.
-    Unusable(Lock, LockMismatchReason),
+    Unusable(LockMismatchReason),
     /// An existing lockfile was provided, and the locked versions should be preferred if possible,
     /// though the forks should be ignored.
-    Versions(Lock, LockMismatchReason),
+    Versions(LockMismatchReason),
     /// An existing lockfile was provided, and the locked versions and forks should be preferred if
     /// possible, even though the lockfile does not satisfy the workspace requirements.
-    Preferable(Lock, LockMismatchReason),
+    Preferable(LockMismatchReason),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
-    Satisfies(Lock),
+    Satisfies,
 }
 
 impl ValidatedLock {
     /// Validate a [`Lock`] against its requirements and resolution policy.
     pub async fn validate(
-        lock: Lock,
+        lock: &Lock,
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
@@ -66,6 +68,7 @@ impl ValidatedLock {
         hasher: &HashStrategy,
         index: &InMemoryIndex,
         database: &DistributionDatabase<'_, BuildDispatch<'_>>,
+        builds: Option<(&BuildDispatch<'_>, &ExtraBuildRequires)>,
         preview: Preview,
         printer: Printer,
     ) -> Result<Self, LockValidationError> {
@@ -84,7 +87,7 @@ impl ValidatedLock {
                 locked: lock.resolution_mode(),
                 requested: options.resolution_mode,
             };
-            return Ok(Self::Unusable(lock, reason));
+            return Ok(Self::Unusable(reason));
         }
         if lock.fork_strategy() != options.fork_strategy {
             let _ = writeln!(
@@ -97,7 +100,7 @@ impl ValidatedLock {
                 locked: lock.fork_strategy(),
                 requested: options.fork_strategy,
             };
-            return Ok(Self::Unusable(lock, reason));
+            return Ok(Self::Unusable(reason));
         }
         // Stored cutoffs can belong to packages considered during backtracking. New cutoffs for
         // packages outside the lock take effect when another change triggers resolution.
@@ -110,10 +113,7 @@ impl ValidatedLock {
                     printer.stderr(),
                     "Resolving despite existing lockfile: {change}",
                 );
-                return Ok(Self::Preferable(
-                    lock,
-                    LockMismatchReason::ExcludeNewer(change),
-                ));
+                return Ok(Self::Preferable(LockMismatchReason::ExcludeNewer(change)));
             }
         }
 
@@ -124,7 +124,7 @@ impl ValidatedLock {
             // regarding fork markers. In particular, we'd like to return `Preferable` here, but we
             // shouldn't if the fork markers cannot be reused.
             debug!("Ignoring existing lockfile due to `--upgrade`");
-            return Ok(Self::Unusable(lock, LockMismatchReason::Upgrade));
+            return Ok(Self::Unusable(LockMismatchReason::Upgrade));
         }
 
         // NOTE: It's important that this appears before any possible path that
@@ -141,10 +141,7 @@ impl ValidatedLock {
                     .try_to_string()
                     .unwrap_or("true".to_string()),
             );
-            return Ok(Self::Versions(
-                lock,
-                LockMismatchReason::ForkEnvironmentCoverage,
-            ));
+            return Ok(Self::Versions(LockMismatchReason::ForkEnvironmentCoverage));
         }
 
         // NOTE: Similarly as above, this should also appear before any
@@ -161,7 +158,7 @@ impl ValidatedLock {
                     .try_to_string()
                     .unwrap_or("true".to_string()),
             );
-            return Ok(Self::Versions(lock, LockMismatchReason::ForkPythonCoverage));
+            return Ok(Self::Versions(LockMismatchReason::ForkPythonCoverage));
         }
 
         // If the set of supported environments has changed, we have to perform a clean resolution.
@@ -178,10 +175,7 @@ impl ValidatedLock {
                 "Resolving despite existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
             );
-            return Ok(Self::Versions(
-                lock,
-                LockMismatchReason::SupportedEnvironments,
-            ));
+            return Ok(Self::Versions(LockMismatchReason::SupportedEnvironments));
         }
 
         // If the set of required platforms has changed, we have to perform a clean resolution.
@@ -198,10 +192,7 @@ impl ValidatedLock {
                 "Resolving despite existing lockfile due to change in supported environments: `{:?}` vs. `{:?}`",
                 expected, actual
             );
-            return Ok(Self::Versions(
-                lock,
-                LockMismatchReason::RequiredEnvironments,
-            ));
+            return Ok(Self::Versions(LockMismatchReason::RequiredEnvironments));
         }
 
         // Different libc requirements can change which versions cover the required platforms.
@@ -211,7 +202,7 @@ impl ValidatedLock {
                 lock.minimum_libc_version(),
                 options.minimum_libc_version,
             );
-            return Ok(Self::Versions(lock, LockMismatchReason::MinimumLibcVersion));
+            return Ok(Self::Versions(LockMismatchReason::MinimumLibcVersion));
         }
 
         // If the conflicting group config has changed, we have to perform a clean resolution.
@@ -221,7 +212,7 @@ impl ValidatedLock {
                 conflicts,
                 lock.conflicts(),
             );
-            return Ok(Self::Versions(lock, LockMismatchReason::Conflicts));
+            return Ok(Self::Versions(LockMismatchReason::Conflicts));
         }
 
         // If the Requires-Python bound has changed, we have to perform a clean resolution, since
@@ -237,9 +228,9 @@ impl ValidatedLock {
                 requested: requires_python.clone(),
             };
             return if lock.fork_markers().is_empty() {
-                Ok(Self::Preferable(lock, reason))
+                Ok(Self::Preferable(reason))
             } else {
-                Ok(Self::Versions(lock, reason))
+                Ok(Self::Versions(reason))
             };
         }
 
@@ -258,7 +249,7 @@ impl ValidatedLock {
                     "Resolving despite existing lockfile due to change in package-specific pre-release modes"
                 );
             }
-            return Ok(Self::Preferable(lock, LockMismatchReason::Prerelease));
+            return Ok(Self::Preferable(LockMismatchReason::Prerelease));
         }
 
         // If the user specified `--upgrade-package` or `--upgrade-group`, then at best we can
@@ -267,18 +258,18 @@ impl ValidatedLock {
             debug!(
                 "Resolving despite existing lockfile due to `--upgrade-package` or `--upgrade-group`"
             );
-            return Ok(Self::Preferable(lock, LockMismatchReason::Upgrade));
+            return Ok(Self::Preferable(LockMismatchReason::Upgrade));
         }
 
         if !lock.satisfies_hash_algorithms(install_path, index_locations)? {
             debug!("Resolving despite existing lockfile due to mismatched hash algorithm");
-            return Ok(Self::Preferable(lock, LockMismatchReason::HashAlgorithms));
+            return Ok(Self::Preferable(LockMismatchReason::HashAlgorithms));
         }
 
         // If the user specified `--refresh`, then we have to re-resolve.
         if matches!(refresh, Some(Refresh::All(..) | Refresh::Packages(..))) {
             debug!("Resolving despite existing lockfile due to `--refresh`");
-            return Ok(Self::Preferable(lock, LockMismatchReason::Refresh));
+            return Ok(Self::Preferable(LockMismatchReason::Refresh));
         }
 
         // If the user provided at least one index URL (from the command line, or from a configuration
@@ -292,6 +283,19 @@ impl ValidatedLock {
             None
         } else {
             Some(index_locations)
+        };
+
+        let build_indexes = if let Some((dispatch, extra)) = builds {
+            let Some(indexes) =
+                crate::build::validated_build_indexes(lock, install_path, dispatch, extra)
+                    .await
+                    .map_err(LockValidationError::BuildInputs)?
+            else {
+                return Ok(Self::Preferable(LockMismatchReason::BuildDependencies));
+            };
+            indexes
+        } else {
+            Vec::new()
         };
 
         // Determine whether the lockfile satisfies the workspace requirements.
@@ -310,6 +314,7 @@ impl ValidatedLock {
             workspace_default_groups,
             dependency_metadata,
             indexes,
+            &build_indexes,
             interpreter.tags()?,
             interpreter.markers(),
             &options.build_options,
@@ -322,14 +327,13 @@ impl ValidatedLock {
         {
             LockSatisfaction::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
-                Ok(Self::Satisfies(lock))
+                Ok(Self::Satisfies)
             }
             LockSatisfaction::Mismatch(mismatch) => {
                 debug!("Resolving despite existing lockfile: {mismatch}");
-                Ok(Self::Preferable(
-                    lock,
-                    LockMismatchReason::Satisfaction(Box::new(mismatch)),
-                ))
+                Ok(Self::Preferable(LockMismatchReason::Satisfaction(
+                    Box::new(mismatch),
+                )))
             }
         }
     }
@@ -337,7 +341,7 @@ impl ValidatedLock {
     /// Return whether the existing lock satisfies the current inputs.
     #[must_use]
     pub fn is_satisfied(&self) -> bool {
-        matches!(self, Self::Satisfies(_))
+        matches!(self, Self::Satisfies)
     }
 
     /// Return whether the existing lock can provide version preferences.
@@ -346,20 +350,22 @@ impl ValidatedLock {
         !matches!(self, Self::Unusable(..))
     }
 
-    /// Convert the [`ValidatedLock`] into a [`Lock`].
+    /// Return whether the existing lock can provide fork preferences.
     #[must_use]
-    pub fn into_lock(self) -> Lock {
-        self.into_parts().0
+    pub(crate) fn can_reuse_forks(&self) -> bool {
+        match self {
+            Self::Satisfies | Self::Preferable(_) => true,
+            Self::Versions(_) | Self::Unusable(_) => false,
+        }
     }
 
-    /// Convert the [`ValidatedLock`] into its lockfile and optional mismatch reason.
-    #[must_use]
-    pub(crate) fn into_parts(self) -> (Lock, Option<LockMismatchReason>) {
+    /// Explain why an otherwise readable lockfile could not be used unchanged.
+    pub(crate) fn into_mismatch(self) -> Option<LockMismatchReason> {
         match self {
-            Self::Unusable(lock, reason)
-            | Self::Preferable(lock, reason)
-            | Self::Versions(lock, reason) => (lock, Some(reason)),
-            Self::Satisfies(lock) => (lock, None),
+            Self::Unusable(reason) | Self::Preferable(reason) | Self::Versions(reason) => {
+                Some(reason)
+            }
+            Self::Satisfies => None,
         }
     }
 }

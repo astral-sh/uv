@@ -1,0 +1,42 @@
+name = "build-cluster-markers"
+description = "Each sdist builds on every platform, but their toolchains conflict if combined."
+
+[root]
+requires = ["first", "second"]
+
+[expected]
+satisfiable = true
+
+# This scenario tests two independent build environments, not the runtime resolver.
+[testgen]
+disable = true
+
+[packages.first.versions."1"]
+wheel = false
+build_requires = [
+    "hatchling",
+    "tool-a; sys_platform == 'win32'",
+    "tool-b; sys_platform != 'win32'",
+]
+
+[packages.second.versions."1"]
+wheel = false
+build_requires = [
+    "hatchling",
+    "tool-b; sys_platform == 'win32'",
+    "tool-a; sys_platform != 'win32'",
+]
+
+[packages.tool-a.versions."1"]
+sdist = false
+requires = ["helper==1"]
+
+[packages.tool-b.versions."1"]
+sdist = false
+requires = ["helper==2"]
+
+[packages.helper.versions."1"]
+sdist = false
+
+[packages.helper.versions."2"]
+sdist = false

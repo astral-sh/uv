@@ -105,6 +105,14 @@ pub struct PackageMetadata {
     #[serde(default)]
     pub requires: Vec<Requirement>,
 
+    /// PEP 508 requirements for building the sdist. Omission uses hatchling; an empty list
+    /// explicitly declares that the build needs no third-party packages.
+    #[serde(default, alias = "build-deps")]
+    pub build_requires: Option<Vec<Requirement>>,
+
+    /// PEP 517 backend import path in the sdist. Defaults to `hatchling.build`.
+    pub build_backend: Option<String>,
+
     /// Extra names mapped to their optional dependency requirements.
     #[serde(default)]
     pub extras: BTreeMap<ExtraName, Vec<Requirement>>,

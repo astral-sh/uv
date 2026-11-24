@@ -702,13 +702,24 @@ impl InternerGuard<'_> {
     /// `os_name == ... or sys_platform == ...`.
     pub(crate) fn without_extras(&mut self, i: NodeId) -> NodeId {
         let mut cache = FxHashMap::default();
-        self.without_extras_cached(i, &mut cache)
+        self.remove_variables(i, &mut cache, &|var| matches!(var, Variable::Extra(_)))
     }
 
-    fn without_extras_cached(
+    /// Keep precisely the Python versions for which at least one environment matches.
+    pub(crate) fn only_python_version(&mut self, i: NodeId) -> NodeId {
+        self.remove_variables(i, &mut FxHashMap::default(), &|var| {
+            !matches!(
+                var,
+                Variable::Version(CanonicalMarkerValueVersion::PythonFullVersion)
+            )
+        })
+    }
+
+    fn remove_variables(
         &mut self,
         mut i: NodeId,
         cache: &mut FxHashMap<NodeId, NodeId>,
+        remove: &impl Fn(&Variable) -> bool,
     ) -> NodeId {
         if matches!(i, NodeId::TRUE | NodeId::FALSE) {
             return i;
@@ -721,7 +732,7 @@ impl InternerGuard<'_> {
         let original = i;
         let parent = i;
         let node = self.shared.node(i);
-        let result = if matches!(node.var, Variable::Extra(_)) {
+        let result = if remove(&node.var) {
             i = NodeId::FALSE;
             for child in node.children.nodes() {
                 i = self.or(i, child.negate(parent));
@@ -729,13 +740,13 @@ impl InternerGuard<'_> {
             if i.is_true() {
                 NodeId::TRUE
             } else {
-                self.without_extras_cached(i, cache)
+                self.remove_variables(i, cache, remove)
             }
         } else {
             // Restrict all nodes recursively.
             let children = node
                 .children
-                .map(i, |node| self.without_extras_cached(node, cache));
+                .map(i, |node| self.remove_variables(node, cache, remove));
             self.create_node(node.var.clone(), children)
         };
         cache.insert(original, result);

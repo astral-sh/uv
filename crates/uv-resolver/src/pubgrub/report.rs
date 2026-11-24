@@ -2970,6 +2970,21 @@ mod tests {
         }
     }
 
+    /// Neither bound of the requested development interval is published. Formatting the
+    /// failure must be able to strip internal range sentinels from real development versions.
+    #[test]
+    fn unavailable_development_versions() -> Result<(), uv_pep440::VersionParseError> {
+        let available = BTreeSet::from([Version::new([1]), Version::new([3])]);
+        let lower = Version::from_str("2.dev1")?;
+        let upper = Version::from_str("2.dev5")?;
+        let requested = Range::from_range_bounds(lower.clone()..upper.clone());
+        assert_eq!(
+            update_availability_range(&requested, &available),
+            Range::from_range_bounds((Bound::Excluded(lower), Bound::Excluded(upper))),
+        );
+        Ok(())
+    }
+
     #[test]
     fn proxy_authentication_hints_use_physical_indexes() -> Result<(), Box<dyn std::error::Error>> {
         let canonical = IndexUrl::from_str(

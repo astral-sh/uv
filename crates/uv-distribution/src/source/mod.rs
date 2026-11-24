@@ -56,6 +56,7 @@ use crate::source::revision::Revision;
 use crate::source::validated_archive::{ArchiveValidation, ValidatedSourceArchive};
 use crate::{FirstPartyPackages, Reporter, RequiresDist};
 
+mod build_source;
 mod built_wheel_metadata;
 mod revision;
 mod validated_archive;

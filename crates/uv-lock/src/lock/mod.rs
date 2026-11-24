@@ -70,6 +70,11 @@ use uv_warnings::warn_user_once;
 use uv_workspace::dependency_groups::{DependencyGroupError, FlatDependencyGroups};
 use uv_workspace::{Editability, WorkspaceMember};
 
+use build::{BuildGraph, PackageBuild};
+pub use build::{BuildInputs, BuildUniverse, BuildUniverseOwner};
+
+mod build;
+
 pub use crate::lock::deserialize::Error as CanonicalLockError;
 pub use crate::lock::export::RequirementsTxtExport;
 pub use crate::lock::export::{
@@ -341,6 +346,8 @@ pub struct Lock {
     options: ResolverOptions,
     /// The actual locked version and their metadata.
     packages: Vec<Package>,
+    /// Additional package nodes used only while building. Absent in runtime-only locks.
+    build: Option<Box<BuildGraph>>,
     /// A map from package ID to index in `packages`.
     ///
     /// This can be used to quickly lookup the full package for any ID
@@ -2830,6 +2837,7 @@ impl Lock {
             requires_python,
             options,
             packages,
+            build: None,
             by_id,
             workspace_members,
             manifest,
@@ -2935,18 +2943,15 @@ impl Lock {
     /// Omit package-specific settings for packages outside the resolution.
     #[must_use]
     pub fn without_unused_exclude_newer_packages(mut self) -> Self {
-        self.options.exclude_newer = self
-            .options
-            .exclude_newer
-            .filter_packages(self.packages.iter().map(Package::name));
+        self.options.exclude_newer = std::mem::take(&mut self.options.exclude_newer)
+            .filter_packages(self.all_packages().map(Package::name));
         self
     }
 
     /// Retain cutoffs for locked packages and names whose cutoffs are already stored in the lock.
     pub fn filter_exclude_newer(&self, exclude_newer: ExcludeNewer) -> ExcludeNewer {
         exclude_newer.filter_packages(
-            self.packages
-                .iter()
+            self.all_packages()
                 .map(Package::name)
                 .chain(self.options.exclude_newer.package.keys()),
         )
@@ -2977,7 +2982,13 @@ impl Lock {
 
     /// Returns the number of packages in the lockfile.
     pub fn len(&self) -> usize {
-        self.packages.len()
+        if self.build.is_some() {
+            self.packages_in_order()
+                .dedup_by(|left, right| left.id == right.id)
+                .count()
+        } else {
+            self.packages.len()
+        }
     }
 
     /// Returns `true` if the lockfile contains no packages.
@@ -2994,8 +3005,7 @@ impl Lock {
     pub fn upgrade_packages(&self, upgrade: &Upgrade) -> FxHashSet<PackageName> {
         if upgrade.is_all() {
             return self
-                .packages
-                .iter()
+                .all_packages()
                 .map(|package| package.name().clone())
                 .collect();
         }
@@ -3043,7 +3053,7 @@ impl Lock {
     ) -> Result<HashStrategy, LockError> {
         let mut hashes: FxHashMap<VersionId, Vec<HashDigest>> = FxHashMap::default();
 
-        for package in &self.packages {
+        for package in self.all_packages() {
             if excluded_packages.contains(package.name()) {
                 continue;
             }
@@ -3098,7 +3108,7 @@ impl Lock {
         root: &Path,
         index_locations: &IndexLocations,
     ) -> Result<bool, LockError> {
-        for package in &self.packages {
+        for package in self.all_packages() {
             let Some(index) = package.index(root)? else {
                 continue;
             };
@@ -4244,6 +4254,7 @@ impl Lock {
         workspace_default_groups: Option<&DefaultGroups>,
         dependency_metadata: &DependencyMetadata,
         indexes: Option<&IndexLocations>,
+        build_indexes: &[IndexMetadata],
         tags: &Tags,
         markers: &MarkerEnvironment,
         build_options: &BuildOptions,
@@ -4714,47 +4725,8 @@ impl Lock {
 
         while let Some(package_index) = queue.pop_front() {
             let package = self.package(package_index);
-            // If the lockfile references an index that was not provided, we can't validate it.
-            if let Source::Registry(index) = &package.id.source {
-                match index {
-                    RegistrySource::Url(url) => {
-                        if remotes
-                            .as_ref()
-                            .is_some_and(|remotes| !remotes.contains(url))
-                        {
-                            let name = &package.id.name;
-                            let version = &package
-                                .id
-                                .version
-                                .as_ref()
-                                .expect("version for registry source");
-                            return Ok(LockSatisfaction::Mismatch(
-                                LockSatisfactionError::MissingRemoteIndex(
-                                    name.clone(),
-                                    (*version).clone(),
-                                    url.clone(),
-                                ),
-                            ));
-                        }
-                    }
-                    RegistrySource::Path(path) => {
-                        if locals.as_ref().is_some_and(|locals| !locals.contains(path)) {
-                            let name = &package.id.name;
-                            let version = &package
-                                .id
-                                .version
-                                .as_ref()
-                                .expect("version for registry source");
-                            return Ok(LockSatisfaction::Mismatch(
-                                LockSatisfactionError::MissingLocalIndex(
-                                    name.clone(),
-                                    (*version).clone(),
-                                    path.to_path_buf(),
-                                ),
-                            ));
-                        }
-                    }
-                }
+            if let Some(mismatch) = package.missing_index(remotes.as_ref(), locals.as_ref()) {
+                return Ok(LockSatisfaction::Mismatch(mismatch));
             }
 
             // If the package is immutable, we don't need to validate it (or its dependencies).
@@ -5081,6 +5053,45 @@ impl Lock {
                     .is_some_and(|(validated, activated)| validated != activated);
                 if seen.insert(dependency.index) || needs_extra_validation {
                     queue.push_back(dependency.index);
+                }
+            }
+        }
+
+        // Runtime traversal never follows build edges. Check build-only index selections too,
+        // and re-read editable backend packages whose own dependencies may have changed.
+        if let Some(build) = &self.build {
+            for index in build_indexes {
+                Self::record_index(index, &mut remotes, &mut locals, root);
+            }
+            for package in build.packages() {
+                if let Some(mismatch) = package.missing_index(remotes.as_ref(), locals.as_ref()) {
+                    return Ok(LockSatisfaction::Mismatch(mismatch));
+                }
+                if !package.has_local_build_source() || self.by_id.contains_key(&package.id) {
+                    continue;
+                }
+                let metadata = Self::package_metadata(
+                    package,
+                    root,
+                    tags,
+                    markers,
+                    build_options,
+                    hasher,
+                    index,
+                    database,
+                )
+                .await?;
+                if package.version() != (!metadata.dynamic).then_some(&metadata.version)
+                    || package.metadata
+                        != PackageMetadata::from_distribution(
+                            &metadata,
+                            root,
+                            PackageRole::Dependency,
+                        )?
+                {
+                    return Ok(LockSatisfaction::Mismatch(
+                        LockSatisfactionError::BuildPackageChanged(package.name().clone()),
+                    ));
                 }
             }
         }
@@ -6280,6 +6291,8 @@ pub enum LockSatisfactionError {
     /// The lockfile is missing a workspace member.
     #[error("Workspace member `{name}` is missing from the lockfile", name = .0.cyan())]
     MissingRoot(PackageName),
+    #[error("Metadata changed for local build dependency `{0}`")]
+    BuildPackageChanged(PackageName),
     /// The lockfile referenced a remote index that was not provided
     #[error(
         "The index for locked package `{package}` is no longer configured: {index}",
@@ -6860,6 +6873,8 @@ impl ResolverManifest {
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct LockWire {
+    #[serde(default)]
+    lock_build_dependencies: bool,
     version: u32,
     revision: Option<u32>,
     requires_python: RequiresPython,
@@ -6886,13 +6901,17 @@ impl TryFrom<LockWire> for Lock {
     type Error = LockError;
 
     fn try_from(wire: LockWire) -> Result<Self, LockError> {
-        // When a name identifies a single package, dependencies can omit its source and version.
-        // Store `None` for names shared by multiple packages.
-        let mut package_ids = FxHashMap::default();
+        // A name can omit its version and source only when it identifies a single package ID.
+        // Copies of that same ID in different build universes do not make the name ambiguous.
+        let mut package_ids: FxHashMap<_, Option<PackageId>> = FxHashMap::default();
         for package in &wire.packages {
             package_ids
                 .entry(package.id.name.clone())
-                .and_modify(|id| *id = None)
+                .and_modify(|id| {
+                    if id.as_ref() != Some(&package.id) {
+                        *id = None;
+                    }
+                })
                 .or_insert_with(|| Some(package.id.clone()));
         }
 
@@ -6936,7 +6955,19 @@ impl TryFrom<LockWire> for Lock {
             minimum_libc_version: options_wire.minimum_libc_version,
             exclude_newer: options_wire.exclude_newer.into(),
         };
-        let lock = Self::new(
+        let (packages, build) = if wire.lock_build_dependencies {
+            let (runtime, build) = BuildGraph::partition(packages, &wire.manifest)?;
+            (runtime, Some(Box::new(build)))
+        } else {
+            if packages.iter().any(|package| package.build.is_some()) {
+                return Err(LockErrorKind::InvalidBuildGraph(
+                    "build dependency entries require `lock-build-dependencies = true`".into(),
+                )
+                .into());
+            }
+            (packages, None)
+        };
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -6948,6 +6979,7 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
+        lock.build = build;
 
         Ok(lock)
     }
@@ -6972,6 +7004,7 @@ impl LockVersion {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package {
     id: PackageId,
+    build: Option<Box<PackageBuild>>,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
     /// If there are multiple versions or sources for the same package name, we add the markers of
@@ -7023,6 +7056,7 @@ impl Package {
         };
         Ok(Self {
             id,
+            build: None,
             sdist,
             wheels,
             fork_markers,
@@ -7639,6 +7673,38 @@ impl Package {
                 .any(|fork_marker| !fork_marker.pep508().is_disjoint(marker))
     }
 
+    /// Check that an explicitly configured set of indexes still allows this package's source.
+    fn missing_index(
+        &self,
+        remotes: Option<&BTreeSet<UrlString>>,
+        locals: Option<&BTreeSet<Box<Path>>>,
+    ) -> Option<LockSatisfactionError> {
+        let Source::Registry(registry) = &self.id.source else {
+            return None;
+        };
+        let version = self.version().expect("registry package has a version");
+        match registry {
+            RegistrySource::Url(url) => {
+                remotes.filter(|indexes| !indexes.contains(url)).map(|_| {
+                    LockSatisfactionError::MissingRemoteIndex(
+                        self.id.name.clone(),
+                        version.clone(),
+                        url.clone(),
+                    )
+                })
+            }
+            RegistrySource::Path(path) => {
+                locals.filter(|indexes| !indexes.contains(path)).map(|_| {
+                    LockSatisfactionError::MissingLocalIndex(
+                        self.id.name.clone(),
+                        version.clone(),
+                        path.to_path_buf(),
+                    )
+                })
+            }
+        }
+    }
+
     /// Returns the [`IndexUrl`] for the package, if it is a registry source.
     pub fn index(&self, root: &Path) -> Result<Option<IndexUrl>, LockError> {
         match &self.id.source {
@@ -7773,6 +7839,14 @@ fn absolute_path(workspace_root: &Path, path: &Path) -> Result<PathBuf, LockErro
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct PackageWire {
+    #[serde(default)]
+    build_inputs: BuildInputs,
+    #[serde(default)]
+    universes: Vec<String>,
+    #[serde(default)]
+    build_dependencies_universe: Option<String>,
+    #[serde(default)]
+    build_dependencies: Vec<DependencyWire>,
     #[serde(flatten)]
     id: PackageId,
     #[serde(default)]
@@ -7941,7 +8015,14 @@ impl PackageWire {
                 .collect()
         };
 
+        let build = PackageBuild {
+            inputs: self.build_inputs,
+            universes: self.universes,
+            universe: self.build_dependencies_universe,
+            dependencies: unwire_deps(self.build_dependencies)?,
+        };
         Ok(Package {
+            build: (build != PackageBuild::default()).then(|| Box::new(build)),
             id: self.id,
             metadata: self.metadata,
             default_groups: self.default_groups,
@@ -7973,7 +8054,7 @@ impl PackageWire {
 /// of the name, the version and the source url.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) struct PackageId {
+pub struct PackageId {
     name: PackageName,
     version: Option<Version>,
     source: Source,
@@ -8854,6 +8935,14 @@ impl SourceDist {
             Self::Metadata { .. } => None,
             Self::Url { url, .. } => Some(url),
             Self::Path { .. } => None,
+        }
+    }
+
+    fn metadata_mut(&mut self) -> &mut SourceDistMetadata {
+        match self {
+            Self::Metadata { metadata }
+            | Self::Url { metadata, .. }
+            | Self::Path { metadata, .. } => metadata,
         }
     }
 
@@ -10159,6 +10248,14 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(DebugNoInline, thiserror::Error)]
 enum LockErrorKind {
+    #[error(
+        "The lockfile does not include build dependencies. Run `uv lock --preview-features lock-build-dependencies` to update it."
+    )]
+    MissingLockedBuilds,
+    #[error("Invalid locked build dependencies: {0}")]
+    InvalidBuildGraph(String),
+    #[error(transparent)]
+    BuildHash(uv_client::FileHashError),
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
     DependencyGroups(#[from] DependencyGroupError),

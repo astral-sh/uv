@@ -1,5 +1,6 @@
 use std::fmt;
 
+use itertools::Itertools;
 use rustc_hash::FxHashMap;
 use serde::Serialize;
 use toml_edit::Value;
@@ -11,9 +12,9 @@ use uv_pep508::MarkerTree;
 use uv_pypi_types::ConflictKind;
 
 use super::{
-    Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy, Lock, Package,
-    PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest, ResolverOptions,
-    Source, SourceDist, Wheel, WheelWireSource, simplified_universal_markers,
+    BuildInputs, Dependency, DirectSource, ExcludeNewerOverride, ExcludeNewerValue, ForkStrategy,
+    Lock, Package, PackageId, PrereleaseMode, RegistrySource, ResolutionMode, ResolverManifest,
+    ResolverOptions, Source, SourceDist, Wheel, WheelWireSource, simplified_universal_markers,
 };
 
 /// Serializes a lockfile directly while preserving the canonical `uv.lock` layout.
@@ -38,6 +39,10 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
         writer.key_value("revision", lock.revision)?;
     }
     writer.key_value("requires-python", lock.requires_python.to_string())?;
+
+    if lock.locks_build_dependencies() {
+        writer.key_value("lock-build-dependencies", true)?;
+    }
 
     if !lock.fork_markers.is_empty() {
         let markers = simplified_universal_markers(&lock.fork_markers, &lock.requires_python);
@@ -114,13 +119,13 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
     // particular package name (the overwhelmingly common case), we can omit some data (like
     // source and version) on dependency edges since it is strictly redundant.
     let mut dist_count_by_name: FxHashMap<PackageName, u64> = FxHashMap::default();
-    for package in &lock.packages {
+    for package in lock.packages_in_order().dedup_by(|a, b| a.id == b.id) {
         *dist_count_by_name
             .entry(package.id.name.clone())
             .or_default() += 1;
     }
 
-    for package in &lock.packages {
+    for package in lock.packages_in_order() {
         write_package(
             writer,
             package,
@@ -285,6 +290,31 @@ fn write_package(
 ) -> Result<(), WriteError> {
     writer.array_of_tables(&["package"])?;
     write_package_id(writer, &package.id, None, PackageIdLocation::Table)?;
+    if let Some(build) = &package.build {
+        if build.inputs != BuildInputs::default() {
+            writer.key_value("build-inputs", serialize_value(&build.inputs)?)?;
+        }
+        if !build.universes.is_empty() {
+            writer.key_value("universes", serialize_value(&build.universes)?)?;
+        }
+        if let Some(universe) = &build.universe {
+            writer.key_value("build-dependencies-universe", universe.as_str())?;
+        }
+        if !build.dependencies.is_empty() {
+            writer.key_multiline_array(
+                "build-dependencies",
+                &build.dependencies,
+                |writer, dependency| {
+                    write_dependency_inline(
+                        writer,
+                        dependency,
+                        simplified_environment,
+                        dist_count_by_name,
+                    )
+                },
+            )?;
+        }
+    }
     if let Some(groups) = &package.default_groups {
         writer.key_value("default-groups", serialize_value(groups)?)?;
     }
