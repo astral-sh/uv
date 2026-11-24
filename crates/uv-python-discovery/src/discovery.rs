@@ -104,7 +104,7 @@ pub enum Error {
 
     #[cfg(windows)]
     #[error("Failed to query installed Python versions from the Windows registry")]
-    RegistryError(#[from] windows::core::Error),
+    RegistryError(#[from] windows_result::Error),
 
     #[error(transparent)]
     InvalidEnvironmentVariable(#[from] uv_static::InvalidEnvironmentVariable),

@@ -58,6 +58,7 @@ zstd = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { workspace = true }
 windows-registry = { workspace = true }
+windows-result = { workspace = true }
 
 [dev-dependencies]
 uv-pep440 = { workspace = true }
