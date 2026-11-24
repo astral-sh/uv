@@ -24,10 +24,10 @@ async fn reject_conflicting_compression_methods() -> anyhow::Result<()> {
         .assert()
         .success();
 
-    let error =
-        uv_extract::stream::unzip(archive.get_output().stdout.as_slice(), tempfile::tempdir()?)
-            .await
-            .unwrap_err();
+    let bytes = archive.get_output().stdout.as_slice();
+    let error = uv_extract::stream::unzip(bytes, tempfile::tempdir()?)
+        .await
+        .unwrap_err();
     insta::assert_debug_snapshot!(error, @r#"
     ConflictingCompressionMethods {
         path: "file.txt",
@@ -35,6 +35,16 @@ async fn reject_conflicting_compression_methods() -> anyhow::Result<()> {
         local_method: 8,
         central_directory_method: 0,
     }
+    "#);
+
+    let path = context.temp_dir.path().join("archive.zip");
+    fs_err::write(&path, bytes)?;
+    let error =
+        uv_extract::unzip(fs_err::File::open(path)?, tempfile::tempdir()?.path()).unwrap_err();
+    insta::assert_debug_snapshot!(error, @r#"
+    AsyncZip(
+        LocalFileHeaderCompressionMismatch,
+    )
     "#);
     Ok(())
 }
