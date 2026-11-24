@@ -39,6 +39,8 @@ struct LocalHeaderEntry {
     relpath: SanitizedArchivePath,
     /// Whether the local file header identifies the entry as a directory.
     is_dir: bool,
+    /// The compression method from the local file header.
+    compression_method: u16,
     /// The computed CRC32 checksum of the entry.
     crc32: u32,
     /// The compressed size from the data descriptor or local file header.
@@ -214,6 +216,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
         }
 
         let file_offset = zip_entry.file_offset();
+        let compression_method = u16::from(zip_entry.compression());
         let expected_compressed_size = zip_entry.compressed_size();
         let expected_uncompressed_size = zip_entry.uncompressed_size();
         let expected_data_descriptor = zip_entry.data_descriptor();
@@ -449,6 +452,7 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                 entry.insert(LocalHeaderEntry {
                     relpath,
                     is_dir,
+                    compression_method,
                     crc32: computed.crc32,
                     uncompressed_size: computed.uncompressed_size,
                     compressed_size,
@@ -535,6 +539,16 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
                                     offset: entry.file_offset(),
                                 });
                             }
+                        }
+                        if local_header.compression_method != entry.compression_method()
+                            && !skip_validation
+                        {
+                            return Err(Error::ConflictingCompressionMethods {
+                                path: relpath.to_path_buf(),
+                                offset: entry.file_offset(),
+                                local_method: local_header.compression_method,
+                                central_directory_method: entry.compression_method(),
+                            });
                         }
                         if local_header.crc32 != entry.crc32() {
                             if !skip_validation {

@@ -68,6 +68,13 @@ pub enum Error {
     },
     #[error("ZIP file uses conflicting entry types for the local file header and central-directory record for: {} ({offset})", path.display())]
     ConflictingEntryTypes { path: PathBuf, offset: u64 },
+    #[error("ZIP file uses conflicting compression methods for {} at offset {offset} ({local_method} in the local file header, {central_directory_method} in the central directory)", path.display())]
+    ConflictingCompressionMethods {
+        path: PathBuf,
+        offset: u64,
+        local_method: u16,
+        central_directory_method: u16,
+    },
     #[error("ZIP file uses conflicting checksums for the local file header and central-directory record (got {local_crc32}, expected {central_directory_crc32}) for: {} ({offset})", path.display())]
     ConflictingChecksums {
         path: PathBuf,
