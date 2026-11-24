@@ -264,10 +264,6 @@ fn unpack_sdist_many_files(c: &mut Criterion<WallTime>) {
             BatchSize::PerIteration,
         );
     });
-
-    uv_preview::set(Preview::default())
-        .expect("Failed to restore default preview features after tar benchmark");
-    uv_preview::finalize().expect("Failed to finalize preview features");
 }
 
 fn unzip_wheel_many_files(c: &mut Criterion<WallTime>) {
@@ -455,6 +451,7 @@ fn resolve_warm_airflow(c: &mut Criterion<WallTime>) {
 fn criterion_with_preview() -> Criterion<WallTime> {
     uv_preview::set(Preview::default())
         .expect("Global preview features should not have been initialized already");
+    uv_preview::finalize().expect("Failed to finalize preview features");
 
     Criterion::default()
 }

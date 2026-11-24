@@ -14,6 +14,7 @@ use std::process::Command;
 use tar_codec::{Archive as _, TarArchive, extract::ExtractPolicy};
 use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
+#[cfg(any(feature = "test-pypi", all(unix, feature = "test-git")))]
 use uv_static::EnvVars;
 #[cfg(feature = "test-pypi")]
 use uv_test::copy_dir_ignore;
