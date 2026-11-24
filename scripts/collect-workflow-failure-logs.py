@@ -1,3 +1,11 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+#
+# [tool.uv]
+# no-build = true
+# exclude-newer = "P7D"
+# ///
 """Index the jobs from a validated Actions run and download only failed job logs."""
 
 import json
@@ -21,7 +29,7 @@ def download_log(repository: str, job_id: int) -> Path:
     path = LOGS / f"{job_id}.txt"
     with tempfile.TemporaryFile() as raw:
         # The jobs endpoint returns plain text. Never print it to the workflow log.
-        subprocess.run(
+        result = subprocess.run(
             [
                 "gh",
                 "api",
@@ -29,10 +37,17 @@ def download_log(repository: str, job_id: int) -> Path:
                 f"repos/{repository}/actions/jobs/{job_id}/logs",
             ],
             stdout=raw,
-            # Redirect errors can include a signed download URL.
-            stderr=subprocess.DEVNULL,
-            check=True,
+            stderr=subprocess.PIPE,
+            check=False,
         )
+        if result.returncode:
+            # Keep the HTTP status or transport error without logging signed URLs.
+            error = CONTROLS.sub("", result.stderr.decode("utf-8", errors="replace"))
+            error = re.sub(r'https?://[^\s"]+', "<url>", error, flags=re.IGNORECASE)
+            raise RuntimeError(
+                f"gh api failed for job {job_id} (exit {result.returncode}): "
+                + " ".join(error.split())
+            )
         raw.seek(0)
         has_content = False
         with path.open("x", encoding="utf-8") as output:
@@ -73,7 +88,7 @@ def main() -> None:
             not isinstance(job_id, int)
             or job_id <= 0
             or job["run_id"] != run_id
-            or job["run_attempt"] != attempt
+            or job.get("run_attempt", attempt) != attempt
             or job["head_sha"] != event["headSha"]
         ):
             raise ValueError("Unexpected job in workflow run")
@@ -85,9 +100,11 @@ def main() -> None:
         }
         if job["conclusion"] in FAILED:
             entry["steps"] = [
-                step for step in job["steps"] if step["conclusion"] in FAILED
+                step for step in job.get("steps", []) if step["conclusion"] in FAILED
             ]
             entry["log"] = str(download_log(repository, job_id))
+        elif job["conclusion"] == "cancelled":
+            entry["steps"] = job.get("steps", [])
         event["jobs"].append(entry)
 
     # The classifier must not run with a partial set of failure logs.

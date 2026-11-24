@@ -89,8 +89,7 @@ jobs:
             exit 0
           fi
 
-          # Even with --job, gh run view --log-failed downloads the run's entire ZIP.
-          python3 scripts/collect-workflow-failure-logs.py
+          uv run --script scripts/collect-workflow-failure-logs.py
 
           {
             printf 'Workflow failure diagnosis automation for run %s\n\n' "$RUN_ID"
