@@ -98,7 +98,7 @@ jobs:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           codex-version: "0.169.0"
           codex-home: "${{ env.REVIEW_CONFIG }}/codex"
-          model: gpt-6.2-astra
+          model: gpt-6-astra
           effort: xhigh
           permission-profile: "pull-request-review"
           safety-strategy: drop-sudo
