@@ -510,7 +510,19 @@ mod test {
 
     async fn format_err(input: &str) -> String {
         let temp_dir = TempDir::new().unwrap();
-        let err = requires_dist_from_pyproject_toml(temp_dir.path(), input)
+        format_err_in(temp_dir.path(), input).await
+    }
+
+    /// Write `input` to `<temp_dir>/pyproject.toml`, discover the workspace, and lower the
+    /// project's dependencies, which must fail. Returns the error chain formatted as uv prints it
+    /// (`error: ...` followed by `Caused by: ...` lines), with `temp_dir` replaced by `[PATH]` and
+    /// backslashes replaced by forward slashes.
+    ///
+    /// Tests can write workspace members into `temp_dir` before calling this.
+    ///
+    /// Panics if discovery and lowering succeed.
+    async fn format_err_in(temp_dir: &Path, input: &str) -> String {
+        let err = requires_dist_from_pyproject_toml(temp_dir, input)
             .await
             .unwrap_err();
         let mut causes = err.chain();
@@ -520,8 +532,33 @@ mod test {
             let _ = writeln!(message, "  Caused by: {err}");
         }
         message
-            .replace(&temp_dir.path().display().to_string(), "[PATH]")
+            .replace(&temp_dir.display().to_string(), "[PATH]")
             .replace('\\', "/")
+    }
+
+    /// Render the lowered `requires_dist` and `dependency_groups`, one requirement per line, with
+    /// the temporary directory replaced by `[TEMPDIR]`.
+    fn format_requires_dist(temp_dir: &Path, requires_dist: &RequiresDist) -> String {
+        let mut output = String::new();
+        for requirement in &requires_dist.requires_dist {
+            let _ = writeln!(output, "{requirement}");
+        }
+        for (group, requirements) in &requires_dist.dependency_groups {
+            for requirement in requirements {
+                let _ = writeln!(output, "{group}: {requirement}");
+            }
+        }
+        // Directory sources are displayed as `file:///` URLs with forward slashes, including on
+        // Windows (e.g., `file:///C:/...`).
+        let temp_dir_url = format!(
+            "file:///{}",
+            temp_dir
+                .display()
+                .to_string()
+                .replace('\\', "/")
+                .trim_start_matches('/')
+        );
+        output.replace(&temp_dir_url, "file://[TEMPDIR]")
     }
 
     #[tokio::test]
@@ -764,6 +801,305 @@ mod test {
         "};
 
         assert_snapshot!(format_err(input).await, @"error: No `project` table found in: [PATH]/pyproject.toml");
+    }
+
+    /// With `default-source-members` enabled, a dependency on a workspace member with no
+    /// `tool.uv.sources` entry is lowered to the member's directory, while a dependency
+    /// that isn't a member is unchanged.
+    #[tokio::test]
+    async fn default_source_members() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::create_dir_all(temp_dir.path().join("varrock")).unwrap();
+        fs_err::write(
+            temp_dir.path().join("varrock").join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "varrock"
+                version = "0.1.0"
+
+                [build-system]
+                requires = [ "uv_build>=0.7" ]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let input = indoc! {r#"
+            [project]
+            name = "lumbridge"
+            version = "1.0.0"
+            dependencies = [
+              "varrock",
+              "falador",
+            ]
+
+            [tool.uv.workspace]
+            default-source-members = true
+            members = [ "varrock" ]
+        "#};
+        let requires_dist = requires_dist_from_pyproject_toml(temp_dir.path(), input)
+            .await
+            .unwrap();
+
+        assert_snapshot!(format_requires_dist(temp_dir.path(), &requires_dist), @"
+        varrock @ file://[TEMPDIR]/varrock
+        falador
+        ");
+    }
+
+    /// Without `default-source-members`, a dependency on a workspace member with no
+    /// `tool.uv.sources` entry is rejected because the setting defaults to `false`.
+    #[tokio::test]
+    async fn default_source_members_unspecified() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::create_dir_all(temp_dir.path().join("varrock")).unwrap();
+        fs_err::write(
+            temp_dir.path().join("varrock").join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "varrock"
+                version = "0.1.0"
+
+                [build-system]
+                requires = [ "uv_build>=0.7" ]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let input = indoc! {r#"
+            [project]
+            name = "lumbridge"
+            version = "1.0.0"
+            dependencies = [
+              "varrock",
+              "falador",
+            ]
+
+            [tool.uv.workspace]
+            members = [ "varrock" ]
+        "#};
+
+        assert_snapshot!(format_err_in(temp_dir.path(), input).await, @"
+        error: Failed to parse entry: `varrock`
+          Caused by: `varrock` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `varrock = { workspace = true }`)
+        ");
+    }
+
+    /// With `default-source-members` disabled, a dependency on a workspace member with no
+    /// `tool.uv.sources` entry is rejected, since workspace members need an explicit source.
+    #[tokio::test]
+    async fn default_source_members_disabled() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::create_dir_all(temp_dir.path().join("varrock")).unwrap();
+        fs_err::write(
+            temp_dir.path().join("varrock").join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "varrock"
+                version = "0.1.0"
+
+                [build-system]
+                requires = [ "uv_build>=0.7" ]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let input = indoc! {r#"
+            [project]
+            name = "lumbridge"
+            version = "1.0.0"
+            dependencies = [
+              "varrock",
+              "falador",
+            ]
+
+            [tool.uv.workspace]
+            default-source-members = false
+            members = [ "varrock" ]
+        "#};
+
+        assert_snapshot!(format_err_in(temp_dir.path(), input).await, @"
+        error: Failed to parse entry: `varrock`
+          Caused by: `varrock` is included as a workspace member, but is missing an entry in `tool.uv.sources` (e.g., `varrock = { workspace = true }`)
+        ");
+    }
+
+    /// With `default-source-members` enabled, an explicit source for a workspace member takes
+    /// precedence over the default and is still validated as a workspace source.
+    #[tokio::test]
+    async fn default_source_members_explicit_source() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::create_dir_all(temp_dir.path().join("varrock")).unwrap();
+        fs_err::write(
+            temp_dir.path().join("varrock").join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "varrock"
+                version = "0.1.0"
+
+                [build-system]
+                requires = [ "uv_build>=0.7" ]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let input = indoc! {r#"
+            [project]
+            name = "lumbridge"
+            version = "1.0.0"
+            dependencies = [
+              "varrock",
+              "falador",
+            ]
+
+            [tool.uv.workspace]
+            default-source-members = true
+            members = [ "varrock" ]
+
+            [tool.uv.sources]
+            varrock = { path = "varrock" }
+        "#};
+
+        assert_snapshot!(format_err_in(temp_dir.path(), input).await, @"
+        error: Failed to parse entry: `varrock`
+          Caused by: `varrock` is included as a workspace member, but references a path in `tool.uv.sources`. Workspace members must be declared as workspace sources (e.g., `varrock = { workspace = true }`).
+        ");
+    }
+
+    /// With `default-source-members` enabled, workspace members in optional dependencies and
+    /// dependency groups are lowered to their directories, while retaining their extra or group.
+    #[tokio::test]
+    async fn default_source_members_optional_dependency_and_dependency_group() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::create_dir_all(temp_dir.path().join("varrock")).unwrap();
+        fs_err::write(
+            temp_dir.path().join("varrock").join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "varrock"
+                version = "0.1.0"
+
+                [build-system]
+                requires = [ "uv_build>=0.7" ]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let input = indoc! {r#"
+            [project]
+            name = "lumbridge"
+            version = "1.0.0"
+
+            [project.optional-dependencies]
+            romeo-and-juliet = [
+              "varrock",
+            ]
+
+            [dependency-groups]
+            shield-of-arrav = [
+              "varrock",
+            ]
+
+            [tool.uv.workspace]
+            default-source-members = true
+            members = [ "varrock" ]
+        "#};
+        let requires_dist = requires_dist_from_pyproject_toml(temp_dir.path(), input)
+            .await
+            .unwrap();
+
+        assert_snapshot!(format_requires_dist(temp_dir.path(), &requires_dist), @"
+        varrock @ file://[TEMPDIR]/varrock ; extra == 'romeo-and-juliet'
+        shield-of-arrav: varrock @ file://[TEMPDIR]/varrock
+        ");
+    }
+
+    /// With `default-source-members` enabled, a `tool.uv.sources` entry for a workspace member that
+    /// only applies to a dependency group replaces the default entirely, so the member is only
+    /// lowered to its directory within that group.
+    #[tokio::test]
+    async fn default_source_members_scoped_source() {
+        let temp_dir = TempDir::new().unwrap();
+        fs_err::create_dir_all(temp_dir.path().join("varrock")).unwrap();
+        fs_err::write(
+            temp_dir.path().join("varrock").join("pyproject.toml"),
+            indoc! {r#"
+                [project]
+                name = "varrock"
+                version = "0.1.0"
+
+                [build-system]
+                requires = [ "uv_build>=0.7" ]
+                build-backend = "uv_build"
+            "#},
+        )
+        .unwrap();
+
+        let input = indoc! {r#"
+            [project]
+            name = "lumbridge"
+            version = "1.0.0"
+            dependencies = [
+              "varrock",
+            ]
+
+            [dependency-groups]
+            dev = [
+              "varrock",
+            ]
+
+            [tool.uv.workspace]
+            default-source-members = true
+            members = [ "varrock" ]
+
+            [tool.uv.sources]
+            varrock = { workspace = true, group = "dev" }
+        "#};
+        let requires_dist = requires_dist_from_pyproject_toml(temp_dir.path(), input)
+            .await
+            .unwrap();
+
+        assert_snapshot!(format_requires_dist(temp_dir.path(), &requires_dist), @"
+        varrock
+        dev: varrock @ file://[TEMPDIR]/varrock
+        ");
+    }
+
+    /// A package can depend on one of its own extras to compose optional dependencies, such as
+    /// `foo[all]` depending on `foo[part]`. Although `foo` is a workspace member, this is a (safe)
+    /// self-reference rather than a dependency on another member. With `default-source-members`
+    /// enabled, it remains a plain requirement without a workspace directory source.
+    #[tokio::test]
+    async fn default_source_members_self_reference() {
+        let temp_dir = TempDir::new().unwrap();
+        let input = indoc! {r#"
+            [project]
+            name = "lumbridge"
+            version = "1.0.0"
+
+            [project.optional-dependencies]
+            all = [
+              "lumbridge[cooks-assistant]",
+            ]
+            cooks-assistant = [
+              "falador",
+            ]
+
+            [tool.uv.workspace]
+            default-source-members = true
+        "#};
+        let requires_dist = requires_dist_from_pyproject_toml(temp_dir.path(), input)
+            .await
+            .unwrap();
+
+        assert_snapshot!(format_requires_dist(temp_dir.path(), &requires_dist), @"
+        lumbridge[cooks-assistant] ; extra == 'all'
+        falador ; extra == 'cooks-assistant'
+        ");
     }
 
     #[test]
