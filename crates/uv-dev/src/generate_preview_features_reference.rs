@@ -430,8 +430,9 @@ mod tests {
 
         ### `venv-redirect-files` {#venv-redirect-files}
 
-        uv supports `.venv` redirect files ([PEP 832](https://peps.python.org/pep-0832/)). Enabling this
-        feature silences the preview warning.
+        uv supports `.venv` redirect files ([PEP 832](https://peps.python.org/pep-0832/)). Enabling
+        this feature silences the preview warning and makes Python discovery reject empty or
+        non-UTF-8 redirect files.
 
         ### `venv-safe-clear` {#venv-safe-clear}
 

@@ -811,6 +811,30 @@ fn sync_invalid_venv_redirect_file() -> Result<()> {
     Ok(())
 }
 
+/// Locking can ignore an empty file, but syncing needs a directory at the same path.
+#[test]
+fn sync_empty_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    write_project(&context, ">=3.12", &[])?;
+    let redirect = context.temp_dir.child(".venv");
+    redirect.touch()?;
+
+    context.lock().assert().success();
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because it is a file
+    ");
+    uv_snapshot!(context.filters(), context.sync().arg("--preview-features")
+        .arg("venv-redirect-files"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Virtual environment redirect file at `.venv` is empty
+    ");
+    assert_eq!(fs_err::read_to_string(redirect.path())?, "");
+    Ok(())
+}
+
 #[cfg(windows)]
 #[test]
 fn sync_centralized_env_replaces_existing_empty_directory() -> Result<()> {

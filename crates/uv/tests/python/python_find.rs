@@ -918,6 +918,30 @@ fn python_find_venv_redirect_file() -> Result<()> {
     Ok(())
 }
 
+/// Without the redirect preview, an empty `.venv` file should not hide a parent environment.
+#[test]
+fn python_find_empty_venv_redirect_file() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filtered_python_names()
+        .with_filtered_virtualenv_bin();
+    let child = context.temp_dir.child("child");
+    child.child(".venv").touch()?;
+
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [VENV]/[BIN]/[PYTHON]
+    ");
+
+    uv_snapshot!(context.filters(), context.python_find().current_dir(&child)
+        .arg("--preview-features").arg("venv-redirect-files"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Virtual environment redirect file at `.venv` is empty
+    ");
+    Ok(())
+}
+
 #[test]
 #[cfg(unix)]
 fn python_find_venv_executable_precedence() -> Result<()> {
