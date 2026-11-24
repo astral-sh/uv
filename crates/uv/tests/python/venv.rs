@@ -22,6 +22,55 @@ use std::{ffi::OsString, os::windows::ffi::OsStringExt};
 use uv_test::LATEST_PYTHON_3_12;
 use uv_test::{assert_link_target, site_packages_path, uv_snapshot};
 
+/// A project environment created by bare `uv venv` also needs valid entrypoints after a move.
+#[test]
+fn moved_project_environment_created_by_venv() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["simple-launcher"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["."]
+    "#})?;
+    let wheel = "simple_launcher-0.1.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        project.child(wheel),
+    )?;
+
+    context.venv().current_dir(&project).assert().success();
+    context
+        .sync()
+        .current_dir(&project)
+        .arg("--offline")
+        .assert()
+        .success();
+    let moved = context.temp_dir.child("moved");
+    fs_err::rename(&project, &moved)?;
+    context
+        .sync()
+        .current_dir(&moved)
+        .args(["--locked", "--offline"])
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(&moved)
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "simple_launcher"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hi from the simple launcher!
+    ");
+    Ok(())
+}
+
 #[test]
 fn create_venv() {
     let context = uv_test::test_context_with_versions!(&["3.12"]);

@@ -11,6 +11,8 @@ use thiserror::Error;
 use uv_pep440::Version;
 use uv_pypi_types::Scheme;
 
+pub(super) const PROJECT_ENVIRONMENT_LOCATION: &str = "uv-project-path";
+
 /// The layout of a virtual environment.
 #[derive(Debug)]
 pub struct VirtualEnvironment {
@@ -45,6 +47,8 @@ pub struct PyVenvConfiguration {
     pub(super) include_system_site_packages: bool,
     /// The Python version the virtual environment was created with
     pub(super) version: Option<Version>,
+    /// The creation location of a local project environment.
+    project_environment_location: Option<PathBuf>,
 }
 
 #[derive(Debug, Error)]
@@ -110,6 +114,7 @@ impl PyVenvConfiguration {
         let mut seed = false;
         let mut include_system_site_packages = true;
         let mut version = None;
+        let mut project_environment_location = None;
 
         // Per https://snarky.ca/how-virtual-environments-work/, the `pyvenv.cfg` file is not a
         // valid INI file, and is instead expected to be parsed by partitioning each line on the
@@ -143,6 +148,9 @@ impl PyVenvConfiguration {
                     // An unrecognized version only prevents checking the interpreter version.
                     version = Version::from_str(value.trim()).ok();
                 }
+                PROJECT_ENVIRONMENT_LOCATION => {
+                    project_environment_location = serde_json::from_str(value.trim()).ok();
+                }
                 _ => {}
             }
         }
@@ -155,6 +163,7 @@ impl PyVenvConfiguration {
             seed,
             include_system_site_packages,
             version,
+            project_environment_location,
         })
     }
 
@@ -171,6 +180,15 @@ impl PyVenvConfiguration {
     /// Returns true if the virtual environment is relocatable.
     pub(crate) fn is_relocatable(&self) -> bool {
         self.relocatable
+    }
+
+    /// Return the recorded creation location for a non-relocatable uv project environment.
+    pub fn project_environment_location(&self) -> Option<&Path> {
+        if self.is_uv() && !self.is_relocatable() {
+            self.project_environment_location.as_deref()
+        } else {
+            None
+        }
     }
 
     /// Returns true if the virtual environment was populated with seed packages.

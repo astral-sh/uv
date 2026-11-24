@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use same_file::is_same_file;
 use tracing::{debug, warn};
 use uv_cache::{Cache, CacheBucket};
 use uv_cache_key::{cache_digest, cache_name};
@@ -31,7 +32,9 @@ use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictItem, ConflictKind, ConflictSet, Conflicts};
 use uv_python_discovery::ConfigDiscovery;
 use uv_python_discovery::PythonInstallation;
-use uv_python_interpreter::{BrokenLink, Interpreter, InvalidEnvironmentKind, PythonEnvironment};
+use uv_python_interpreter::{
+    BrokenLink, Interpreter, InvalidEnvironmentKind, PyVenvConfiguration, PythonEnvironment,
+};
 use uv_python_managed::{PythonMinorVersionLink, UpgradePolicy};
 use uv_python_types::{
     EnvironmentPreference, LenientImplementationName, PythonArchitecture, PythonDownloads,
@@ -195,6 +198,36 @@ pub enum ProjectEnvironmentPolicy {
     ///
     /// Create an environment if none exists, or replace an invalid virtual environment.
     Preserve,
+}
+
+/// Whether absolute entrypoints in a local project environment refer to another directory.
+fn project_environment_was_moved(root: &Path) -> bool {
+    let cfg = root.join("pyvenv.cfg");
+    // A link at `.venv` can refer to a shared environment. A non-UTF-8 path cannot be recreated.
+    if root.simplified().to_str().is_none()
+        || !fs_err::symlink_metadata(root).is_ok_and(|metadata| metadata.is_dir())
+        || !fs_err::symlink_metadata(&cfg).is_ok_and(|metadata| metadata.is_file())
+    {
+        return false;
+    }
+    let Ok(cfg) = PyVenvConfiguration::parse(cfg) else {
+        return false;
+    };
+    let Some(recorded) = cfg.project_environment_location() else {
+        return false;
+    };
+    if !recorded.is_absolute() || recorded == root.simplified() {
+        return false;
+    }
+
+    match fs_err::metadata(recorded) {
+        Ok(metadata) if metadata.is_dir() => is_same_file(root, recorded).is_ok_and(|same| !same),
+        Ok(_) => true,
+        Err(err) => matches!(
+            err.kind(),
+            io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+        ),
+    }
 }
 
 /// Discover an existing project environment at `root` without validating its compatibility.
@@ -674,7 +707,11 @@ impl<'a> ProjectEnvironmentTarget<'a> {
 #[expect(clippy::large_enum_variant)]
 pub enum ProjectInterpreter {
     /// A compatible interpreter from outside the project, to create a new virtual environment.
-    Interpreter(CompatibleProjectPython),
+    Interpreter {
+        interpreter: CompatibleProjectPython,
+        /// A local environment that needs to be recreated after its location changed.
+        moved_environment: Option<PathBuf>,
+    },
     /// An existing project environment, which may be incompatible under `--no-sync`.
     Environment(PythonEnvironment),
 }
@@ -734,6 +771,7 @@ impl ProjectInterpreter {
         let environment_selection =
             ProjectEnvironmentSelection::from_install_path(target.install_path(), active);
         let centralized = centralized_environments_enabled(&environment_selection, cache);
+        let mut moved_environment = None;
 
         // Prefer `.venv`'s interpreter to keep its compatible cached environment selected; derive
         // the cache root instead of trusting the link target.
@@ -779,7 +817,14 @@ impl ProjectInterpreter {
             };
             if let Some(root) = root
                 && let Some(path) = root.discovery_path()
-                && let Some(environment) = discover_project_environment(
+            {
+                if matches!(policy, ProjectEnvironmentPolicy::Compatible)
+                    && environment_selection.is_default()
+                    && path == target.install_path().join(".venv")
+                    && project_environment_was_moved(path)
+                {
+                    moved_environment = Some(path.to_path_buf());
+                } else if let Some(environment) = discover_project_environment(
                     path,
                     python_request,
                     python_preference,
@@ -788,9 +833,9 @@ impl ProjectInterpreter {
                     policy,
                     centralized,
                     cache,
-                )?
-            {
-                return Ok(Self::Environment(environment));
+                )? {
+                    return Ok(Self::Environment(environment));
+                }
             }
         }
 
@@ -851,13 +896,16 @@ impl ProjectInterpreter {
             )?;
         }
 
-        Ok(Self::Interpreter(project_python.validate(interpreter)?))
+        Ok(Self::Interpreter {
+            interpreter: project_python.validate(interpreter)?,
+            moved_environment,
+        })
     }
 
     /// Convert the [`ProjectInterpreter`] into an [`Interpreter`].
     pub fn into_interpreter(self) -> Interpreter {
         match self {
-            Self::Interpreter(interpreter) => interpreter.into_interpreter(),
+            Self::Interpreter { interpreter, .. } => interpreter.into_interpreter(),
             Self::Environment(environment) => environment.into_interpreter(),
         }
     }
@@ -1027,11 +1075,17 @@ impl ProjectEnvironment {
             }
 
             // Otherwise, create a virtual environment with the discovered interpreter.
-            ProjectInterpreter::Interpreter(interpreter) => {
+            ProjectInterpreter::Interpreter {
+                interpreter,
+                moved_environment,
+            } => {
                 let requested = interpreter.into_requested_interpreter();
                 let upgrade_policy = UpgradePolicy::from_request(requested.request());
                 let interpreter = requested.into_interpreter();
-                let root = if centralized {
+                let moved = moved_environment.is_some();
+                let root = if let Some(root) = moved_environment {
+                    ProjectEnvironmentRoot::Directory(root)
+                } else if centralized {
                     ProjectEnvironmentRoot::Directory(centralized_environment_root(
                         target,
                         &interpreter,
@@ -1052,7 +1106,7 @@ impl ProjectEnvironment {
 
                 // Avoid removing things that are not virtual environments and are outside the
                 // environment cache.
-                let replace_environment = if environment_reference {
+                let replace_environment = if environment_reference || moved {
                     true
                 } else {
                     match (root.try_exists(), root.join("pyvenv.cfg").try_exists()) {
@@ -1103,6 +1157,7 @@ impl ProjectEnvironment {
                     })
                     .map(uv_virtualenv::Prompt::Static)
                     .unwrap_or(uv_virtualenv::Prompt::None);
+                let relocatable = uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault);
 
                 // Under `--dry-run`, avoid modifying the environment.
                 if dry_run.enabled() {
@@ -1115,7 +1170,7 @@ impl ProjectEnvironment {
                         uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         ),
-                        uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
+                        relocatable,
                         uv_virtualenv::Seed::Disabled,
                         upgrade_policy,
                     )?;
@@ -1127,9 +1182,21 @@ impl ProjectEnvironment {
                 }
 
                 if replace_environment {
-                    // Remove environment references directly to preserve their targets.
-                    let removed = if environment_reference {
-                        match uv_fs::remove_symlink(&root) {
+                    // Interpreter selection can take time. Check the location again before removal.
+                    if moved && !project_environment_was_moved(&root) {
+                        return Err(EnvironmentError::InvalidProjectEnvironmentDir(
+                            root,
+                            "it changed while uv was preparing to recreate it".to_string(),
+                        ));
+                    }
+                    // Remove references and moved environments without resolving the final link.
+                    let removed = if environment_reference || moved {
+                        let removed = if environment_reference {
+                            uv_fs::remove_symlink(&root)
+                        } else {
+                            uv_fs::remove_virtualenv(&root)
+                        };
+                        match removed {
                             Ok(()) => true,
                             Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
                             Err(err) => return Err(uv_virtualenv::Error::from(err).into()),
@@ -1173,20 +1240,25 @@ impl ProjectEnvironment {
                     interpreter,
                     prompt,
                     false,
-                    if environment_reference {
+                    if environment_reference || moved {
                         uv_virtualenv::OnExisting::Fail
                     } else {
                         uv_virtualenv::OnExisting::Remove(
                             uv_virtualenv::RemovalReason::ManagedEnvironment,
                         )
                     },
-                    uv_preview::is_enabled(PreviewFeature::RelocatableEnvsDefault),
+                    relocatable,
                     uv_virtualenv::Seed::Disabled,
                     upgrade_policy,
                 )?;
 
                 if centralized {
                     update_project_environment_link(&environment, target, link_error_reporting);
+                } else if !relocatable
+                    && environment_selection.is_default()
+                    && root == target.install_path().join(".venv")
+                {
+                    environment.record_project_environment_location()?;
                 }
 
                 if replace_environment {

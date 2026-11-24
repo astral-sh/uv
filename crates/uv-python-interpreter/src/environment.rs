@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -12,7 +13,9 @@ use uv_fs::{LockedFile, LockedFileError, Simplified};
 use uv_pep440::Version;
 
 use crate::Interpreter;
-use crate::virtualenv::{PyVenvConfiguration, virtualenv_python_executable};
+use crate::virtualenv::{
+    PROJECT_ENVIRONMENT_LOCATION, PyVenvConfiguration, virtualenv_python_executable,
+};
 use uv_python_types::{EnvironmentPreference, Prefix, PythonRequest, Target};
 
 /// A failure while inspecting an existing Python environment.
@@ -281,6 +284,21 @@ impl PythonEnvironment {
             PyVenvConfiguration::set(&content, key, value),
         )?;
         Ok(())
+    }
+
+    /// Record the location of a freshly created non-relocatable local project environment.
+    pub fn record_project_environment_location(&self) -> io::Result<()> {
+        let root = self.root();
+        let cfg = root.join("pyvenv.cfg");
+        if !fs_err::symlink_metadata(root)?.is_dir() || !fs_err::symlink_metadata(&cfg)?.is_file() {
+            return Ok(());
+        }
+        // A JSON string preserves whitespace and keeps the value on one line.
+        let location = serde_json::to_string(root.simplified()).map_err(io::Error::other)?;
+        fs_err::OpenOptions::new()
+            .append(true)
+            .open(cfg)?
+            .write_all(format!("{PROJECT_ENVIRONMENT_LOCATION} = {location}\n").as_bytes())
     }
 
     /// Returns `true` if the environment is "relocatable".

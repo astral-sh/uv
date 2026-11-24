@@ -1131,6 +1131,137 @@ fn sync_unbounded_build_backend() -> Result<()> {
     Ok(())
 }
 
+/// Syncing a moved project repairs console scripts that embed an absolute interpreter path.
+#[test]
+fn sync_moved_environment() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["simple-launcher"]
+
+        [tool.uv]
+        no-index = true
+        find-links = ["."]
+    "#})?;
+    let wheel = "simple_launcher-0.1.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        project.child(wheel),
+    )?;
+
+    context
+        .sync()
+        .current_dir(&project)
+        .arg("--offline")
+        .assert()
+        .success();
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(&project)
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "simple_launcher"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hi from the simple launcher!
+    ");
+
+    let moved = context.temp_dir.child("moved");
+    fs_err::rename(&project, &moved)?;
+    context
+        .sync()
+        .current_dir(&moved)
+        .args(["--locked", "--offline"])
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.run()
+        .current_dir(&moved)
+        .env_remove(EnvVars::VIRTUAL_ENV)
+        .args(["--no-sync", "simple_launcher"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    Hi from the simple launcher!
+    ");
+    Ok(())
+}
+
+/// Absolute entrypoints still work when the original path aliases the moved directory.
+#[test]
+fn sync_moved_environment_preserves_symlink_alias() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context
+        .sync()
+        .current_dir(&project)
+        .arg("--offline")
+        .assert()
+        .success();
+    project.child(".venv/sentinel").touch()?;
+
+    let moved = context.temp_dir.child("moved");
+    fs_err::rename(&project, &moved)?;
+    uv_fs::create_symlink(moved.path(), project.path())?;
+
+    context
+        .sync()
+        .current_dir(&moved)
+        .args(["--locked", "--offline"])
+        .assert()
+        .success();
+    moved
+        .child(".venv/sentinel")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
+/// A linked project environment can be shared with other projects.
+#[test]
+fn sync_moved_environment_preserves_external_target() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let project = context.temp_dir.child("project");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+    "#})?;
+    context
+        .sync()
+        .current_dir(&project)
+        .arg("--offline")
+        .assert()
+        .success();
+    project.child(".venv/sentinel").touch()?;
+
+    let moved = context.temp_dir.child("moved");
+    fs_err::rename(&project, &moved)?;
+    let external = context.temp_dir.child("external");
+    let environment = moved.child(".venv");
+    fs_err::rename(&environment, &external)?;
+    uv_fs::create_symlink(external.path(), environment.path())?;
+
+    context
+        .sync()
+        .current_dir(&moved)
+        .args(["--locked", "--offline"])
+        .assert()
+        .success();
+    // The same external environment remains accessible through the project's link.
+    environment
+        .child("sentinel")
+        .assert(predicate::path::exists());
+    Ok(())
+}
+
 /// With `relocatable-envs-default`, project environments are relocatable by default.
 #[test]
 fn sync_relocatable_envs_default() -> Result<()> {
