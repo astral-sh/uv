@@ -3,7 +3,7 @@ name: "update-issue-context"
 run-name: Issue context for ${{ github.event.issue.number }}
 
 on:
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] NOTE(ww): amply mitigated below
     types: [created]
 
 permissions: {}
