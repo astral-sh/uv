@@ -20,8 +20,8 @@ To change the installation path, use `UV_INSTALL_DIR`:
 
 !!! note
 
-    Changing the installation path only affects where the uv binary is installed. uv will still store
-    its data (cache, Python installations, tools, etc.) in the default locations. See the
+    Changing the installation path only affects where the uv binary is installed. uv will still
+    store its data (cache, Python installations, tools, etc.) in the default locations. See the
     [storage reference](./storage.md) for details on these locations and how to customize them.
 
 ## Disabling shell modifications

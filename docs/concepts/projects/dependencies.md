@@ -113,9 +113,10 @@ $ uv add "httpx>0.1.0"
 
 !!! note
 
-    In this example, we are changing the constraints for the dependency in the `pyproject.toml`.
-    The locked version of the dependency will only change if necessary to satisfy the new
-    constraints. To force the package version to update to the latest within the constraints, use `--upgrade-package <name>`, e.g.:
+    In this example, we are changing the constraints for the dependency in the `pyproject.toml`. The
+    locked version of the dependency will only change if necessary to satisfy the new constraints.
+    To force the package version to update to the latest within the constraints, use
+    `--upgrade-package <name>`, e.g.:
 
     ```console
     $ uv add "httpx>0.1.0" --upgrade-package httpx

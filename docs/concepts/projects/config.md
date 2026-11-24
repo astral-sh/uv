@@ -56,9 +56,9 @@ table of the `pyproject.toml`.
 
 !!! important
 
-    These are only different from [command-line interfaces](#command-line-interfaces) on Windows, where
-    they are wrapped by a GUI executable so they can be started without a console. On other platforms,
-    they behave the same.
+    These are only different from [command-line interfaces](#command-line-interfaces) on Windows,
+    where they are wrapped by a GUI executable so they can be started without a console. On other
+    platforms, they behave the same.
 
 For example, to declare a command called `hello` that invokes the `app` function in the `example`
 module:
@@ -395,13 +395,14 @@ requires-dist = ["torch", "einops"]
 
 !!! tip
 
-    To determine the package metadata for a package like `flash-attn`, navigate to the appropriate Git repository,
-    or look it up on [PyPI](https://pypi.org/project/flash-attn) and download the package's source distribution.
-    The package requirements can typically be found in the `setup.py` or `setup.cfg` file.
+    To determine the package metadata for a package like `flash-attn`, navigate to the appropriate
+    Git repository, or look it up on [PyPI](https://pypi.org/project/flash-attn) and download the
+    package's source distribution. The package requirements can typically be found in the `setup.py`
+    or `setup.cfg` file.
 
-    (If the package includes a built distribution, you can unzip it to find the `METADATA` file; however, the presence
-    of a built distribution would negate the need to provide the metadata upfront, since it would already be available
-    to uv.)
+    (If the package includes a built distribution, you can unzip it to find the `METADATA` file;
+    however, the presence of a built distribution would negate the need to provide the metadata
+    upfront, since it would already be available to uv.)
 
     The `version` field in `tool.uv.dependency-metadata` is optional for registry-based
     dependencies (when omitted, uv will assume the metadata applies to all versions of the package),

@@ -105,8 +105,8 @@ identical packages are merged to keep the number of forks low.
 !!! tip
 
     Forking can be observed in the logs of `uv lock -v` by looking for
-    `Splitting resolution on ...`, `Solving split ... (requires-python: ...)` and `Split ... resolution
-    took ...`.
+    `Splitting resolution on ...`, `Solving split ... (requires-python: ...)` and
+    `Split ... resolution took ...`.
 
 One difficulty in a forking resolver is that where splits occur is dependent on the order packages
 are seen, which is in turn dependent on the preferences, e.g., from `uv.lock`. So it is possible for

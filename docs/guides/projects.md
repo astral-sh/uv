@@ -103,7 +103,8 @@ description or license. You can edit this file manually, or use commands like `u
 
 !!! tip
 
-    See the official [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
+    See the official
+    [`pyproject.toml` guide](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
     for more details on getting started with the `pyproject.toml` format.
 
 You'll also use this file to specify uv [configuration options](../concepts/configuration-files.md)
@@ -222,8 +223,9 @@ environment with all required dependencies at their locked versions.
 
 !!! note
 
-    `uv run` does not remove extraneous packages (those not in the lockfile) from the environment
-    by default. See [handling of extraneous packages](../concepts/projects/sync.md#handling-of-extraneous-packages)
+    `uv run` does not remove extraneous packages (those not in the lockfile) from the environment by
+    default. See
+    [handling of extraneous packages](../concepts/projects/sync.md#handling-of-extraneous-packages)
     for details.
 
 For example, to use `flask`:
@@ -269,7 +271,8 @@ executing a command:
 
 !!! note
 
-    The virtual environment must be active to run scripts and commands in the project without `uv run`. Virtual environment activation differs per shell and platform.
+    The virtual environment must be active to run scripts and commands in the project without
+    `uv run`. Virtual environment activation differs per shell and platform.
 
 See the documentation on [running commands and scripts](../concepts/projects/run.md) in projects for
 more details.

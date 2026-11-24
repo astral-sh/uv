@@ -265,8 +265,9 @@ supported platform.
 
 !!! note
 
-    uv's resolver can compile dependencies for multiple platforms at once (see ["universal resolution"](../../concepts/resolution.md#universal-resolution)),
-    allowing you to use a single `requirements.txt` for all platforms:
+    uv's resolver can compile dependencies for multiple platforms at once (see
+    ["universal resolution"](../../concepts/resolution.md#universal-resolution)), allowing you to
+    use a single `requirements.txt` for all platforms:
 
     ```console
     $ uv pip compile --universal requirements.in

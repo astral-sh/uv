@@ -155,7 +155,8 @@ build-backend = "uv_build"
 
     You can select a different build backend template by using `--build-backend` with `hatchling`,
     `uv_build`, `flit-core`, `pdm-backend`, `setuptools`, `maturin`, or `scikit-build-core`. An
-    alternative backend is required if you want to create a [library with extension modules](#projects-with-extension-modules).
+    alternative backend is required if you want to create a
+    [library with extension modules](#projects-with-extension-modules).
 
 The created module defines a simple API function:
 
@@ -252,9 +253,10 @@ Hello from example-ext!
 
 !!! important
 
-    When creating a project with maturin or scikit-build-core, uv configures [`tool.uv.cache-keys`](../../reference/settings.md#cache-keys)
-    to include common source file types. To force a rebuild, e.g. when changing files outside
-    `cache-keys` or when not using `cache-keys`, use `--reinstall`.
+    When creating a project with maturin or scikit-build-core, uv configures
+    [`tool.uv.cache-keys`](../../reference/settings.md#cache-keys) to include common source file
+    types. To force a rebuild, e.g. when changing files outside `cache-keys` or when not using
+    `cache-keys`, use `--reinstall`.
 
 ## Creating a project without a build system
 

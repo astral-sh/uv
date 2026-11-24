@@ -22,7 +22,9 @@ create a workspace rooted at that package.
 
 !!! tip
 
-    By default, running `uv init` inside an existing package will add the newly created member to the workspace, creating a `tool.uv.workspace` table in the workspace root if it doesn't already exist.
+    By default, running `uv init` inside an existing package will add the newly created member to
+    the workspace, creating a `tool.uv.workspace` table in the workspace root if it doesn't already
+    exist.
 
 In defining a workspace, you must specify the `members` (required) and `exclude` (optional) keys,
 which direct the workspace to include or exclude specific directories as members respectively, and
@@ -206,4 +208,6 @@ to install that member in a separate virtual environment.
 
 !!! note
 
-    As Python does not provide dependency isolation, uv can't ensure that a package uses its declared dependencies and nothing else. For workspaces specifically, uv can't ensure that packages don't import dependencies declared by another workspace member.
+    As Python does not provide dependency isolation, uv can't ensure that a package uses its
+    declared dependencies and nothing else. For workspaces specifically, uv can't ensure that
+    packages don't import dependencies declared by another workspace member.

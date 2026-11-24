@@ -22,7 +22,11 @@ $ uv python install
 
 !!! note
 
-    Python does not publish official distributable binaries. As such, uv uses distributions from the Astral [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone) project. See the [Python distributions](../concepts/python-versions.md#managed-python-distributions) documentation for more details.
+    Python does not publish official distributable binaries. As such, uv uses distributions from the
+    Astral [`python-build-standalone`](https://github.com/astral-sh/python-build-standalone)
+    project. See the
+    [Python distributions](../concepts/python-versions.md#managed-python-distributions)
+    documentation for more details.
 
 Once Python is installed, it will be used by `uv` commands automatically. uv also adds the installed
 version to your `PATH`:
@@ -40,7 +44,8 @@ $ uv python install --default
 
 !!! tip
 
-    See the documentation on [installing Python executables](../concepts/python-versions.md#installing-python-executables)
+    See the documentation on
+    [installing Python executables](../concepts/python-versions.md#installing-python-executables)
     for more details.
 
 ## Installing a specific version
@@ -109,7 +114,9 @@ $ uv venv
 
 !!! tip
 
-    Automatic Python downloads can be [easily disabled](../concepts/python-versions.md#disabling-automatic-python-downloads) if you want more control over when Python is downloaded.
+    Automatic Python downloads can be
+    [easily disabled](../concepts/python-versions.md#disabling-automatic-python-downloads) if you
+    want more control over when Python is downloaded.
 
 <!-- TODO(zanieb): Restore when Python shim management is added
 Note that when an automatic Python installation occurs, the `python` command will not be added to the shell. Use `uv python install-shim` to ensure the `python` shim is installed.

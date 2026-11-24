@@ -14,7 +14,8 @@ CUDA).
 
 !!! note
 
-    Some of the features outlined in this guide require uv version 0.5.3 or later. We recommend upgrading prior to configuring PyTorch.
+    Some of the features outlined in this guide require uv version 0.5.3 or later. We recommend
+    upgrading prior to configuring PyTorch.
 
 ## Installing PyTorch
 
@@ -146,8 +147,8 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "CUDA 11.8"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to use
-    the PyTorch index on Linux and Windows, but fall back to PyPI on macOS:
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv
+    to use the PyTorch index on Linux and Windows, but fall back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
@@ -161,8 +162,8 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "CUDA 12.6"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
-    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv
+    to limit the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
@@ -176,8 +177,8 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "CUDA 12.8"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
-    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv
+    to limit the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
@@ -191,8 +192,8 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "CUDA 13.0"
 
-    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
-    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
+    PyTorch doesn't publish CUDA builds for macOS. As such, we gate on `sys_platform` to instruct uv
+    to limit the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
@@ -206,8 +207,8 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "ROCm 7.2"
 
-    PyTorch doesn't publish ROCm builds for macOS or Windows. As such, we gate on `sys_platform` to instruct uv
-    to limit the PyTorch index to Linux, falling back to PyPI on macOS and Windows:
+    PyTorch doesn't publish ROCm builds for macOS or Windows. As such, we gate on `sys_platform` to
+    instruct uv to limit the PyTorch index to Linux, falling back to PyPI on macOS and Windows:
 
     ```toml
     [tool.uv.sources]
@@ -229,8 +230,8 @@ Next, update the `pyproject.toml` to point `torch` and `torchvision` to the desi
 
 === "Intel GPUs"
 
-    PyTorch doesn't publish Intel GPU builds for macOS. As such, we gate on `sys_platform` to instruct uv to limit
-    the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
+    PyTorch doesn't publish Intel GPU builds for macOS. As such, we gate on `sys_platform` to
+    instruct uv to limit the PyTorch index to Linux and Windows, falling back to PyPI on macOS:
 
     ```toml
     [tool.uv.sources]
@@ -436,8 +437,8 @@ explicit = true
 
 !!! note
 
-    Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to install
-    on macOS when the `cu130` extra is enabled.
+    Since GPU-accelerated builds aren't available on macOS, the above configuration will fail to
+    install on macOS when the `cu130` extra is enabled.
 
 ## Installing GPU-enabled PyTorch extensions
 

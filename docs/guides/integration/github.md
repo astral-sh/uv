@@ -200,8 +200,9 @@ jobs:
 !!! tip
 
     The
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path) can
-    be used to install to the system Python environment instead of creating a virtual environment.
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path)
+    can be used to install to the system Python environment instead of creating a virtual
+    environment.
 
 ## Caching
 
@@ -339,9 +340,9 @@ steps:
 ```
 
 [PAT]:
-  https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
+https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
 [repository secret]:
-  https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
+https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-a-repository
 
 ## Publishing to PyPI
 

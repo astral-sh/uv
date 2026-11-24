@@ -133,7 +133,9 @@ Use the `UV_PYTHON_INSTALL_DIR` environment variable to override the installatio
 
 !!! note
 
-    Changing where Python is installed will not be automatically reflected in existing virtual environments; they will keep referring to the old location, and will need to be updated manually (e.g. by re-creating them).
+    Changing where Python is installed will not be automatically reflected in existing virtual
+    environments; they will keep referring to the old location, and will need to be updated manually
+    (e.g. by re-creating them).
 
 ### Python executables
 

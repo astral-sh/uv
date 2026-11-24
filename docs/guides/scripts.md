@@ -14,9 +14,10 @@ environments.
 !!! note
 
     If you are not familiar with Python environments: every Python installation has an environment
-    that packages can be installed in. Typically, creating [_virtual_ environments](https://docs.python.org/3/library/venv.html) is recommended to
-    isolate packages required by each script. uv automatically manages virtual environments for you
-    and prefers a [declarative](#declaring-script-dependencies) approach to dependencies.
+    that packages can be installed in. Typically, creating
+    [_virtual_ environments](https://docs.python.org/3/library/venv.html) is recommended to isolate
+    packages required by each script. uv automatically manages virtual environments for you and
+    prefers a [declarative](#declaring-script-dependencies) approach to dependencies.
 
 ## Running a script without dependencies
 
@@ -194,7 +195,9 @@ $ uv run example.py
 
 !!! important
 
-    When using inline script metadata, even if `uv run` is [used in a _project_](../concepts/projects/run.md), the project's dependencies will be ignored. The `--no-project` flag is not required.
+    When using inline script metadata, even if `uv run` is
+    [used in a _project_](../concepts/projects/run.md), the project's dependencies will be ignored.
+    The `--no-project` flag is not required.
 
 uv also respects Python version requirements:
 

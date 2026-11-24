@@ -24,10 +24,8 @@ In upstream, the placeholder names are found in
 In this crate, the placeholder names are found in
 [`uv_virtualenv::virtualenv::create()`][crate-placeholders]
 
-[upstream-placeholders]:
-  https://github.com/pypa/virtualenv/blob/dad9369e97f5aef7e33777b18dcdb51b1fdac7bd/src/virtualenv/activation/via_template.py#L43
-[crate-placeholders]:
-  https://github.com/astral-sh/uv/blob/d8f3f03198308be53de51a3a297c85566eabb084/crates/uv-virtualenv/src/virtualenv.rs#L462
+[upstream-placeholders]: https://github.com/pypa/virtualenv/blob/dad9369e97f5aef7e33777b18dcdb51b1fdac7bd/src/virtualenv/activation/via_template.py#L43
+[crate-placeholders]: https://github.com/astral-sh/uv/blob/d8f3f03198308be53de51a3a297c85566eabb084/crates/uv-virtualenv/src/virtualenv.rs#L462
 
 It is important that the placeholder names (as used in the activation scripts) conform to the
 placeholders names used in [this crate's source][crate-placeholders].
@@ -47,8 +45,7 @@ approach][upstream-tcl/tk-approach]).
 
 [pypa/virtualenv#2928]: https://github.com/pypa/virtualenv/pull/2928
 [pypa/virtualenv#2940]: https://github.com/pypa/virtualenv/pull/2940
-[upstream-tcl/tk-approach]:
-  https://github.com/pypa/virtualenv/blob/dad9369e97f5aef7e33777b18dcdb51b1fdac7bd/src/virtualenv/discovery/py_info.py#L140
+[upstream-tcl/tk-approach]: https://github.com/pypa/virtualenv/blob/dad9369e97f5aef7e33777b18dcdb51b1fdac7bd/src/virtualenv/discovery/py_info.py#L140
 
 This upstream implementation is considered an undesirable complexity in this project. As such, the
 upstream TCL/TK related patches shall be omitted when syncing activation scripts with upstream

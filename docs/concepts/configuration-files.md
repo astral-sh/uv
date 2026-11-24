@@ -39,8 +39,8 @@ default = true
 !!! note
 
     `uv.toml` files take precedence over `pyproject.toml` files, so if both `uv.toml` and
-    `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`, and
-    the `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
+    `pyproject.toml` files are present in a directory, configuration will be read from `uv.toml`,
+    and the `[tool.uv]` section in the accompanying `pyproject.toml` will be ignored.
 
 uv will also discover `uv.toml` configuration files in the user- and system-level
 [configuration directories](../reference/storage.md#configuration-directories), e.g., user-level

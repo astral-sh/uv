@@ -13,7 +13,8 @@ environments, running FastAPI applications, and more.
 
 !!! note
 
-    You can view the source code for this guide in the [uv-fastapi-example](https://github.com/astral-sh/uv-fastapi-example) repository.
+    You can view the source code for this guide in the
+    [uv-fastapi-example](https://github.com/astral-sh/uv-fastapi-example) repository.
 
 ## Migrating an existing FastAPI project
 

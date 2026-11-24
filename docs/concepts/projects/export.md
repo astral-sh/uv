@@ -84,7 +84,8 @@ which is useful for security auditing, compliance, and supply chain transparency
 
 !!! important
 
-    Support for exporting to CycloneDX is in [preview](../preview.md), and may change in any future release.
+    Support for exporting to CycloneDX is in [preview](../preview.md), and may change in any future
+    release.
 
 ### What is CycloneDX?
 

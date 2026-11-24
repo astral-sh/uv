@@ -23,7 +23,6 @@ project are called _indirect_ or _transitive dependencies_.
 
 To help demonstrate the resolution process, consider the following dependencies:
 
-<!-- prettier-ignore -->
 - The project depends on `foo` and `bar`.
 - `foo` has one version, 1.0.0:
     - `foo 1.0.0` depends on `lib>=1.0.0`.
@@ -39,7 +38,6 @@ resolution must also include the transitive dependencies, so a version of `lib` 
 
 In some resolutions, there may be more than one valid solution. Consider the following dependencies:
 
-<!-- prettier-ignore -->
 - The project depends on `foo` and `bar`.
 - `foo` has two versions, 1.0.0 and 2.0.0:
     - `foo 1.0.0` has no dependencies.
@@ -67,8 +65,8 @@ Python version, Python implementation, and more.
 
 !!! note
 
-    See the [environment
-    markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers)
+    See the
+    [environment markers](https://packaging.python.org/en/latest/specifications/dependency-specifiers/#environment-markers)
     section in the Python Packaging documentation for more details about markers.
 
 Markers are important for resolution because their values change the required dependencies.
@@ -96,12 +94,13 @@ not a lower bound.
 
 !!! note
 
-    Python's environment markers expose far more information about the current machine
-    than can be expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
+    Python's environment markers expose far more information about the current machine than can be
+    expressed by a simple `--python-platform` argument. For example, the `platform_version` marker
     on macOS includes the time at which the kernel was built, which can (in theory) be encoded in
     package requirements. uv's resolver makes a best-effort attempt to generate a resolution that is
-    compatible with any machine running on the target `--python-platform`, which should be sufficient for
-    most use cases, but may lose fidelity for complex package and platform combinations.
+    compatible with any machine running on the target `--python-platform`, which should be
+    sufficient for most use cases, but may lose fidelity for complex package and platform
+    combinations.
 
 ## Universal resolution
 
