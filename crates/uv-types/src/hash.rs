@@ -103,6 +103,14 @@ impl HashStrategy {
         }
         let mut hashes = constraint_hashes.clone();
         for (id, digests) in requirement_hashes.iter() {
+            // An explicitly empty policy rejects every artifact for this identity.
+            if digests.is_empty() {
+                if constraints.hashes_for_id(id).is_some() {
+                    return Err(HashStrategyError::NoIntersection(id.to_string(), mode));
+                }
+                hashes.insert(id.clone(), Vec::new());
+                continue;
+            }
             let mut digests = digests.clone();
             if mode.is_require() {
                 digests.retain(satisfies_require_hashes);

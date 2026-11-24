@@ -2569,6 +2569,11 @@ impl Lock {
                 .into());
             }
 
+            if !wheel_marker.is_true() {
+                package.build_hashes =
+                    package.additional_build_hashes(dist, index_locations, &requires_python);
+            }
+
             package.add_dependencies(
                 DependencyContext::Production,
                 &requires_python,
@@ -3032,14 +3037,91 @@ impl Lock {
         upgrade_packages
     }
 
+    /// Verify isolated build dependencies, including wheels omitted from runtime artifacts.
+    pub fn build_hash_strategy(&self, root: &Path) -> Result<HashStrategy, LockError> {
+        self.hash_strategy(root, &FxHashSet::default(), true)
+    }
+
+    /// Return the resolution and isolated build policies, sharing their hash map when possible.
+    pub fn hash_strategies(
+        &self,
+        root: &Path,
+        upgrade: &Upgrade,
+    ) -> Result<(HashStrategy, HashStrategy), LockError> {
+        let build = self.build_hash_strategy(root)?;
+        let runtime = if upgrade.is_none() && !self.has_build_hashes() {
+            build.clone()
+        } else {
+            self.hash_strategy(root, &self.upgrade_packages(upgrade), false)?
+        };
+        Ok((runtime, build))
+    }
+
+    /// Restrict the newly resolved build hashes to eligible files trusted by the
+    /// previous lockfile, unless the user explicitly upgraded the release.
+    pub fn retain_trusted_build_hashes(
+        &mut self,
+        previous: &Self,
+        upgrade: &Upgrade,
+    ) -> Result<(), LockError> {
+        if upgrade.is_all() {
+            return Ok(());
+        }
+        let upgraded = previous.upgrade_packages(upgrade);
+        for package in &mut self.packages {
+            let Some(&index) = previous.by_id.get(&package.id) else {
+                continue;
+            };
+            let locked = previous.package(index);
+            if (package.build_hashes.is_empty() && locked.build_hashes.is_empty())
+                || upgraded.contains(package.name())
+            {
+                continue;
+            }
+
+            // A previously locked runtime wheel may now be excluded by a marker.
+            let trusted: FxHashSet<_> = locked
+                .artifact_hashes()
+                .chain(&locked.build_hashes)
+                .collect();
+            let current: FxHashSet<_> = package
+                .artifact_hashes()
+                .chain(&package.build_hashes)
+                .collect();
+
+            // The supplemental hashes have no filenames. Losing one while gaining a new
+            // digest may indicate a replacement, including if the wheel is now reachable.
+            let replaced = !current.is_subset(&trusted)
+                && locked
+                    .build_hashes
+                    .iter()
+                    .any(|digest| !current.contains(digest));
+            if replaced || (!trusted.is_empty() && current.is_disjoint(&trusted)) {
+                return Err(LockErrorKind::ChangedBuildHashes(package.id.name.clone()).into());
+            }
+            package
+                .build_hashes
+                .retain(|digest| trusted.contains(digest));
+        }
+        Ok(())
+    }
+
+    /// Whether build verification includes hashes beyond the runtime artifacts.
+    pub fn has_build_hashes(&self) -> bool {
+        self.packages
+            .iter()
+            .any(|package| !package.build_hashes.is_empty())
+    }
+
     /// Return a [`HashStrategy`] that verifies artifacts recorded in this lockfile.
     ///
     /// Registry hashes apply to package names and versions; direct archive hashes apply to URLs
     /// or paths. Packages in `excluded_packages` are skipped. This strategy does not generate hashes.
-    pub fn hash_strategy(
+    fn hash_strategy(
         &self,
         root: &Path,
         excluded_packages: &FxHashSet<PackageName>,
+        include_build_hashes: bool,
     ) -> Result<HashStrategy, LockError> {
         let mut hashes: FxHashMap<VersionId, Vec<HashDigest>> = FxHashMap::default();
 
@@ -3084,11 +3166,54 @@ impl Lock {
             }
         }
 
+        if include_build_hashes {
+            for ((name, version), common) in self.common_build_hashes() {
+                let id = VersionId::from_registry(name.clone(), version.clone());
+                // An empty entry requires verification and rejects every file. This applies
+                // when sources have disjoint build hashes and no runtime artifact has a hash.
+                let digests = hashes.entry(id).or_default();
+                for hash in common {
+                    if !digests.contains(hash) {
+                        digests.push(hash.clone());
+                    }
+                }
+            }
+        }
+
         if hashes.is_empty() {
             Ok(HashStrategy::default())
         } else {
             Ok(HashStrategy::verify(Arc::new(hashes)))
         }
+    }
+
+    /// The build verifier identifies registry releases by name and version. Only add a
+    /// digest if all locked registries for that release trust it. Digests also present on
+    /// runtime artifacts are already available to the verifier.
+    fn common_build_hashes(&self) -> FxHashMap<(&PackageName, &Version), BTreeSet<&HashDigest>> {
+        let packages = self.packages.iter().filter_map(|package| {
+            if !matches!(package.id.source, Source::Registry(_)) {
+                return None;
+            }
+            let version = package.id.version.as_ref()?;
+            Some(((package.name(), version), &package.build_hashes))
+        });
+        let mut common = FxHashMap::default();
+        for (id, hashes) in packages.clone() {
+            if !hashes.is_empty() {
+                common
+                    .entry(id)
+                    .or_insert_with(|| hashes.iter().collect::<BTreeSet<_>>());
+            }
+        }
+        if !common.is_empty() {
+            for (id, hashes) in packages {
+                if let Some(common) = common.get_mut(&id) {
+                    common.retain(|hash| hashes.contains(*hash));
+                }
+            }
+        }
+        common
     }
 
     /// Return whether every registry artifact in the lockfile has a hash using its index's
@@ -3111,6 +3236,10 @@ impl Lock {
                 |hash: Option<&HashDigest>| hash.is_none_or(|hash| hash.algorithm() != algorithm);
 
             if package.sdist.iter().any(|sdist| mismatched(sdist.hash()))
+                || package
+                    .build_hashes
+                    .iter()
+                    .any(|hash| hash.algorithm() != algorithm)
                 || package
                     .wheels
                     .iter()
@@ -6974,6 +7103,8 @@ pub struct Package {
     id: PackageId,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
+    /// Additional wheel digests used only to verify isolated build dependencies.
+    build_hashes: BTreeSet<HashDigest>,
     /// If there are multiple versions or sources for the same package name, we add the markers of
     /// the fork(s) that contained this version or source, so we can set the correct preferences in
     /// the next resolution.
@@ -7025,6 +7156,7 @@ impl Package {
             id,
             sdist,
             wheels,
+            build_hashes: BTreeSet::new(),
             fork_markers,
             dependencies: vec![],
             optional_dependencies: BTreeMap::default(),
@@ -7033,6 +7165,50 @@ impl Package {
             group_requires_python: BTreeMap::new(),
             metadata,
         })
+    }
+
+    /// Collect digests for registry wheels omitted from the runtime artifacts.
+    ///
+    /// An isolated build can use a locked version outside its runtime dependency marker.
+    /// Its wheels come from the same index and must support the project's Python versions,
+    /// but the build host can have a different platform.
+    fn additional_build_hashes(
+        &self,
+        annotated_dist: &AnnotatedDist,
+        index_locations: &IndexLocations,
+        requires_python: &RequiresPython,
+    ) -> BTreeSet<HashDigest> {
+        let ResolvedDist::Installable { dist, .. } = &annotated_dist.dist else {
+            return BTreeSet::new();
+        };
+        let (index, wheels) = match dist.as_ref() {
+            Dist::Built(BuiltDist::Registry(dist)) => (&dist.best_wheel().index, &dist.wheels),
+            Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => {
+                (&dist.index, &dist.wheels)
+            }
+            Dist::Built(_) | Dist::Source(_) => return BTreeSet::new(),
+        };
+        if wheels.len() == self.wheels.len() {
+            return BTreeSet::new();
+        }
+
+        let algorithm = index_locations.hash_algorithm_for(index);
+        let runtime: FxHashSet<_> = self.artifact_hashes().collect();
+        wheels
+            .iter()
+            .filter(|wheel| &wheel.index == index)
+            .filter(|wheel| {
+                !is_wheel_unreachable_for_marker(
+                    &wheel.filename,
+                    requires_python,
+                    &UniversalMarker::TRUE,
+                    None,
+                )
+            })
+            .filter_map(|wheel| advertised_hash(&wheel.file.hashes, algorithm))
+            .filter(|hash| !runtime.contains(hash))
+            .cloned()
+            .collect()
     }
 
     /// Add the dependencies of a resolution node to the [`Package`] in the given context.
@@ -7659,25 +7835,16 @@ impl Package {
         }
     }
 
-    /// Returns all the hashes associated with this [`Package`].
+    /// Return hashes for the distributions available for installation.
     fn hashes(&self) -> HashDigests {
-        let mut hashes = Vec::with_capacity(
-            usize::from(self.sdist.as_ref().and_then(|sdist| sdist.hash()).is_some())
-                + self
-                    .wheels
-                    .iter()
-                    .map(|wheel| usize::from(wheel.hash.is_some()))
-                    .sum::<usize>(),
-        );
-        if let Some(ref sdist) = self.sdist {
-            if let Some(hash) = sdist.hash() {
-                hashes.push(hash.clone());
-            }
-        }
-        for wheel in &self.wheels {
-            hashes.extend(wheel.hash.clone());
-        }
-        HashDigests::from(hashes)
+        self.artifact_hashes().cloned().collect()
+    }
+
+    fn artifact_hashes(&self) -> impl Iterator<Item = &HashDigest> {
+        self.sdist
+            .iter()
+            .filter_map(SourceDist::hash)
+            .chain(self.wheels.iter().filter_map(|wheel| wheel.hash.as_ref()))
     }
 
     /// Returns the [`ResolvedRepositoryReference`] for the package, if it is a Git source.
@@ -7781,6 +7948,8 @@ struct PackageWire {
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
+    #[serde(default, deserialize_with = "deserialize_build_hashes")]
+    build_hashes: BTreeSet<HashDigest>,
     #[serde(default, rename = "resolution-markers")]
     fork_markers: Vec<SimplifiedMarkerTree>,
     #[serde(default)]
@@ -7948,6 +8117,7 @@ impl PackageWire {
             group_requires_python: self.group_requires_python,
             sdist: self.sdist,
             wheels: self.wheels,
+            build_hashes: self.build_hashes,
             fork_markers: self
                 .fork_markers
                 .into_iter()
@@ -9706,24 +9876,28 @@ fn select_registry_hash(
     index_locations: &IndexLocations,
     filename: &str,
 ) -> Result<Option<HashDigest>, LockError> {
-    let Some(algorithm) = index_locations.hash_algorithm_for(index) else {
-        return Ok(hashes.iter().max().cloned());
-    };
-    warn_index_hash_algorithm_preview();
-
-    hashes
-        .iter()
-        .find(|hash| hash.algorithm() == algorithm)
-        .cloned()
-        .map(Some)
-        .ok_or_else(|| {
-            LockErrorKind::MissingHashAlgorithm {
+    let algorithm = index_locations.hash_algorithm_for(index);
+    let hash = advertised_hash(hashes, algorithm);
+    if let Some(algorithm) = algorithm {
+        warn_index_hash_algorithm_preview();
+        if hash.is_none() {
+            return Err(LockErrorKind::MissingHashAlgorithm {
                 index: index.clone(),
                 filename: filename.to_string(),
                 algorithm,
             }
-            .into()
-        })
+            .into());
+        }
+    }
+    Ok(hash.cloned())
+}
+
+/// Select an advertised digest using the index's algorithm, if specified.
+fn advertised_hash(hashes: &HashDigests, algorithm: Option<HashAlgorithm>) -> Option<&HashDigest> {
+    match algorithm {
+        Some(algorithm) => hashes.iter().find(|hash| hash.algorithm() == algorithm),
+        None => hashes.iter().max(),
+    }
 }
 
 /// Warn if an index-specific hash algorithm is used without its preview feature enabled.
@@ -9734,6 +9908,18 @@ fn warn_index_hash_algorithm_preview() {
             PreviewFeature::IndexHashAlgorithm
         );
     }
+}
+
+/// Deserialize the additional digests used to verify isolated build inputs.
+fn deserialize_build_hashes<'de, D>(deserializer: D) -> Result<BTreeSet<HashDigest>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let hashes: Vec<String> = serde::Deserialize::deserialize(deserializer)?;
+    hashes
+        .into_iter()
+        .map(|hash| hash.parse().map_err(serde::de::Error::custom))
+        .collect()
 }
 
 /// Deserialize an optional hash from the lockfile's `{algorithm}:{digest}` string format.
@@ -10276,6 +10462,11 @@ enum LockErrorKind {
     /// An artifact does not satisfy the lockfile's hash requirement.
     #[error(transparent)]
     Hash(#[from] LockHashError),
+    /// Re-resolution could replace previously trusted files or discard the last trusted hash.
+    #[error(
+        "Cannot preserve the locked build hashes for `{0}`. Use `--upgrade-package {0}` to accept the current files"
+    )]
+    ChangedBuildHashes(PackageName),
     /// An error that occurs when an index requires a hash algorithm that an artifact does not
     /// advertise.
     #[error(
@@ -11017,7 +11208,7 @@ mod tests {
     }
 
     #[test]
-    fn hash_strategy_includes_direct_and_local_wheels() {
+    fn hash_strategies_for_locked_wheels() {
         let lock: Lock = toml::from_str(
             r#"
 version = 1
@@ -11035,12 +11226,38 @@ name = "local"
 version = "1.0.0"
 source = { path = "local-1.0.0-py3-none-any.whl" }
 wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb" }]
+
+[[package]]
+name = "registry"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+build-hashes = ["sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb"]
+
+[[package]]
+name = "registry"
+version = "1.0.0"
+source = { registry = "https://another.example.com/simple" }
+build-hashes = [
+    "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
+    "sha256:abababababababababababababababababababababababababababababababab",
+]
+
+[[package]]
+name = "disjoint"
+version = "1.0.0"
+source = { registry = "https://example.com/simple" }
+build-hashes = ["sha256:abababababababababababababababababababababababababababababababab"]
+
+[[package]]
+name = "disjoint"
+version = "1.0.0"
+source = { registry = "https://another.example.com/simple" }
 "#,
         )
         .expect("valid lock");
         let root = std::env::current_dir().expect("current directory");
-        let hasher = lock
-            .hash_strategy(&root, &FxHashSet::default())
+        let (hasher, build_hasher) = lock
+            .hash_strategies(&root, &Upgrade::default())
             .expect("valid source paths");
         let digest = HashDigest::from_str(
             "sha256:53a42340ae36747fb1471f9b4b7958be1f6e2e5fc234f931aafa3e454fd31dfb",
@@ -11066,6 +11283,24 @@ wheels = [{ filename = "local-1.0.0-py3-none-any.whl", hash = "sha256:53a42340ae
         assert_eq!(
             hasher.archive_policy_for_url(&unknown),
             ArchiveHashPolicy::None
+        );
+        let name = PackageName::from_str("registry").expect("valid name");
+        let version = "1.0.0".parse().expect("valid version");
+        assert_eq!(
+            hasher.archive_policy_for_package(&name, &version),
+            ArchiveHashPolicy::None
+        );
+        assert_eq!(
+            build_hasher.archive_policy_for_package(&name, &version),
+            ArchiveHashPolicy::Any(slice::from_ref(&digest))
+        );
+        let name = PackageName::from_str("disjoint").expect("valid name");
+        let build_hasher = build_hasher
+            .with_constraint_hashes(&hasher)
+            .expect("compatible constraints");
+        assert_eq!(
+            build_hasher.archive_policy_for_package(&name, &version),
+            ArchiveHashPolicy::Any(&[])
         );
     }
 

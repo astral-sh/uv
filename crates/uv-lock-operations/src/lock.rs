@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use rustc_hash::FxHashSet;
 use tracing::debug;
 
 use uv_cache::{Cache, Refresh};
@@ -31,7 +30,7 @@ use uv_resolver::{
     FlatIndex, OptionsBuilder, PythonRequirement, ResolverEnvironment, UniversalMarker,
 };
 use uv_settings::{LockedSource, ResolverSettings};
-use uv_types::{BuildIsolation, HashStrategy, SourceTreeEditablePolicy};
+use uv_types::{BuildIsolation, HashStrategy, HashVerification, SourceTreeEditablePolicy};
 use uv_warnings::{warn_user, warn_user_once, warn_user_with_chain};
 use uv_workspace::WorkspaceCache;
 
@@ -659,39 +658,30 @@ async fn do_lock(
         .artifact_environments(artifact_environments.clone())
         .minimum_libc_version(minimum_libc_version)
         .build();
-    // Checking an existing lockfile may build metadata and install build dependencies. Verify any
-    // artifacts recorded in that lockfile, including for an ordinary unlocked command.
-    let (locked_hasher, locked_build_hasher) = if let Some(existing_lock) = existing_lock.as_ref() {
-        let locked_hasher =
-            existing_lock.hash_strategy(target.install_path(), &FxHashSet::default())?;
-        let build_hasher = HashStrategy::from_constraints(
-            &existing_lock.build_constraints(target.install_path()),
-            Some(&interpreter.to_resolver_marker_environment()),
-            *build_hash_checking,
-        )?;
-        let locked_build_hasher = locked_hasher
-            .clone()
-            .with_constraint_hashes(&build_hasher)?;
-        (locked_hasher, locked_build_hasher)
-    } else {
-        (HashStrategy::default(), HashStrategy::default())
-    };
     // Re-resolving an outdated lock does not authorize replacing known artifacts. Only an
     // explicit unlocked upgrade releases the selected packages' hashes.
     let hash_upgrade = match mode {
         LockMode::Locked(..) => &Upgrade::default(),
         LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => upgrade,
     };
-    let resolution_hasher = if hash_upgrade.is_none() {
-        locked_hasher.clone()
-    } else if let Some(existing_lock) = existing_lock.as_ref() {
-        // An explicit upgrade allows replacing the selected packages' files, so do not require
-        // them to match the hashes recorded in the lockfile.
-        let upgrade_packages = existing_lock.upgrade_packages(hash_upgrade);
-        existing_lock.hash_strategy(target.install_path(), &upgrade_packages)?
-    } else {
-        HashStrategy::default()
-    };
+    // Checking an existing lockfile may build metadata and install build dependencies. Verify any
+    // artifacts recorded in that lockfile, including for an ordinary unlocked command.
+    let (resolution_hasher, build_artifacts, locked_build_hasher) =
+        if let Some(existing_lock) = existing_lock.as_ref() {
+            let (resolution_hasher, build_artifacts) =
+                existing_lock.hash_strategies(target.install_path(), hash_upgrade)?;
+            let build_hasher = HashStrategy::from_constraints(
+                &existing_lock.build_constraints(target.install_path()),
+                Some(&interpreter.to_resolver_marker_environment()),
+                *build_hash_checking,
+            )?;
+            let locked_build_hasher = build_artifacts
+                .clone()
+                .with_constraint_hashes(&build_hasher)?;
+            (resolution_hasher, build_artifacts, locked_build_hasher)
+        } else {
+            Default::default()
+        };
     let hasher = HashStrategy::collect(HashCollection::Url)
         .with_verification(resolution_hasher.verification().clone());
 
@@ -702,8 +692,8 @@ async fn do_lock(
     )?;
     // Explicit build constraints apply even when fresh resolution can replace lockfile hashes.
     let resolution_build_hasher = match mode {
-        LockMode::Locked(..) => locked_hasher.with_constraint_hashes(&build_hasher)?,
-        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => build_hasher,
+        LockMode::Locked(..) => build_artifacts.with_constraint_hashes(&build_hasher)?,
+        LockMode::Write(_) | LockMode::DryRun(_) | LockMode::Frozen(_) => build_hasher.clone(),
     };
 
     // TODO(charlie): These are all default values. We should consider whether we want to make them
@@ -771,7 +761,7 @@ async fn do_lock(
     );
 
     // If any of the resolution-determining settings changed, invalidate the lock.
-    let existing_lock = if let Some(existing_lock) = existing_lock {
+    let validated_lock = if let Some(existing_lock) = existing_lock.as_ref() {
         let validation_build_dispatch = build_dispatch.fork(&locked_build_hasher);
         let database = DistributionDatabase::new(
             &client,
@@ -839,12 +829,13 @@ async fn do_lock(
         None
     };
 
-    match existing_lock {
+    match validated_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.
             logger.on_complete(lock.len(), start, printer)?;
 
+            let lock = existing_lock.expect("validated an existing lock");
             Ok((LockResult::Unchanged(lock), None))
         }
 
@@ -870,7 +861,7 @@ async fn do_lock(
             .with_first_party_packages(&first_party_packages);
 
             // Determine whether we can reuse the existing package versions.
-            let versions_lock = existing_lock.as_ref().and_then(|lock| match &lock {
+            let versions_lock = validated_lock.as_ref().and_then(|lock| match lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
                 ValidatedLock::Preferable(lock, _) => Some(lock),
                 ValidatedLock::Versions(lock, _) => Some(lock),
@@ -890,7 +881,7 @@ async fn do_lock(
             }
 
             // Determine whether we can reuse the existing package forks.
-            let forks_lock = existing_lock.as_ref().and_then(|lock| match &lock {
+            let forks_lock = validated_lock.as_ref().and_then(|lock| match lock {
                 ValidatedLock::Satisfies(lock) => Some(lock),
                 ValidatedLock::Preferable(lock, _) => Some(lock),
                 ValidatedLock::Versions(..) => None,
@@ -998,10 +989,6 @@ async fn do_lock(
             )
             .relative_to(target.install_path())?;
 
-            let (previous, reason) = existing_lock.map_or((None, None), |lock| {
-                let (lock, reason) = lock.into_parts();
-                (Some(lock), reason)
-            });
             let lock = Lock::from_resolution(
                 &resolution,
                 manifest,
@@ -1028,7 +1015,7 @@ async fn do_lock(
             .with_member_group_metadata(packages)?
             .with_workspace_group_metadata(workspace_group_metadata);
 
-            let lock = if let Some(recorder) = recorder {
+            let mut lock = if let Some(recorder) = recorder {
                 lock.prune_unused(recorder.take())
             } else if preview.is_enabled(PreviewFeature::MissingExcludeNewerPackageLock) {
                 lock.without_unused_exclude_newer_packages()
@@ -1036,6 +1023,22 @@ async fn do_lock(
                 lock
             };
 
+            if let Some(previous) = existing_lock.as_ref() {
+                lock.retain_trusted_build_hashes(previous, hash_upgrade)?;
+            }
+
+            // Check that the newly locked digests are consistent with the build constraints
+            // before writing a lockfile that would fail its own validation.
+            if matches!(build_hasher.verification(), HashVerification::IfPresent(hashes) | HashVerification::Required(hashes) if !hashes.is_empty())
+                && lock.has_build_hashes()
+            {
+                lock.build_hash_strategy(target.install_path())?
+                    .with_constraint_hashes(&build_hasher)?;
+            }
+
+            let valid = validated_lock.is_some();
+            let reason = validated_lock.and_then(ValidatedLock::into_reason);
+            let previous = existing_lock.filter(|_| valid);
             let unchanged = if let Some(check_lockfile_contents) = check_lockfile_contents {
                 previous.is_some() && check_lockfile_contents == lock.to_toml()?.as_str()
             } else {

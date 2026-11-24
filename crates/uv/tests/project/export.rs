@@ -2188,6 +2188,16 @@ fn requirements_txt_dependency_conflicting_markers() -> Result<()> {
                 { url = "https://files.pythonhosted.org/packages/c9/6e/751437067affe7ac0944b1ad4856ec11650da77f0dd8f305fae1117ef7bb/cffi-1.16.0-cp312-cp312-win32.whl", hash = "sha256:b2ca4e77f9f47c55c194982e10f058db063937845bb2b7a86c84a6cfe0aefa8b", size = 173564, upload-time = "2023-09-28T18:01:23.527Z" },
                 { url = "https://files.pythonhosted.org/packages/e9/63/e285470a4880a4f36edabe4810057bd4b562c6ddcc165eacf9c3c7210b40/cffi-1.16.0-cp312-cp312-win_amd64.whl", hash = "sha256:68678abf380b42ce21a5f2abde8efee05c114c2fdb2e9eef2efdb0257fba1235", size = 181956, upload-time = "2023-09-28T18:01:24.971Z" },
             ]
+            build-hashes = [
+                "sha256:2d92b25dbf6cae33f65005baf472d2c245c050b1ce709cc4588cdcdd5495b520",
+                "sha256:68e7c44931cc171c54ccb702482e9fc723192e88d25a0e133edd7aff8fcd1f6e",
+                "sha256:88e2b3c14bdb32e440be531ade29d3c50a1a59cd4e51b1dd8b0865c54ea5d2e2",
+                "sha256:abd808f9c129ba2beda4cfc53bde801e5bcf9d6e0f22f095e45327c038bfe68e",
+                "sha256:b7be2d771cdba2942e13215c4e340bfd76398e9227ad10402a8767ab1865d2e6",
+                "sha256:e715596e683d2ce000574bae5d07bd522c781a822866c20495e52520564f0969",
+                "sha256:fa3a0128b152627161ce47201262d3140edb5a5c3da88d73a1b790a959126956",
+                "sha256:fcc8eb6d5902bb1cf6dc4f187ee3ea80a1eba0a89aba40a5cb20a5087d961357",
+            ]
 
             [[package]]
             name = "idna"
@@ -3770,6 +3780,56 @@ fn devrequirements_txt_() -> Result<()> {
     ----- stderr -----
     warning: The `tool.uv.dev-dependencies` field (used in `pyproject.toml`) is deprecated and will be removed in a future release; use `dependency-groups.dev` instead
     Resolved 5 packages in [TIME]
+    ");
+
+    Ok(())
+}
+
+/// The only advertised digest belongs to a filtered wheel. A pin without a hash
+/// would let a subsequent install accept new files added to the same release.
+#[cfg(feature = "test-universal")]
+#[test]
+fn requirements_txt_last_filtered_hash() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["demo; sys_platform == 'linux'"]
+    "#})?;
+    context.temp_dir.child("uv.lock").write_str(indoc! {r#"
+        version = 1
+        requires-python = ">=3.12"
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [{ name = "demo", marker = "sys_platform == 'linux'" }]
+
+        [[package]]
+        name = "demo"
+        version = "1.0.0"
+        source = { registry = "https://example.org/simple" }
+        sdist = { url = "https://example.org/demo-1.0.0.tar.gz" }
+        build-hashes = ["sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-header", "--no-annotate"]), @r"
+    exit_code: 0 (success)
+    ----- stdout -----
+    --require-hashes
+    demo==1.0.0 ; sys_platform == 'linux'
+    ");
+
+    uv_snapshot!(context.filters(), context.export().args(["--frozen", "--no-header", "--no-annotate", "--no-hashes"]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    demo==1.0.0 ; sys_platform == 'linux'
     ");
 
     Ok(())

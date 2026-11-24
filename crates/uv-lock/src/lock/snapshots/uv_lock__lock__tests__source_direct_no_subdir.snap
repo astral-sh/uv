@@ -69,6 +69,7 @@ Ok(
                 },
                 sdist: None,
                 wheels: [],
+                build_hashes: {},
                 fork_markers: [],
                 dependencies: [],
                 optional_dependencies: {},

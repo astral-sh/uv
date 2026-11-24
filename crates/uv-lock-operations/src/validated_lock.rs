@@ -24,23 +24,23 @@ use crate::{LockMismatchReason, LockValidationError};
 
 /// Whether an existing lockfile can satisfy or guide a new resolution.
 #[derive(Debug)]
-pub enum ValidatedLock {
+pub enum ValidatedLock<'a> {
     /// An existing lockfile was provided, but its contents should be ignored.
-    Unusable(Lock, LockMismatchReason),
+    Unusable(&'a Lock, LockMismatchReason),
     /// An existing lockfile was provided, and the locked versions should be preferred if possible,
     /// though the forks should be ignored.
-    Versions(Lock, LockMismatchReason),
+    Versions(&'a Lock, LockMismatchReason),
     /// An existing lockfile was provided, and the locked versions and forks should be preferred if
     /// possible, even though the lockfile does not satisfy the workspace requirements.
-    Preferable(Lock, LockMismatchReason),
+    Preferable(&'a Lock, LockMismatchReason),
     /// An existing lockfile was provided, and it satisfies the workspace requirements.
-    Satisfies(Lock),
+    Satisfies(&'a Lock),
 }
 
-impl ValidatedLock {
+impl<'a> ValidatedLock<'a> {
     /// Validate a [`Lock`] against its requirements and resolution policy.
     pub async fn validate(
-        lock: Lock,
+        lock: &'a Lock,
         install_path: &Path,
         packages: &BTreeMap<PackageName, WorkspaceMember>,
         members: &[PackageName],
@@ -346,20 +346,14 @@ impl ValidatedLock {
         !matches!(self, Self::Unusable(..))
     }
 
-    /// Convert the [`ValidatedLock`] into a [`Lock`].
+    /// Return the reason the lockfile requires re-resolution.
     #[must_use]
-    pub fn into_lock(self) -> Lock {
-        self.into_parts().0
-    }
-
-    /// Convert the [`ValidatedLock`] into its lockfile and optional mismatch reason.
-    #[must_use]
-    pub(crate) fn into_parts(self) -> (Lock, Option<LockMismatchReason>) {
+    pub(crate) fn into_reason(self) -> Option<LockMismatchReason> {
         match self {
-            Self::Unusable(lock, reason)
-            | Self::Preferable(lock, reason)
-            | Self::Versions(lock, reason) => (lock, Some(reason)),
-            Self::Satisfies(lock) => (lock, None),
+            Self::Unusable(_, reason) | Self::Preferable(_, reason) | Self::Versions(_, reason) => {
+                Some(reason)
+            }
+            Self::Satisfies(_) => None,
         }
     }
 }

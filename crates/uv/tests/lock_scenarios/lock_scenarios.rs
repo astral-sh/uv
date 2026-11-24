@@ -5477,6 +5477,11 @@ fn unreachable_wheels() -> Result<()> {
         wheels = [
             { url = "http://[LOCALHOST]/files/a-1.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:559a9c629536d99c1213064c303dcc6ee8dd2917824c0a0f6549f94d0be02abd", upload-time = "2024-03-24T00:00:00Z" },
         ]
+        build-hashes = [
+            "sha256:3ac372465ecc85567df4206c0a287a5bb9f19ed2f9ffa2fa57bfbff9489612bd",
+            "sha256:956189706b65f0f6eb554156cfc5c68baa6bb704ba21bbc052ca62bff0b300b7",
+            "sha256:e13362b40e9d692cc28b4d65fe77145c7cf81cdf5eb8dc7e3dcb02a906ca42b0",
+        ]
 
         [[package]]
         name = "b"
@@ -5487,6 +5492,10 @@ fn unreachable_wheels() -> Result<()> {
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4d0fc532c5d6e2f11ca522dfd3684b50b132dd1db78fba3ad510023f4d5830b7", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp312-cp312-musllinux_1_1_armv7l.whl", hash = "sha256:8f328487f947ee5119d348f2c73ab9119dd29349b840f6f26e0d351245d6084b", upload-time = "2024-03-24T00:00:00Z" },
         ]
+        build-hashes = [
+            "sha256:38c6baa53f8146850abfc032a2ac67406dcb41a589cbb8bb493661b79b100fd2",
+            "sha256:b3c1f44a8e076fa1fa9c6829513a56cb13b96c61eb12b08ef12331ebb4783d23",
+        ]
 
         [[package]]
         name = "c"
@@ -5495,6 +5504,11 @@ fn unreachable_wheels() -> Result<()> {
         sdist = { url = "http://[LOCALHOST]/files/c-1.0.0.tar.gz", hash = "sha256:699a07ff61aab66fcba4883a94c6d2b61afb7797fa956ae36f2efdf30d9dfbc7", upload-time = "2024-03-24T00:00:00Z" }
         wheels = [
             { url = "http://[LOCALHOST]/files/c-1.0.0-cp312-cp312-macosx_14_0_x86_64.whl", hash = "sha256:a25d2ba9ff1417f63313691a2f686f30b617a8696329023e44b7f7fc96573598", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        build-hashes = [
+            "sha256:212d36f13dfe51725f77efad83e592d84f1e8a08895d91bddf80858a963e32dd",
+            "sha256:8525369d6d0f8138c9dcb7b0811c3b6fb9034d3d0f4a43af4429816129057a70",
+            "sha256:ca9a176464db84b035eca193125f60d49f6a64f171836c81bff0e396257c2286",
         ]
 
         [[package]]
@@ -5966,6 +5980,11 @@ fn specific_architecture() -> Result<()> {
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-macosx_10_9_x86_64.whl", hash = "sha256:afc62d392afde77dc8cb1a76ca661ea28622a990e3655d96b101301526790393", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/b-1.0.0-cp313-cp313-manylinux2010_x86_64.whl", hash = "sha256:baa416bab7cc0d502bc96bc57672f2fa83dd56b7dc37b701126e16fcc8ce115a", upload-time = "2024-03-24T00:00:00Z" },
         ]
+        build-hashes = [
+            "sha256:389bbfb1037c3644566b6c880f037e9b836f6ff0fb5c1bf0b3ac0534b546fe50",
+            "sha256:4c1861cfbaeded8dbdfb183ae20ca3dcb1450bcc285377791c1c5e96f59e8507",
+            "sha256:a2a67d6a4da7b2ef67e6883b299cc67b0e82321986767bb3b52392eb604ce53a",
+        ]
 
         [[package]]
         name = "c"
@@ -5977,6 +5996,11 @@ fn specific_architecture() -> Result<()> {
             { url = "http://[LOCALHOST]/files/c-1.0.0-cp313-cp313-macosx_10_9_arm64.whl", hash = "sha256:27e36c0dab216a5e265e247d2fb7cab31448beb97cefc22cce301885210b54df", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/c-1.0.0-cp313-cp313-manylinux2010_aarch64.whl", hash = "sha256:4d267230c94b48fb96c8eabadfd39eeb5efcb5d712f699feba087b1bb7ee18b5", upload-time = "2024-03-24T00:00:00Z" },
         ]
+        build-hashes = [
+            "sha256:0503ce710195670bfe157079852fb95a606209e725006dfd6bac4327d9d9eddc",
+            "sha256:80361de7faeda543aebe42b49e291477185aaba6a03a91a8b7121ad9fe710ae8",
+            "sha256:aa79f82f6c83d3e4b9b8eab932cc483f4f06407358ae7a0a7bed2b3e8364ad64",
+        ]
 
         [[package]]
         name = "d"
@@ -5986,6 +6010,12 @@ fn specific_architecture() -> Result<()> {
             { url = "http://[LOCALHOST]/files/d-1.0.0-cp313-cp313-freebsd_13_aarch64.whl", hash = "sha256:faa00bef937a8020e48e398b106bf2085b327128af2e0a91a1596dfa07035b0a", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/d-1.0.0-cp313-cp313-freebsd_13_x86_64.whl", hash = "sha256:0535a2b64b540cf7ab4e124fa4673054113fd4d3957ae6b77b63833729e308c9", upload-time = "2024-03-24T00:00:00Z" },
             { url = "http://[LOCALHOST]/files/d-1.0.0-cp313-cp313-manylinux2010_i686.whl", hash = "sha256:66575b89a885afc891c6c84589a50b2f5112a0d1731c924df1fd376010e659e8", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+        build-hashes = [
+            "sha256:1ec76c105ec6f911f0bb30d99564cb2506bc66305ba53f8951a87cafef92362b",
+            "sha256:29da21b79d72f1ba8a7cdcf889491676f1460d425980352882231786a592841a",
+            "sha256:8234e45553c9f786ce0778bcc93728c52977fda70852f4ad01851ff24a06b532",
+            "sha256:a4ba1cac7e7a9da8a2f43150579619bd49f0002945f00c8478d0de0ec65c8bc2",
         ]
 
         [[package]]
