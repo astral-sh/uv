@@ -78,6 +78,10 @@ def upload_request(metadata: dict, token: str | None) -> dict:
     )
 
 
+class TransientUploadError(RuntimeError):
+    """Storage returned a failure that can be retried."""
+
+
 def storage_request(
     method: str, url: str, headers: dict, body: Iterable[bytes] | bytes
 ) -> tuple[str | None, bytes]:
@@ -101,6 +105,10 @@ def storage_request(
                 headers=headers,
             )
             response = connection.getresponse()
+            if response.status in {408, 429, 500, 502, 503, 504}:
+                raise TransientUploadError(
+                    f"Profile upload failed with status {response.status}"
+                )
             if not 200 <= response.status < 300:
                 raise RuntimeError(
                     f"Profile upload failed with status {response.status}"
@@ -108,6 +116,8 @@ def storage_request(
             return response.getheader("ETag"), response.read()
         finally:
             connection.close()
+    except (ConnectionError, TimeoutError, http.client.IncompleteRead):
+        raise TransientUploadError("Profile upload connection failed") from None
     except (OSError, ValueError, http.client.HTTPException):
         raise RuntimeError("Profile upload failed") from None
 
@@ -284,7 +294,7 @@ class MultipartUpload:
         self.etags[index] = etag
         return etag
 
-    def finish(self) -> None:
+    def finish(self, *, retries: int = 0) -> None:
         if len(self.etags) != len(self.parts):
             raise ValueError("Missing profile parts")
         root = ET.Element("CompleteMultipartUpload")
@@ -296,16 +306,34 @@ class MultipartUpload:
             key.lower(): value for key, value in self.completion["headers"].items()
         }
         headers.setdefault("content-type", "application/xml")
-        _, body = storage_request(
-            "POST", self.completion["url"], headers, ET.tostring(root)
-        )
+        payload = ET.tostring(root)
+        for attempt in range(retries + 1):
+            try:
+                self.send_completion(headers, payload)
+                return
+            except TransientUploadError:
+                if attempt == retries:
+                    raise
+                time.sleep(2**attempt)
+
+    def send_completion(self, headers: dict, payload: bytes) -> None:
+        _, body = storage_request("POST", self.completion["url"], headers, payload)
         # S3 can send an error in the body of an HTTP 200 response.
         try:
             result = ET.fromstring(body.strip())
         except ET.ParseError:
             raise ValueError("Invalid profile upload completion response") from None
-        if result.tag.rsplit("}", 1)[-1] != "CompleteMultipartUploadResult":
-            raise ValueError("Profile upload did not complete")
+        tag = result.tag.rsplit("}", 1)[-1]
+        if tag == "CompleteMultipartUploadResult":
+            return
+        if tag == "Error" and result.findtext("{*}Code") in {
+            "InternalError",
+            "ServiceUnavailable",
+            "SlowDown",
+            "RequestTimeout",
+        }:
+            raise TransientUploadError("Profile upload did not complete")
+        raise ValueError("Profile upload did not complete")
 
 
 class CaptureServer(ThreadingHTTPServer):
@@ -322,7 +350,7 @@ class CaptureServer(ThreadingHTTPServer):
         self.ref = ref
         self.event = event
         self.nonce = secrets.token_urlsafe()
-        self.pending: tuple[dict, str | MultipartUpload] | None = None
+        self.pending: tuple[dict, str | MultipartUpload, dict] | None = None
         self.lock = threading.Lock()
         self.partial = directory / "profile.partial"
         self.complete = False
@@ -362,7 +390,7 @@ class CaptureHandler(BaseHTTPRequestHandler):
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
             if self.path == f"/{self.server.nonce}/complete" and self.server.pending:
-                metadata, upload = self.server.pending
+                metadata, upload, _ = self.server.pending
                 if not isinstance(upload, MultipartUpload):
                     raise ValueError("Unexpected multipart completion")
                 # Build the completion from the ETags storage returned. Neither
@@ -380,7 +408,7 @@ class CaptureHandler(BaseHTTPRequestHandler):
                 self.respond(404, {})
                 return
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 1024 * 1024 or self.server.complete:
+            if not 0 < length <= 1024 * 1024:
                 raise ValueError("Unexpected metadata upload")
             metadata = json.loads(self.rfile.read(length))
             verify_recording(
@@ -394,28 +422,32 @@ class CaptureHandler(BaseHTTPRequestHandler):
             token = self.headers.get("Authorization")
             with self.server.lock:
                 if self.server.pending:
-                    raise ValueError("Profile upload already started")
-                response = upload_request(metadata, token)
-                if metadata["version"] == 12:
-                    upload = MultipartUpload(metadata, response["multipartUpload"])
-                    self.server.partial.touch(exist_ok=False)
-                    self.server.pending = metadata, upload
-                    response["multipartUpload"] = {
-                        "parts": [
-                            {
-                                "url": f"{self.server.endpoint}/part/{index}",
-                                "headers": {},
-                            }
-                            for index in range(len(upload.parts))
-                        ],
-                        "complete": {
-                            "url": f"{self.server.endpoint}/complete",
-                            "headers": {},
-                        },
-                    }
+                    original, _, response = self.server.pending
+                    if metadata != original:
+                        raise ValueError("Profile upload already started")
                 else:
-                    self.server.pending = metadata, response["uploadUrl"]
-                    response["uploadUrl"] = f"{self.server.endpoint}/profile"
+                    response = upload_request(metadata, token)
+                    upload: str | MultipartUpload
+                    if metadata["version"] == 12:
+                        upload = MultipartUpload(metadata, response["multipartUpload"])
+                        self.server.partial.touch(exist_ok=False)
+                        response["multipartUpload"] = {
+                            "parts": [
+                                {
+                                    "url": f"{self.server.endpoint}/part/{index}",
+                                    "headers": {},
+                                }
+                                for index in range(len(upload.parts))
+                            ],
+                            "complete": {
+                                "url": f"{self.server.endpoint}/complete",
+                                "headers": {},
+                            },
+                        }
+                    else:
+                        upload = response["uploadUrl"]
+                        response["uploadUrl"] = f"{self.server.endpoint}/profile"
+                    self.server.pending = metadata, upload, response
             self.respond(200, response)
         except (KeyError, OSError, RuntimeError, ValueError) as error:
             print(f"CodSpeed capture failed: {type(error).__name__}", flush=True)
@@ -427,7 +459,7 @@ class CaptureHandler(BaseHTTPRequestHandler):
             if not self.server.pending:
                 self.respond(404, {})
                 return
-            metadata, upload = self.server.pending
+            metadata, upload, _ = self.server.pending
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0:
                 raise ValueError("Empty profile upload")
@@ -446,12 +478,18 @@ class CaptureHandler(BaseHTTPRequestHandler):
                 return
             with self.server.lock:
                 if self.server.complete:
-                    raise ValueError("Profile already uploaded")
-                with self.server.partial.open("wb") as output:
-                    output.writelines(chunks(self.rfile, length))
-                verify_profile(self.server.partial, metadata)
-                upload_profile(upload, self.server.partial, metadata)
-                self.server.publish(metadata)
+                    with (self.server.directory / "profile.tar").open("rb") as profile:
+                        if length != os.fstat(profile.fileno()).st_size or any(
+                            chunk != profile.read(len(chunk))
+                            for chunk in chunks(self.rfile, length)
+                        ):
+                            raise ValueError("Invalid profile retry")
+                else:
+                    with self.server.partial.open("wb") as output:
+                        output.writelines(chunks(self.rfile, length))
+                    verify_profile(self.server.partial, metadata)
+                    upload_profile(upload, self.server.partial, metadata)
+                    self.server.publish(metadata)
             self.respond(200, {})
         except (KeyError, OSError, RuntimeError, ValueError) as error:
             print(f"CodSpeed capture failed: {type(error).__name__}", flush=True)
@@ -648,7 +686,7 @@ def import_profiles(directory: Path, source_run: str, source_sha: str) -> None:
             with profile.open("rb") as stream:
                 for index in range(len(upload.parts)):
                     upload.put(index, stream)
-            upload.finish()
+            upload.finish(retries=3)
         else:
             upload_profile(response["uploadUrl"], profile, metadata)
         print(f"Imported {mode} profiles from uv run {source_run}")
