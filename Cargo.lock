@@ -121,9 +121,9 @@ dependencies = [
 
 [[package]]
 name = "archive-trait"
-version = "0.0.16"
+version = "0.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5040ca935c09888e7dfb04383b4d62fa3571e25bc66b6f345b591e97958524"
+checksum = "24ed9d753c6bf6ad6855ea6295df8aa0828bc9ee091633b49fe240402b3eb664"
 dependencies = [
  "cap-std",
  "thiserror",
@@ -4915,9 +4915,9 @@ checksum = "eddb6b06d20fba9ed21fca3d696ee1b6e870bca0bcf9fa2971f6ae2436de576a"
 
 [[package]]
 name = "tar-codec"
-version = "0.0.16"
+version = "0.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6875ba507bbec6022500f46477159a03f07ebdffdb4ea043254974531df1dac2"
+checksum = "4cac8b1341c7c68ea322a9c155ccdb09d32b1526be8da22c20b8cb3323814c98"
 dependencies = [
  "archive-trait",
  "tar-framing",
@@ -4927,9 +4927,9 @@ dependencies = [
 
 [[package]]
 name = "tar-framing"
-version = "0.0.16"
+version = "0.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49727b1a300514960d425d0e741a7da3e693170f3db39de3180fdbbc07e542c5"
+checksum = "c07c818ffdfc87f607073f986b6167218bc9e05d54ecec4d50299a949e09feb1"
 dependencies = [
  "thiserror",
  "tokio",
