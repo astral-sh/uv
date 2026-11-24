@@ -1,8 +1,5 @@
-//! Deserializes the canonical lockfile layout without building a TOML tree.
-//!
-//! This parser is deliberately limited to the syntax emitted by the lockfile
-//! serializer. The public entry point falls back to the general TOML parser
-//! when a lock uses another valid representation.
+//! The canonical lockfile reader avoids building a TOML tree. Other layouts fall back
+//! to the general TOML parser.
 
 use std::borrow::Cow;
 use std::fmt;
@@ -16,7 +13,30 @@ use smallvec::SmallVec;
 use toml_parser::decoder::{Encoding, IntegerRadix, ScalarKind};
 use toml_parser::{Raw, Span};
 
-use super::Lock;
+use super::{Lock, LockParseError, VERSION};
+
+/// Parse noncanonical TOML once, retaining the header for diagnostics if deserializing fails.
+pub(super) fn from_general_toml(input: &str) -> Result<Lock, LockParseError> {
+    let document = toml::de::DeTable::parse(input)?;
+    let version = document.get_ref().get("version").cloned();
+
+    Lock::deserialize(toml::Deserializer::from(document)).map_err(|mut source| {
+        source.set_input(Some(input));
+        let Some(version) = version
+            .and_then(|value| u32::deserialize(toml::de::ValueDeserializer::from(value)).ok())
+        else {
+            return LockParseError::Toml(source);
+        };
+        if version != VERSION {
+            return LockParseError::UnparsableVersion {
+                supported: VERSION,
+                version,
+                source,
+            };
+        }
+        LockParseError::Toml(source)
+    })
+}
 
 /// Parses a canonical lock directly into its existing, validated wire format.
 pub(super) fn from_str(input: &str) -> Result<Lock, Error> {
@@ -1113,9 +1133,13 @@ version = "1.0.0"
     #[test]
     fn unparsable_unsupported_lock_version_is_identified() {
         let version = VERSION + 1;
-        let input = CANONICAL_LOCK
-            .replacen("version = 1", &format!("version = {version}"), 1)
-            .replacen("name = \"dependency\"", "name = false", 1);
+        let input = formatdoc! {r#"
+            version = {version}
+            requires-python = ">=3.12"
+
+            [[package]]
+            name = false
+        "#};
         let error =
             Lock::from_toml(&input).expect_err("unparsable unsupported lock versions are rejected");
 
