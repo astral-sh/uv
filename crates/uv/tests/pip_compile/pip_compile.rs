@@ -4040,7 +4040,9 @@ fn compile_yanked_version_indirect() -> Result<()> {
     Ok(())
 }
 
-/// An existing pin whose marker parses to false must not opt into a yanked version.
+/// We normally allow a yanked release if the output file already pins it. Even in a
+/// universal resolution, no platform is both Linux and Windows, so the pin to the yanked
+/// 1.0.0 never applies. We should select the non-yanked 0.1.0 instead.
 #[cfg(feature = "test-universal")]
 #[test]
 fn universal_inactive_yanked_preference() -> Result<()> {
