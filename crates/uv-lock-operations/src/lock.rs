@@ -17,7 +17,7 @@ use uv_distribution_types::{
     UnresolvedRequirementSpecification,
 };
 use uv_git::ResolvedRepositoryReference;
-use uv_lock::{GroupMetadata, Lock, ResolverManifest};
+use uv_lock::{GroupMetadata, Lock, LockSatisfactionError, ResolverManifest};
 use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 use uv_pypi_types::{ConflictKind, SupportedEnvironments};
@@ -216,13 +216,13 @@ impl<'env> LockOperation<'env> {
                 .await?;
 
                 // If the lockfile changed, return an error.
-                if let LockResult::Changed(prev, cur) = result {
-                    return Err(LockError::LockMismatch(
-                        prev.map(Box::new),
-                        Box::new(cur),
+                if let LockResult::Changed(_, resolved) = result {
+                    return Err(LockError::LockMismatch {
+                        filename: lock_filename,
                         lock_source,
-                        reason.map(Box::new),
-                    ));
+                        resolved: Some(Box::new(resolved)),
+                        reason: reason.map(Box::new),
+                    });
                 }
 
                 Ok(result)
@@ -840,6 +840,22 @@ async fn do_lock(
     };
 
     match existing_lock {
+        // A known-invalid selection can be reported in locked mode without resolving again.
+        Some(ValidatedLock::Preferable(_, LockMismatchReason::Satisfaction(mismatch)))
+            if let LockMode::Locked(_, lock_source) = mode
+                && matches!(
+                    *mismatch,
+                    LockSatisfactionError::MismatchedDependencyVersion(..)
+                        | LockSatisfactionError::ConflictingDependencySelections(..)
+                ) =>
+        {
+            Err(LockError::LockMismatch {
+                filename: target.lock_filename(),
+                lock_source,
+                resolved: None,
+                reason: Some(Box::new(LockMismatchReason::Satisfaction(mismatch))),
+            })
+        }
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.

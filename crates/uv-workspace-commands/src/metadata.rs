@@ -186,7 +186,7 @@ pub async fn metadata(
             .await
             {
                 Ok(lock) => lock.into_lock(),
-                Err(err @ LockError::LockMismatch(..)) => return Err(UvError::user(err).into()),
+                Err(err @ LockError::LockMismatch { .. }) => return Err(UvError::user(err).into()),
                 Err(err) => return Err(UvError::from(err).into()),
             };
             &resolved_lock

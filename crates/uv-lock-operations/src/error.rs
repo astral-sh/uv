@@ -117,13 +117,15 @@ pub enum LockMismatchReason {
 /// A failure while reading, validating, or resolving a lockfile.
 #[derive(thiserror::Error, DebugNoInline)]
 pub enum LockError {
-    #[error("The lockfile at `uv.lock` needs to be updated, but `{2}` was provided.")]
-    LockMismatch(
-        Option<Box<Lock>>,
-        Box<Lock>,
-        LockedSource,
-        #[source] Option<Box<LockMismatchReason>>,
-    ),
+    #[error("The lockfile at `{filename}` needs to be updated, but `{lock_source}` was provided.")]
+    LockMismatch {
+        filename: PathBuf,
+        lock_source: LockedSource,
+        /// The replacement lock, if resolution completed before reporting the mismatch.
+        resolved: Option<Box<Lock>>,
+        #[source]
+        reason: Option<Box<LockMismatchReason>>,
+    },
 
     #[error(
         "The lockfile at `{0}` has non-canonical formatting at line {1}, but `{2}` was provided."
@@ -250,7 +252,7 @@ impl From<LockParseError> for LockError {
 impl From<LockError> for UvError {
     fn from(error: LockError) -> Self {
         match error {
-            error @ (LockError::LockMismatch(..)
+            error @ (LockError::LockMismatch { .. }
             | LockError::LockFormat(..)
             | LockError::MissingLockfile(..)
             | LockError::LockWorkspaceMismatch(..)) => Self::user(error),
@@ -289,7 +291,7 @@ impl From<LockError> for UvError {
 impl Hinted for LockError {
     fn hints(&self) -> Hints<'_> {
         match self {
-            Self::LockMismatch(..) | Self::LockWorkspaceMismatch(..) => {
+            Self::LockMismatch { .. } | Self::LockWorkspaceMismatch(..) => {
                 Hints::from("To update the lockfile, run `uv lock`.")
             }
             Self::LockFormat(..) => Hints::from(

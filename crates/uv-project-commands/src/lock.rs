@@ -221,7 +221,7 @@ pub async fn lock(
             Ok(ExitStatus::Success)
         }
         // Lock mismatches from `--check`/`--locked` are expected validation failures.
-        Err(err @ (LockError::LockMismatch(..) | LockError::LockFormat(..))) => {
+        Err(err @ (LockError::LockMismatch { .. } | LockError::LockFormat(..))) => {
             Err(UvError::user(err).into())
         }
         Err(err) => Err(UvError::from(err).into()),

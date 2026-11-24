@@ -82,6 +82,7 @@ pub use crate::lock::map::PackageMap;
 pub use crate::lock::tree::{TreeDisplay, TreeJsonTarget};
 
 use self::requirements::{RequirementNormalizer, normalize_collection, normalize_requirement};
+use self::versions::VersionChecker;
 
 mod deserialize;
 pub(crate) mod export;
@@ -92,6 +93,7 @@ mod map;
 mod requirements;
 mod serialize;
 mod tree;
+mod versions;
 #[cfg(test)]
 mod windows_emulation_tests;
 
@@ -446,7 +448,7 @@ impl<'lock> DependencySelectionContext<'lock> {
 }
 
 /// The dependency section in which a locked edge is stored.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum DependencyContext<'a> {
     Production,
     Extra(&'a ExtraName),
@@ -454,6 +456,19 @@ enum DependencyContext<'a> {
 }
 
 impl DependencyContext<'_> {
+    /// Groups use global overrides and package-scoped exclusions. Without a parent version,
+    /// only global modifiers apply in any section.
+    fn modifier_scope<'a>(
+        self,
+        package: &'a PackageName,
+        version: Option<&'a Version>,
+    ) -> DependencyModifierScope<'a> {
+        version.map_or(DependencyModifierScope::Global, |version| match self {
+            Self::Production | Self::Extra(_) => DependencyModifierScope::Package(package, version),
+            Self::Group(_) => DependencyModifierScope::DependencyGroup(package, version),
+        })
+    }
+
     /// Specialize a requirement to the dependency section that can activate it.
     fn requirement_marker(self, marker: MarkerTree) -> MarkerTree {
         let extra = match self {
@@ -4372,7 +4387,7 @@ impl Lock {
         let filter = ManifestFilter::from_lock(self);
         let omit_constraints = uv_preview::is_enabled(PreviewFeature::ResolutionInputs);
 
-        let normalized_constraints = {
+        let normalized_constraints: BTreeSet<_> = {
             let expected = normalizer.constraints(
                 constraints
                     .iter()
@@ -4531,12 +4546,27 @@ impl Lock {
             }
         }
 
-        let dependency_modifiers = if allow_missing_package_metadata {
-            DependencyModifiers::new(
-                Overrides::from_entries(normalized_overrides)
-                    .map_err(LockErrorKind::InvalidScopedOverride)?,
-                Excludes::from_entries(excludes.iter().cloned()),
+        let modifiers = Overrides::from_entries(normalized_overrides).map(|overrides| {
+            DependencyModifiers::new(overrides, Excludes::from_entries(excludes.iter().cloned()))
+        });
+        // Skip the version check if a package-scoped override uses an unsupported source, such as
+        // a direct URL or a named index. Standard validation can still compare the package's
+        // current requirements with those saved in the lockfile. The `lock-without-metadata`
+        // preview needs the overrides to check the resolved dependencies, so return the error below.
+        if let Ok(modifiers) = &modifiers
+            && let Some(mismatch) = VersionChecker::check(
+                self,
+                packages,
+                dependency_metadata,
+                Constraints::from_requirements(normalized_constraints.iter().cloned()),
+                modifiers,
             )
+        {
+            return Ok(LockSatisfaction::Mismatch(mismatch));
+        }
+
+        let dependency_modifiers = if allow_missing_package_metadata {
+            modifiers.map_err(LockErrorKind::InvalidScopedOverride)?
         } else {
             DependencyModifiers::default()
         };
@@ -5131,8 +5161,7 @@ impl Lock {
 
     /// Apply dependency policies before flattening recursive self-requirements.
     ///
-    /// Groups use only global overrides and are not flattened, but exclusions still use the
-    /// owning package's resolved version.
+    /// Dependency groups can depend on the parent package and keep those dependencies as edges.
     fn preprocess_requirements(
         package_name: &PackageName,
         package_version: Option<&Version>,
@@ -5140,15 +5169,7 @@ impl Lock {
         context: DependencyContext<'_>,
         modifiers: &DependencyModifiers,
     ) -> Vec<Requirement> {
-        let scope =
-            package_version.map_or(DependencyModifierScope::Global, |version| match context {
-                DependencyContext::Group(_) => {
-                    DependencyModifierScope::DependencyGroup(package_name, version)
-                }
-                DependencyContext::Production | DependencyContext::Extra(_) => {
-                    DependencyModifierScope::Package(package_name, version)
-                }
-            });
+        let scope = context.modifier_scope(package_name, package_version);
         let requirements = modifiers
             .apply(scope, requirements)
             .map(Cow::into_owned)
@@ -6282,6 +6303,16 @@ pub enum LockSatisfactionError {
         BTreeSet<Requirement>,
         BTreeSet<Requirement>,
     ),
+    /// A locked dependency version violates a declared specifier.
+    #[error(
+        "Locked `{}` does not satisfy `{}`.",
+        package_label(.0, Some(.1)).cyan(),
+        .2.cyan(),
+    )]
+    MismatchedDependencyVersion(PackageName, Version, VersionSpecifiers),
+    /// Two locked packages with the same name can be selected together.
+    #[error("{0}")]
+    ConflictingDependencySelections(Box<DependencySelectionConflict>),
     /// Refreshed declarations regenerate different resolved dependency edges.
     #[error(
         "Resolved dependencies for `{}` {}",
@@ -6317,6 +6348,32 @@ pub enum LockSatisfactionError {
     /// The lockfile is missing a version.
     #[error("Package `{name}` is missing a locked version", name = .0.cyan())]
     MissingVersion(PackageName),
+}
+
+/// Two distinct locked packages with the same name that can be selected together.
+pub struct DependencySelectionConflict {
+    first: PackageId,
+    second: PackageId,
+}
+
+impl Display for DependencySelectionConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Locked packages `{}` and `{}` can be selected together.",
+            selection_label(&self.first).cyan(),
+            selection_label(&self.second).cyan(),
+        )
+    }
+}
+
+impl Debug for DependencySelectionConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DependencySelectionConflict")
+            .field("first", &selection_label(&self.first))
+            .field("second", &selection_label(&self.second))
+            .finish()
+    }
 }
 
 fn override_difference(
@@ -6541,6 +6598,27 @@ fn remote_index_label(index: &UrlString) -> String {
 
 fn package_label(name: &PackageName, version: Option<&Version>) -> String {
     version.map_or_else(|| name.to_string(), |version| format!("{name}=={version}"))
+}
+
+/// Use [`SafeUrl`]'s credential redaction and omit URL queries from conflict diagnostics.
+fn selection_label(id: &PackageId) -> String {
+    let url = match &id.source {
+        Source::Registry(RegistrySource::Url(url))
+        | Source::Direct(url, _)
+        | Source::Git(url, _) => url,
+        Source::Registry(RegistrySource::Path(_))
+        | Source::Path(_)
+        | Source::Directory(_)
+        | Source::Editable(_)
+        | Source::Virtual(_) => return id.to_string(),
+    };
+    let name = package_label(&id.name, id.version.as_ref());
+    let kind = id.source.name();
+    let Ok(mut url) = url.to_url() else {
+        return format!("{name} @ {kind}");
+    };
+    url.set_query(None);
+    format!("{name} @ {kind}+{url}")
 }
 
 /// We discard the lockfile if these options match.
@@ -10939,6 +11017,51 @@ mod tests {
             let expr = format!("{}", anstream::adapter::strip_str(&expr));
             insta::assert_snapshot!(expr, @$snapshot);
         }};
+    }
+
+    /// Two sources can have the same diagnostic label after their URL queries are removed.
+    #[test]
+    fn selection_conflict_retains_distinct_sources() -> Result<(), Box<dyn Error>> {
+        let lock: Lock = toml::from_str(
+            r#"
+version = 1
+revision = 5
+requires-python = ">=3.12"
+
+[manifest]
+requirements = [{ name = "demo" }]
+
+[[package]]
+name = "demo"
+version = "1.0.0"
+source = { registry = "https://example.org/simple?token=one" }
+
+[[package]]
+name = "demo"
+version = "1.0.0"
+source = { registry = "https://example.org/simple?token=two" }
+"#,
+        )?;
+        let Some(LockSatisfactionError::ConflictingDependencySelections(conflict)) =
+            VersionChecker::check(
+                &lock,
+                &BTreeMap::new(),
+                &DependencyMetadata::default(),
+                Constraints::default(),
+                &DependencyModifiers::default(),
+            )
+        else {
+            return Err("expected conflicting selections".into());
+        };
+        assert_ne!(conflict.first.source, conflict.second.source);
+        assert_stripped_snapshot!(conflict, @"Locked packages `demo==1.0.0 @ registry+https://example.org/simple` and `demo==1.0.0 @ registry+https://example.org/simple` can be selected together.");
+        insta::assert_debug_snapshot!(conflict, @r#"
+        DependencySelectionConflict {
+            first: "demo==1.0.0 @ registry+https://example.org/simple",
+            second: "demo==1.0.0 @ registry+https://example.org/simple",
+        }
+        "#);
+        Ok(())
     }
 
     fn marker_environment() -> MarkerEnvironment {
