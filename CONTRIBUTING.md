@@ -165,10 +165,8 @@ cargo fmt --all
 # Python
 uv run --only-group=check ruff format .
 
-# Markdown, YAML, and other files (requires Node.js)
-npx prettier@3.9.0 --write .
-# or in Docker
-docker run --rm -v .:/src/ -w /src/ node:alpine npx prettier@3.9.0 --write .
+# Markdown
+uv run --locked --only-group=check rumdl fmt .
 ```
 
 ## Linting
@@ -302,11 +300,9 @@ To preview any changes to the documentation locally:
 
 1. Install the [Rust toolchain](https://www.rust-lang.org/tools/install).
 
-2. Install [Node](https://nodejs.org/en/download) - needed to run Prettier to format the docs
+2. Run `cargo dev generate-all` to update the generated documentation.
 
-3. Run `cargo dev generate-all`, to update any auto-generated documentation.
-
-4. Run the development server with:
+3. Start the development server.
 
    ```shell
    uv run --only-group docs mkdocs serve -f mkdocs.yml
@@ -319,7 +315,7 @@ Documentation is deployed automatically on release by publishing to the
 [Astral documentation](https://github.com/astral-sh/docs) repository, which itself deploys via
 Cloudflare Pages.
 
-After making changes to the documentation, [format the markdown files](#formatting) using Prettier.
+After editing the documentation, [format the Markdown files](#formatting) with rumdl.
 
 ## Development code signing on macOS
 

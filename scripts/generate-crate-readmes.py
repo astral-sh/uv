@@ -40,25 +40,22 @@ MEMBER_TEMPLATE = """{GENERATED_HEADER}
 
 # {name}
 
-This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here is
-unstable and will have frequent breaking changes.
+This crate is an internal component of [uv](https://crates.io/crates/uv). The Rust API exposed here
+is unstable and will have frequent breaking changes.
 
 This version ({crate_version}) is a component of [uv {uv_version}]({uv_crates_io_url}). The source can
 be found [here]({source_url}).
 
-See uv's [crate versioning
-policy](https://docs.astral.sh/uv/reference/policies/versioning/#crate-versioning) for details on
-versioning.
+See uv's [crate versioning policy](https://docs.astral.sh/uv/reference/policies/versioning/#crate-versioning) for details on versioning.
 """
 
 
 REPO_URL = "https://github.com/astral-sh/uv"
-PRETTIER_VERSION = "3.8.3"
 
 
 def main() -> None:
     result = subprocess.run(
-        ["cargo", "metadata", "--format-version", "1"],
+        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
         capture_output=True,
         text=True,
         check=True,
@@ -154,11 +151,19 @@ def main() -> None:
 
     # Format all generated READMEs once at the end
     subprocess.run(
-        ["npx", "--yes", f"prettier@{PRETTIER_VERSION}", "--write"]
-        + [str(path) for path in generated_paths],
+        [
+            "uv",
+            "run",
+            "--no-active",
+            "--locked",
+            "--only-group=check",
+            "rumdl",
+            "fmt",
+            *generated_paths,
+        ],
+        cwd=workspace_root,
         check=True,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
     )
 
 

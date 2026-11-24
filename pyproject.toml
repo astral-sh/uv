@@ -125,6 +125,7 @@ jaq = [
 check = [
     { include-group = "jaq" },
     "astral-dev-toolchain-cargo-shear>=1.13.4",
+    "astral-dev-toolchain-rumdl>=0.3.2",
     "ruff>=0.16.2",
     "ty>=0.0.106",
     "validate-pyproject[all,store]>=0.25",

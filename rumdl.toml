@@ -1,0 +1,21 @@
+[global]
+flavor = "mkdocs"
+enable = ["MD013", "MD047"]
+line-length = 100
+force-exclude = true
+exclude = [
+  ".venv",
+  ".prism",
+  "CHANGELOG.md",
+  "PREVIEW-CHANGELOG.md",
+  "docs/reference/cli.md",
+  "docs/reference/settings.md",
+  "docs/reference/environment.md",
+  "test/ecosystem/**/LICENSE.md",
+  "docs/guides/integration/gitlab.md",
+]
+
+[MD013]
+reflow = true
+code-blocks = false
+code-spans = false
