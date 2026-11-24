@@ -3963,8 +3963,9 @@ pub struct AddArgs {
     )]
     pub constraints: Vec<Maybe<RequirementsInput>>,
 
-    /// Apply this marker to all added packages.
-    #[arg(long, short, value_parser = MarkerTree::from_str, value_hint = ValueHint::Other)]
+    /// Apply this marker to all added packages. For wheel variant markers, use a named requirement
+    /// such as `uv add "foo; variant_label == 'gpu'"`.
+    #[arg(long, short, value_parser = MarkerTree::parse_environment, value_hint = ValueHint::Other)]
     pub marker: Option<MarkerTree>,
 
     /// Add the requirements to the development dependency group [env: UV_DEV=]

@@ -80,10 +80,8 @@ impl Display for UnresolvedRequirement {
 impl UnresolvedRequirement {
     /// Returns whether the markers apply for the given environment.
     ///
-    /// When the environment is not given, this treats all marker expressions
-    /// that reference the environment as true. In other words, it does
-    /// environment independent expression evaluation. (Which in turn devolves
-    /// to "only evaluate marker expressions that reference an extra name.")
+    /// For evaluation without an interpreter environment, see
+    /// [`uv_pep508::MarkerTree::evaluate_optional_environment`].
     pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
         match self {
             Self::Named(requirement) => requirement.evaluate_markers(env, extras),

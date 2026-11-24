@@ -174,7 +174,13 @@ fn parse_unnamed_requirement<Url: UnnamedRequirementUrl>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        parse::parse_markers_cursor(cursor, reporter)?
+        cursor.eat_whitespace();
+        let marker_start = cursor.pos();
+        parse::parse_markers_cursor_with_context(
+            cursor,
+            parse::MarkerContext::UnnamedRequirement { marker_start },
+            reporter,
+        )?
     } else {
         None
     };

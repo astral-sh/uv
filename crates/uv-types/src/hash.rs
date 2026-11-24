@@ -294,10 +294,8 @@ impl HashStrategy {
     /// supplied digests. When requirements and constraints both supply hashes, registry pins
     /// permit only shared hashes; direct references must match hashes from both sources.
     ///
-    /// When the environment is not given, this treats all marker expressions
-    /// that reference the environment as true. In other words, it does
-    /// environment independent expression evaluation. (Which in turn devolves
-    /// to "only evaluate marker expressions that reference an extra name.")
+    /// For evaluation without an interpreter environment, see
+    /// [`Requirement::evaluate_markers`].
     pub fn from_requirements<'a>(
         requirements: impl Iterator<Item = (&'a UnresolvedRequirement, &'a [String])>,
         constraints: impl Iterator<Item = (&'a Requirement, &'a [String])>,

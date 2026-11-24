@@ -1,7 +1,11 @@
 use arcstr::ArcStr;
+use itertools::Itertools;
 use smallvec::SmallVec;
 use std::str::FromStr;
-use uv_normalize::{ExtraName, GroupName};
+use std::sync::Arc;
+use uv_normalize::{
+    ExtraName, GroupName, InvalidVariantComponent, VariantFeature, VariantNamespace, VariantValue,
+};
 use uv_pep440::{Version, VersionPattern, VersionSpecifier};
 
 use crate::cursor::Cursor;
@@ -12,6 +16,14 @@ use crate::{
     ExtraOperator, MarkerExpression, MarkerOperator, MarkerTree, MarkerValue, MarkerValueString,
     MarkerValueVersion, MarkerWarningKind, Pep508Error, Pep508ErrorSource, Pep508Url, Reporter,
 };
+
+/// Where a marker is declared determines whether it can refer to a wheel variant.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MarkerContext {
+    Environment,
+    Dependency,
+    UnnamedRequirement { marker_start: usize },
+}
 
 /// ```text
 /// version_cmp   = wsp* <'<=' | '<' | '!=' | '==' | '>=' | '>' | '~=' | '==='>
@@ -75,6 +87,7 @@ fn parse_marker_operator<T: Pep508Url>(
 /// '`implementation_version`', 'extra'
 fn parse_marker_value<T: Pep508Url>(
     cursor: &mut Cursor,
+    context: MarkerContext,
     reporter: &mut impl Reporter,
 ) -> Result<MarkerValue, Pep508Error<T>> {
     // > User supplied constants are always encoded as strings with either ' or " quote marks. Note
@@ -105,7 +118,7 @@ fn parse_marker_value<T: Pep508Url>(
                 !char.is_whitespace() && !matches!(char, '>' | '=' | '<' | '!' | '~' | ')')
             });
             let key = cursor.slice(start, len);
-            MarkerValue::from_str(key)
+            let value = MarkerValue::from_str(key)
                 .map_err(|_| Pep508Error {
                     message: Pep508ErrorSource::String(format!(
                         "Expected a quoted string or a valid marker name, found `{key}`"
@@ -158,7 +171,24 @@ fn parse_marker_value<T: Pep508Url>(
                         );
                     }
                     _ => {}
-                })
+                })?;
+            if value.is_variant() {
+                let offset = match context {
+                    MarkerContext::Dependency => return Ok(value),
+                    MarkerContext::Environment => 0,
+                    // Omit the URL, which may contain credentials.
+                    MarkerContext::UnnamedRequirement { marker_start } => marker_start,
+                };
+                return Err(Pep508Error {
+                    message: Pep508ErrorSource::String(format!(
+                        "The marker `{key}` is only allowed in named dependency specifiers"
+                    )),
+                    input: cursor.to_string().split_off(offset),
+                    start: start - offset,
+                    len,
+                });
+            }
+            Ok(value)
         }
     }
 }
@@ -168,19 +198,50 @@ fn parse_marker_value<T: Pep508Url>(
 /// ```
 pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
     cursor: &mut Cursor,
+    context: MarkerContext,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerExpression>, Pep508Error<T>> {
     cursor.eat_whitespace();
     let start = cursor.pos();
-    let l_value = parse_marker_value(cursor, reporter)?;
+    let l_value = parse_marker_value(cursor, context, reporter)?;
+    let l_value_end = cursor.pos();
     cursor.eat_whitespace();
     // "not in" and "in" must be preceded by whitespace. We must already have matched a whitespace
     // when we're here because other `parse_marker_key` would have pulled the characters in and
     // errored
     let operator = parse_marker_operator(cursor)?;
     cursor.eat_whitespace();
-    let r_value = parse_marker_value(cursor, reporter)?;
+    let r_value = parse_marker_value(cursor, context, reporter)?;
     let len = cursor.pos() - start;
+
+    // Ignoring an invalid variant predicate would make a guarded dependency unconditional.
+    let invalid_variant = |message: &str| Pep508Error {
+        message: Pep508ErrorSource::String(message.to_string()),
+        start,
+        len,
+        input: cursor.to_string(),
+    };
+    if (l_value.is_variant() && !matches!(r_value, MarkerValue::QuotedString(_)))
+        || (r_value.is_variant() && !matches!(l_value, MarkerValue::QuotedString(_)))
+    {
+        return Err(invalid_variant(
+            "Wheel variant markers must be compared with a quoted string",
+        ));
+    }
+    let variant_label = MarkerValue::MarkerEnvString(MarkerValueString::VariantLabel);
+    if (l_value == variant_label || r_value == variant_label)
+        && !matches!(
+            operator,
+            MarkerOperator::Equal
+                | MarkerOperator::NotEqual
+                | MarkerOperator::In
+                | MarkerOperator::NotIn
+        )
+    {
+        return Err(invalid_variant(
+            "The marker `variant_label` only supports `==`, `!=`, `in`, and `not in`",
+        ));
+    }
 
     // Convert a `<marker_value> <marker_op> <marker_value>` expression into its
     // typed equivalent.
@@ -313,7 +374,55 @@ pub(crate) fn parse_marker_key_op_value<T: Pep508Url>(
                                 input: cursor.to_string(),
                             }
                         })?;
+                    let invalid_member = |message: String| Pep508Error {
+                        message: Pep508ErrorSource::String(message),
+                        start,
+                        len: l_value_end - start,
+                        input: cursor.to_string(),
+                    };
+                    let invalid_component =
+                        |error: InvalidVariantComponent| invalid_member(error.to_string());
+                    // PEP 825 ignores whitespace adjacent to the `::` separators.
                     let pair = match key {
+                        MarkerValueList::VariantNamespaces => {
+                            CanonicalMarkerListPair::VariantNamespace(
+                                VariantNamespace::from_str(&l_string).map_err(invalid_component)?,
+                            )
+                        }
+                        MarkerValueList::VariantFeatures => {
+                            let Some((namespace, feature)) = l_string.split("::").collect_tuple()
+                            else {
+                                return Err(invalid_member(
+                                    "Expected a variant feature in the form `namespace :: feature`"
+                                        .to_string(),
+                                ));
+                            };
+                            CanonicalMarkerListPair::VariantFeature(Arc::new((
+                                VariantNamespace::from_str(namespace.trim_end())
+                                    .map_err(invalid_component)?,
+                                VariantFeature::from_str(feature.trim_start())
+                                    .map_err(invalid_component)?,
+                            )))
+                        }
+                        MarkerValueList::VariantProperties => {
+                            let Some((namespace, feature, value)) =
+                                l_string.split("::").collect_tuple()
+                            else {
+                                return Err(invalid_member(
+                                    "Expected a variant property in the form \
+                                     `namespace :: feature :: value`"
+                                        .to_string(),
+                                ));
+                            };
+                            CanonicalMarkerListPair::VariantProperty(Arc::new((
+                                VariantNamespace::from_str(namespace.trim_end())
+                                    .map_err(invalid_component)?,
+                                VariantFeature::from_str(feature.trim())
+                                    .map_err(invalid_component)?,
+                                VariantValue::from_str(value.trim_start())
+                                    .map_err(invalid_component)?,
+                            )))
+                        }
                         // `'...' in extras`
                         MarkerValueList::Extras => match ExtraName::from_str(&l_string) {
                             Ok(name) => CanonicalMarkerListPair::Extras(name),
@@ -578,15 +687,16 @@ fn parse_extra_expr(
 /// ```
 fn parse_marker_expr<T: Pep508Url>(
     cursor: &mut Cursor,
+    context: MarkerContext,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     cursor.eat_whitespace();
     if let Some(start_pos) = cursor.eat_char('(') {
-        let marker = parse_marker_or(cursor, reporter)?;
+        let marker = parse_marker_or(cursor, context, reporter)?;
         cursor.next_expect_char(')', start_pos)?;
         Ok(marker)
     } else {
-        Ok(parse_marker_key_op_value(cursor, reporter)?.map(MarkerTree::expression))
+        Ok(parse_marker_key_op_value(cursor, context, reporter)?.map(MarkerTree::expression))
     }
 }
 
@@ -596,9 +706,16 @@ fn parse_marker_expr<T: Pep508Url>(
 /// ```
 fn parse_marker_and<T: Pep508Url>(
     cursor: &mut Cursor,
+    context: MarkerContext,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    parse_marker_op(cursor, "and", MarkerTree::and, parse_marker_expr, reporter)
+    parse_marker_op(
+        cursor,
+        "and",
+        MarkerTree::and,
+        |cursor, reporter| parse_marker_expr(cursor, context, reporter),
+        reporter,
+    )
 }
 
 /// ```text
@@ -607,24 +724,24 @@ fn parse_marker_and<T: Pep508Url>(
 /// ```
 fn parse_marker_or<T: Pep508Url>(
     cursor: &mut Cursor,
+    context: MarkerContext,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     parse_marker_op(
         cursor,
         "or",
         MarkerTree::or,
-        |cursor, reporter| parse_marker_and(cursor, reporter),
+        |cursor, reporter| parse_marker_and(cursor, context, reporter),
         reporter,
     )
 }
 
 /// Parses both `marker_and` and `marker_or`
-#[expect(clippy::type_complexity)]
 fn parse_marker_op<T: Pep508Url, R: Reporter>(
     cursor: &mut Cursor,
     op: &str,
     apply: fn(MarkerTree, MarkerTree) -> MarkerTree,
-    parse_inner: fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
+    parse_inner: impl Fn(&mut Cursor, &mut R) -> Result<Option<MarkerTree>, Pep508Error<T>>,
     reporter: &mut R,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
     let first = parse_inner(cursor, reporter)?;
@@ -667,14 +784,23 @@ fn parse_marker_op<T: Pep508Url, R: Reporter>(
     Ok(expressions.first().copied())
 }
 
-/// ```text
-/// marker        = marker_or^
-/// ```
+/// Parse a standalone environment selector.
 pub(crate) fn parse_markers_cursor<T: Pep508Url>(
     cursor: &mut Cursor,
     reporter: &mut impl Reporter,
 ) -> Result<Option<MarkerTree>, Pep508Error<T>> {
-    let marker = parse_marker_or(cursor, reporter)?;
+    parse_markers_cursor_with_context(cursor, MarkerContext::Environment, reporter)
+}
+
+/// ```text
+/// marker        = marker_or^
+/// ```
+pub(crate) fn parse_markers_cursor_with_context<T: Pep508Url>(
+    cursor: &mut Cursor,
+    context: MarkerContext,
+    reporter: &mut impl Reporter,
+) -> Result<Option<MarkerTree>, Pep508Error<T>> {
+    let marker = parse_marker_or(cursor, context, reporter)?;
     cursor.eat_whitespace();
     if let Some((pos, unexpected)) = cursor.next() {
         // If we're here, both parse_marker_or and parse_marker_and returned because the next
@@ -703,5 +829,6 @@ pub(crate) fn parse_markers<T: Pep508Url>(
 
     // If the tree consisted entirely of arbitrary expressions
     // that were ignored, it evaluates to true.
-    parse_markers_cursor(&mut chars, reporter).map(|result| result.unwrap_or(MarkerTree::TRUE))
+    parse_markers_cursor_with_context(&mut chars, MarkerContext::Dependency, reporter)
+        .map(|result| result.unwrap_or(MarkerTree::TRUE))
 }

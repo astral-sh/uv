@@ -18,7 +18,6 @@ use super::algebra::{Edges, INTERNER, InternerGuard, NodeId, Variable};
 use super::simplify;
 #[cfg(test)]
 use crate::Pep508ErrorSource;
-#[cfg(test)]
 use crate::cursor::Cursor;
 use crate::marker::lowering::{
     CanonicalMarkerListPair, CanonicalMarkerValueString, CanonicalMarkerValueVersion,
@@ -103,12 +102,15 @@ pub enum MarkerValueString {
     SysPlatform,
     /// Deprecated `sys.platform` from <https://peps.python.org/pep-0345/#environment-markers>
     SysPlatformDeprecated,
+    /// The label of the selected wheel.
+    VariantLabel,
 }
 
 impl Display for MarkerValueString {
     /// Normalizes deprecated names to the proper ones
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::VariantLabel => f.write_str("variant_label"),
             Self::ImplementationName => f.write_str("implementation_name"),
             Self::OsName | Self::OsNameDeprecated => f.write_str("os_name"),
             Self::PlatformMachine | Self::PlatformMachineDeprecated => {
@@ -129,13 +131,19 @@ impl Display for MarkerValueString {
 
 /// Those markers with exclusively `in` and `not in` operators.
 ///
-/// Contains PEP 751 lockfile markers.
+/// Includes PEP 751 lockfile markers and PEP 825 wheel variant markers.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum MarkerValueList {
     /// `extras`. This one is special because it's a list, and user-provided
     Extras,
     /// `dependency_groups`. This one is special because it's a list, and user-provided
     DependencyGroups,
+    /// `variant_namespaces`
+    VariantNamespaces,
+    /// `variant_features`
+    VariantFeatures,
+    /// `variant_properties`
+    VariantProperties,
 }
 
 impl Display for MarkerValueList {
@@ -143,6 +151,9 @@ impl Display for MarkerValueList {
         match self {
             Self::Extras => f.write_str("extras"),
             Self::DependencyGroups => f.write_str("dependency_groups"),
+            Self::VariantNamespaces => f.write_str("variant_namespaces"),
+            Self::VariantFeatures => f.write_str("variant_features"),
+            Self::VariantProperties => f.write_str("variant_properties"),
         }
     }
 }
@@ -162,6 +173,20 @@ pub(crate) enum MarkerValue {
     Extra,
     /// Not a constant, but a user given quoted string with a value inside such as '3.8' or "windows"
     QuotedString(ArcStr),
+}
+
+impl MarkerValue {
+    pub(super) fn is_variant(&self) -> bool {
+        matches!(
+            self,
+            Self::MarkerEnvString(MarkerValueString::VariantLabel)
+                | Self::MarkerEnvList(
+                    MarkerValueList::VariantNamespaces
+                        | MarkerValueList::VariantFeatures
+                        | MarkerValueList::VariantProperties
+                )
+        )
+    }
 }
 
 impl FromStr for MarkerValue {
@@ -199,6 +224,10 @@ impl FromStr for MarkerValue {
             "python_version" => Self::MarkerEnvVersion(MarkerValueVersion::PythonVersion),
             "sys_platform" => Self::MarkerEnvString(MarkerValueString::SysPlatform),
             "sys.platform" => Self::MarkerEnvString(MarkerValueString::SysPlatformDeprecated),
+            "variant_label" => Self::MarkerEnvString(MarkerValueString::VariantLabel),
+            "variant_namespaces" => Self::MarkerEnvList(MarkerValueList::VariantNamespaces),
+            "variant_features" => Self::MarkerEnvList(MarkerValueList::VariantFeatures),
+            "variant_properties" => Self::MarkerEnvList(MarkerValueList::VariantProperties),
             "extras" => Self::MarkerEnvList(MarkerValueList::Extras),
             "dependency_groups" => Self::MarkerEnvList(MarkerValueList::DependencyGroups),
             "extra" => Self::Extra,
@@ -500,7 +529,7 @@ pub enum MarkerExpression {
         operator: MarkerOperator,
         value: ArcStr,
     },
-    /// `'...' in <key>`, a PEP 751 expression.
+    /// Membership in a PEP 751 or PEP 825 set-valued marker, e.g., `'...' in <key>`.
     List {
         pair: CanonicalMarkerListPair,
         operator: ContainerOperator,
@@ -594,7 +623,11 @@ impl MarkerExpression {
     #[cfg(test)]
     fn parse_reporter(s: &str, reporter: &mut impl Reporter) -> Result<Option<Self>, Pep508Error> {
         let mut chars = Cursor::new(s);
-        let expression = parse::parse_marker_key_op_value(&mut chars, reporter)?;
+        let expression = parse::parse_marker_key_op_value(
+            &mut chars,
+            parse::MarkerContext::Dependency,
+            reporter,
+        )?;
         chars.eat_whitespace();
         if let Some((pos, unexpected)) = chars.next() {
             let input = chars.to_string();
@@ -765,22 +798,24 @@ impl MarkerTree {
     pub fn deserialize_dependency<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Self, D::Error> {
-        Self::from_str(&String::deserialize(deserializer)?).map_err(de::Error::custom)
+        Self::parse_environment(&String::deserialize(deserializer)?).map_err(de::Error::custom)
     }
 
-    /// Parse an environment selector.
+    /// Parse an environment selector, rejecting wheel variant markers.
     pub fn parse_environment(input: &str) -> Result<Self, Pep508Error> {
-        Self::from_str(input)
+        let mut cursor = Cursor::new(input);
+        parse::parse_markers_cursor(&mut cursor, &mut TracingReporter)
+            .map(Option::unwrap_or_default)
     }
 
-    /// Deserialize an environment selector.
+    /// Deserialize an environment selector, rejecting wheel variant markers.
     pub fn deserialize_environment<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Self, D::Error> {
         Self::parse_environment(&String::deserialize(deserializer)?).map_err(de::Error::custom)
     }
 
-    /// Deserialize a list of environment selectors.
+    /// Deserialize a list of environment selectors, rejecting wheel variant markers in any entry.
     pub fn deserialize_environment_list<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Vec<Self>, D::Error> {
@@ -1026,17 +1061,19 @@ impl MarkerTree {
     /// Evaluates this marker tree against an optional environment and a
     /// possibly empty sequence of extras.
     ///
-    /// When an environment is not provided, all marker expressions based on
-    /// the environment evaluate to `true`. That is, this provides environment
-    /// independent marker evaluation. In practice, this means only the extras
-    /// are evaluated when an environment is not provided.
+    /// Without an interpreter environment, any Python version or platform is possible.
+    /// Extras still use the supplied values. No wheel label matches and the variant sets
+    /// are empty, so negated checks such as `variant_label != 'gpu'` are true.
     pub fn evaluate_optional_environment(
         self,
         env: Option<&MarkerEnvironment>,
         extras: &[ExtraName],
     ) -> bool {
         match env {
-            None => self.evaluate_extras(extras),
+            // TODO(konsti): With the wheel variants preview enabled, evaluate variant markers
+            // against the declaring wheel even when there is no target interpreter.
+            // Evaluate them as we visit each node so short-circuiting can skip whole branches.
+            None => self.resolve_variants_false().evaluate_extras(extras),
             Some(env) => self.evaluate_reporter_impl(
                 env,
                 ExtrasEnvironment::from_extras(extras),
@@ -1063,6 +1100,12 @@ impl MarkerTree {
             }
             MarkerTreeKind::String(marker) => {
                 for (range, tree) in marker.children() {
+                    if marker.key() == CanonicalMarkerValueString::VariantLabel {
+                        if matches_absent_label(range) {
+                            return tree.evaluate_reporter_impl(env, extras, reporter);
+                        }
+                        continue;
+                    }
                     let l_string = env.get_string(marker.key());
 
                     if matches!(
@@ -1104,12 +1147,18 @@ impl MarkerTree {
             }
             MarkerTreeKind::In(marker) => {
                 return marker
-                    .edge(marker.value().contains(env.get_string(marker.key())))
+                    .edge(
+                        marker.key() != CanonicalMarkerValueString::VariantLabel
+                            && marker.value().contains(env.get_string(marker.key())),
+                    )
                     .evaluate_reporter_impl(env, extras, reporter);
             }
             MarkerTreeKind::Contains(marker) => {
                 return marker
-                    .edge(env.get_string(marker.key()).contains(marker.value()))
+                    .edge(
+                        marker.key() != CanonicalMarkerValueString::VariantLabel
+                            && env.get_string(marker.key()).contains(marker.value()),
+                    )
                     .evaluate_reporter_impl(env, extras, reporter);
             }
             MarkerTreeKind::Extra(marker) => {
@@ -1123,6 +1172,11 @@ impl MarkerTree {
                     CanonicalMarkerListPair::DependencyGroup(dependency_group) => {
                         extras.dependency_groups().contains(dependency_group)
                     }
+                    // TODO(konsti): Evaluate membership against the declaring wheel's variant
+                    // properties.
+                    CanonicalMarkerListPair::VariantNamespace(_)
+                    | CanonicalMarkerListPair::VariantFeature(_)
+                    | CanonicalMarkerListPair::VariantProperty(_) => false,
                     // Invalid marker expression
                     CanonicalMarkerListPair::Arbitrary { .. } => return false,
                 };
@@ -1514,6 +1568,34 @@ impl MarkerTree {
         imp(self, &mut f, &mut None);
     }
 
+    /// Resolve wheel variant markers without assuming a label for the declaring wheel.
+    ///
+    /// Label equality and membership checks are false, and the sets have no members.
+    #[must_use]
+    pub fn resolve_variants_false(self) -> Self {
+        if !INTERNER
+            .shared
+            .contains_variable(self.0, Variable::is_variant)
+        {
+            return self;
+        }
+        Self::from_operation(|interner| {
+            interner.restrict_nodes(self.0, &|node| {
+                if !node.var.is_variant() {
+                    return None;
+                }
+                match &node.children {
+                    Edges::String { edges } => edges
+                        .iter()
+                        .find(|(range, _)| matches_absent_label(range))
+                        .map(|(_, child)| *child),
+                    Edges::Boolean { low, .. } => Some(*low),
+                    Edges::Version { .. } => None,
+                }
+            })
+        })
+    }
+
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
         Self::from_operation(|interner| {
             interner.restrict_by(self.0, &|var| match var {
@@ -1531,6 +1613,11 @@ impl MarkerTree {
             })
         })
     }
+}
+
+/// Use the range above every compared label so that no label equality matches, including `== ''`.
+fn matches_absent_label(range: &Ranges<ArcStr>) -> bool {
+    matches!(range.bounding_range(), Some((_, Bound::Unbounded)))
 }
 
 impl fmt::Debug for MarkerTree {
@@ -2780,6 +2867,58 @@ mod test {
         assert!(marker2.evaluate(&env37, &[]));
         assert!(marker3.evaluate(&env27, &[]));
         assert!(!marker3.evaluate(&env37, &[]));
+    }
+
+    #[test]
+    fn variant_markers_resolve_to_false() {
+        let env = env37();
+        let marker = m("variant_label == '' or variant_label in 'gpu' or '' in variant_label \
+            or 'nvidia' in variant_namespaces \
+            or 'nvidia :: sm_arch' in variant_features \
+            or 'nvidia :: sm_arch :: 89_real' in variant_properties");
+        let rendered = marker.try_to_string().expect("nonempty marker");
+        assert_eq!(m(&rendered), marker);
+        assert_eq!(
+            m("'nvidia  ::sm_arch::  89_real' in variant_properties")
+                .try_to_string()
+                .as_deref(),
+            Some("'nvidia :: sm_arch :: 89_real' in variant_properties")
+        );
+        assert!(!marker.evaluate(&env, &[]));
+        assert!(!marker.evaluate_optional_environment(None, &[]));
+        assert!(marker.resolve_variants_false().is_false());
+
+        let negated = m("variant_label != '' and 'nvidia' not in variant_namespaces");
+        assert!(negated.evaluate(&env, &[]));
+        assert!(negated.evaluate_optional_environment(None, &[]));
+        assert!(negated.resolve_variants_false().is_true());
+    }
+
+    #[test]
+    fn variant_markers_reject_incomplete_property() {
+        assert_snapshot!(parse_err("'nvidia :: sm_arch' in variant_properties"), @"
+        Expected a variant property in the form `namespace :: feature :: value`
+        'nvidia :: sm_arch' in variant_properties
+        ^^^^^^^^^^^^^^^^^^^
+        ");
+    }
+
+    #[test]
+    fn invalid_variant_marker_expressions() {
+        assert!(
+            MarkerTree::parse_environment("python_version >= '0' or variant_label == 'gpu'")
+                .is_err()
+        );
+        assert!(MarkerTree::from_str("'nvidia' == variant_namespaces").is_err());
+        assert!(MarkerTree::from_str("variant_namespaces in 'nvidia'").is_err());
+        assert_snapshot!(parse_err("variant_label < 'gpu'"), @"
+        The marker `variant_label` only supports `==`, `!=`, `in`, and `not in`
+        variant_label < 'gpu'
+        ^^^^^^^^^^^^^^^^^^^^^
+        ");
+        assert!(MarkerTree::from_str("'gpu' >= variant_label").is_err());
+        assert!(MarkerTree::from_str("variant_label ~= '12.0'").is_err());
+        assert!(MarkerTree::from_str("variant_label == sys_platform").is_err());
     }
 
     #[test]
