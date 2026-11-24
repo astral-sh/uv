@@ -9,42 +9,34 @@ Released on 2026-11-24.
 
 ### Enhancements
 
-- Report missing package entries for dependencies in `uv.lock` ([#23304](https://github.com/astral-sh/uv/pull/23304))
-- Support proxy indexes through reversible artifact URLs ([#20790](https://github.com/astral-sh/uv/pull/20790))
-- Validate locked dependency versions ([#23238](https://github.com/astral-sh/uv/pull/23238))
+- Validate that dependency requirements in `uv.lock` match the locked package versions ([astral-sh/uv#23238](https://github.com/astral-sh/uv/pull/23238))
+- Explain why `uv.lock` needs to be updated when `--locked` rejects it ([astral-sh/uv#23251](https://github.com/astral-sh/uv/pull/23251))
+- Report dependencies whose package entries are missing from `uv.lock` ([astral-sh/uv#23304](https://github.com/astral-sh/uv/pull/23304))
+
+### Python
+
+- Update managed CPython 3.11.18, 3.12.16, 3.13.18, 3.14.10, 3.15.2, and 3.16.0a2 builds ([astral-sh/uv#23240](https://github.com/astral-sh/uv/pull/23240), [astral-sh/uv#23397](https://github.com/astral-sh/uv/pull/23397))
+- Update GraalPy 3.13.0 to build 25.6.5 ([astral-sh/uv#23397](https://github.com/astral-sh/uv/pull/23397))
+
+### Preview features
+
+- Use proxy indexes while keeping lockfiles portable to their upstream indexes through reversible artifact URLs ([astral-sh/uv#20790](https://github.com/astral-sh/uv/pull/20790), [astral-sh/uv#23276](https://github.com/astral-sh/uv/pull/23276))
 
 ### Bug fixes
 
-- Filter unreachable wheels before selecting hashes for uv.lock ([#23312](https://github.com/astral-sh/uv/pull/23312))
-- Ignore pins with unsatisfiable markers in `uv pip compile --universal` ([#23394](https://github.com/astral-sh/uv/pull/23394))
+- Reject wheels whose ZIP data descriptor and central directory disagree on the compressed size ([astral-sh/uv#23332](https://github.com/astral-sh/uv/pull/23332))
+- Refresh cached interpreter information when libc, the macOS version, or `pyvenv.cfg` changes ([astral-sh/uv#23214](https://github.com/astral-sh/uv/pull/23214), [astral-sh/uv#23215](https://github.com/astral-sh/uv/pull/23215), [astral-sh/uv#23216](https://github.com/astral-sh/uv/pull/23216))
+- Allow `uv sync --no-install-package` to skip packages without a compatible distribution ([astral-sh/uv#23338](https://github.com/astral-sh/uv/pull/23338))
+- Ignore unreachable wheels before requiring hashes for `uv.lock` ([astral-sh/uv#23312](https://github.com/astral-sh/uv/pull/23312))
+- Avoid reusing yanked pins with unsatisfiable markers in `uv pip compile --universal` ([astral-sh/uv#23394](https://github.com/astral-sh/uv/pull/23394))
 
 ### Documentation
 
-- Cite Minato's original description of the ISOP algorithm ([#23303](https://github.com/astral-sh/uv/pull/23303))
-- Tweak proxy indexes docs ([#23276](https://github.com/astral-sh/uv/pull/23276))
+- Cite Minato's original description of the ISOP algorithm ([astral-sh/uv#23303](https://github.com/astral-sh/uv/pull/23303))
 
 ### Other changes
 
-- Add PEP 723 metadata and locks to two release scripts ([#23288](https://github.com/astral-sh/uv/pull/23288))
-- Bump webpki-root-certs ([#23302](https://github.com/astral-sh/uv/pull/23302))
-- Explain why a lockfile needs to be updated with `--locked` ([#23251](https://github.com/astral-sh/uv/pull/23251))
-- Fix unsound rkyv API ([#23366](https://github.com/astral-sh/uv/pull/23366))
-- Invalidate the interpreter cache when `pyvenv.cfg` changes ([#23216](https://github.com/astral-sh/uv/pull/23216))
-- Invalidate the interpreter cache when libc changes ([#23214](https://github.com/astral-sh/uv/pull/23214))
-- Invalidate the interpreter cache when the macOs version changes ([#23215](https://github.com/astral-sh/uv/pull/23215))
-- Move typos to its own dependency group ([#23296](https://github.com/astral-sh/uv/pull/23296))
-- Parse wheel variant dependency markers ([#23257](https://github.com/astral-sh/uv/pull/23257))
-- Remove `scripts/popular_packages` ([#23286](https://github.com/astral-sh/uv/pull/23286))
-- Revert "Parse wheel variant dependency markers" ([#23373](https://github.com/astral-sh/uv/pull/23373))
-- Revert "Update CodSpeedHQ/action action to v5.6.0 (#23354)" ([#23377](https://github.com/astral-sh/uv/pull/23377))
-- Share registry wheel and sdist conversion between pylock writers ([#23313](https://github.com/astral-sh/uv/pull/23313))
-- Skip distribution selection for packages excluded from installation ([#23338](https://github.com/astral-sh/uv/pull/23338))
-- Sync latest Python releases ([#23397](https://github.com/astral-sh/uv/pull/23397))
-- Sync latest Python releases, update to 20261123 python-build-standalone release ([#23240](https://github.com/astral-sh/uv/pull/23240))
-- Update blake2 dependency from 0.11.0-rc.6 to 0.11.0 ([#23294](https://github.com/astral-sh/uv/pull/23294))
-- Use `uv check` for repository type checking in CI ([#23289](https://github.com/astral-sh/uv/pull/23289))
-- Use the shared upload-r2 action for release mirrors ([#23368](https://github.com/astral-sh/uv/pull/23368))
-- Validate ZIP data descriptor compressed sizes against the central directory ([#23332](https://github.com/astral-sh/uv/pull/23332))
+- Update the bundled Mozilla root certificates via `webpki-root-certs` 1.0.12 ([astral-sh/uv#23302](https://github.com/astral-sh/uv/pull/23302))
 
 ## 0.13.9
 
