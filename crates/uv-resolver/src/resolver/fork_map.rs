@@ -36,12 +36,13 @@ impl ForkScope {
     /// where that group is active.
     fn from_requirement(requirement: &Requirement) -> Self {
         let conflict = Self::conflict_for_requirement(requirement);
+        let marker = requirement.marker.resolve_variants_false();
         let marker = conflict
             .as_ref()
             .filter(|conflict_item| matches!(conflict_item.kind(), ConflictKind::Group(_)))
-            .map_or(requirement.marker, |conflict_item| {
+            .map_or(marker, |conflict_item| {
                 UniversalMarker::new(
-                    requirement.marker.without_extras(),
+                    marker.without_extras(),
                     ConflictMarker::from_conflict_item(conflict_item),
                 )
                 .combined()

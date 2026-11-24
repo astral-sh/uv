@@ -469,6 +469,11 @@ impl HashStrategy {
         let mut hashes = None;
 
         for requirement in requirements {
+            // TODO(konsti): A contradiction folded during parsing has already lost its
+            // variant marker. Decide how to handle hashes on all such declarations.
+            if requirement.marker.resolve_dependency_variants().is_none() {
+                continue;
+            }
             let Some((id, digests)) = Self::requirement_hashes(requirement)? else {
                 continue;
             };
@@ -736,7 +741,9 @@ mod tests {
             groups: Box::default(),
             marker: "python_version >= '3.8'".parse().unwrap(),
             source: RequirementSource::Url {
-                location: "https://files.pythonhosted.org/packages/36/55/ad4de788d84a630656ece71059665e01ca793c04294c463fd84132f40fe6/anyio-4.0.0-py3-none-any.whl"
+                location: url
+                    .split_once('#')
+                    .map_or(url, |(location, _)| location)
                     .parse::<SafeUrl>()
                     .unwrap()
                     .with_policy(Raw),
@@ -790,6 +797,19 @@ mod tests {
                 ArchiveHashPolicy::All(expected.as_slice())
             );
         }
+    }
+
+    #[test]
+    fn inactive_variant_dependency_cannot_authorize_url() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let url = "https://example.com/anyio-4.0.0-py3-none-any.whl";
+        let digest = "cfdb2b588b9fc25ede96d8db56ed50848b0b649dca3dd1df0b11f683bb9e0b5f";
+        let mut dependency = requirement(&format!("{url}#sha256={digest}"));
+        dependency.marker = "variant_label == ''".parse()?;
+        let hasher = HashStrategy::require(Arc::default())
+            .augment_with_requirements(std::iter::once(&dependency))?;
+        assert!(!hasher.allows_url(&url.parse()?));
+        Ok(())
     }
 
     #[test]

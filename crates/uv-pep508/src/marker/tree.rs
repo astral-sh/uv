@@ -794,11 +794,11 @@ impl MarkerTree {
         Self(interner.canonicalize(value))
     }
 
-    /// Deserialize a dependency marker.
+    /// Deserialize a dependency marker, allowing wheel variant markers.
     pub fn deserialize_dependency<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<Self, D::Error> {
-        Self::parse_environment(&String::deserialize(deserializer)?).map_err(de::Error::custom)
+        Self::from_str(&String::deserialize(deserializer)?).map_err(de::Error::custom)
     }
 
     /// Parse an environment selector, rejecting wheel variant markers.
@@ -1283,20 +1283,26 @@ impl MarkerTree {
         extra_expression
     }
 
-    /// Find a top level `extra == "..."` name.
+    /// Find the top-level `extra == "..."` name after applying the wheel variant fallback.
     ///
     /// ASSUMPTION: There is one `extra = "..."`, and it's either the only marker or part of the
     /// main conjunction.
     pub fn top_level_extra_name(self) -> Option<Cow<'static, ExtraName>> {
-        // Fast path: The marker is only a `extra == "..."`.
-        if let MarkerTreeKind::Extra(marker) = self.kind()
+        // A variant alternative can hide the extra that selects a source. If the whole
+        // dependency is inactive, its declared extra still matters for source validation.
+        let resolved = self.resolve_variants_false();
+        let marker = if resolved.is_false() { self } else { resolved };
+
+        // TODO(konsti): Handle alternative extras in source selection. For `extra == 'a'
+        // or extra == 'b'`, the true branch alone cannot establish that `a` is required.
+        if let MarkerTreeKind::Extra(marker) = marker.kind()
             && marker.edge(true).is_true()
         {
             let CanonicalMarkerValueExtra::Extra(extra) = marker.name;
             return Some(Cow::Borrowed(extra));
         }
 
-        let extra_expression = self.top_level_extra()?;
+        let extra_expression = marker.top_level_extra()?;
 
         match extra_expression {
             MarkerExpression::Extra { name, .. } => name.into_extra().map(Cow::Owned),
@@ -1594,6 +1600,20 @@ impl MarkerTree {
                 }
             })
         })
+    }
+
+    /// Return the dependency marker unless the wheel variant fallback disables it.
+    ///
+    /// Leave already-false markers to the caller. Constraints and overrides have their
+    /// own rules for declarations that were unsatisfiable before variant evaluation.
+    #[must_use]
+    pub fn resolve_dependency_variants(self) -> Option<Self> {
+        let marker = self.resolve_variants_false();
+        if marker != self && marker.is_false() {
+            None
+        } else {
+            Some(marker)
+        }
     }
 
     fn simplify_extras_with_impl(self, is_extra: &impl Fn(&ExtraName) -> bool) -> Self {
@@ -2872,10 +2892,12 @@ mod test {
     #[test]
     fn variant_markers_resolve_to_false() {
         let env = env37();
-        let marker = m("variant_label == '' or variant_label in 'gpu' or '' in variant_label \
+        let marker = m(
+            "variant_label == '' or variant_label in 'gpu' or '' in variant_label \
             or 'nvidia' in variant_namespaces \
             or 'nvidia :: sm_arch' in variant_features \
-            or 'nvidia :: sm_arch :: 89_real' in variant_properties");
+            or 'nvidia :: sm_arch :: 89_real' in variant_properties",
+        );
         let rendered = marker.try_to_string().expect("nonempty marker");
         assert_eq!(m(&rendered), marker);
         assert_eq!(
@@ -2892,6 +2914,22 @@ mod test {
         assert!(negated.evaluate(&env, &[]));
         assert!(negated.evaluate_optional_environment(None, &[]));
         assert!(negated.resolve_variants_false().is_true());
+    }
+
+    #[test]
+    fn variant_alternative_to_extra() {
+        let marker = m("extra == 'gpu' or variant_label == 'accel'");
+        assert_eq!(
+            marker
+                .top_level_extra_name()
+                .as_deref()
+                .map(ExtraName::as_str),
+            Some("gpu")
+        );
+
+        // An empty namespace set makes the negative membership test unconditional.
+        let marker = m("extra == 'gpu' or 'nvidia' not in variant_namespaces");
+        assert!(marker.top_level_extra_name().is_none());
     }
 
     #[test]

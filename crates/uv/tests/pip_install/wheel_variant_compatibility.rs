@@ -90,6 +90,44 @@ fn install_local_variant_wheel() -> Result<()> {
     Ok(())
 }
 
+/// The variant fallback must not match even the declaring wheel's own label or the empty string.
+#[test]
+fn install_with_unresolved_variant_markers() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let variant = null_variant().to_string();
+    let requires = [
+        "dep; variant_label != '' and 'nvidia' not in variant_namespaces".parse()?,
+        "missing; variant_label == '' or variant_label == 'null'".parse()?,
+    ];
+    let (filename, wheel) = WheelBuilder::new(&"ok".parse()?, &"1.0.0".parse()?)
+        .variant(&"null".parse()?, &variant)
+        .requires(&requires)
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("ok-1.0.0-variants.json")
+        .write_str(&variant)?;
+
+    let (filename, wheel) = WheelBuilder::new(&"dep".parse()?, &"1.0.0".parse()?).build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .arg("--no-index")
+        .arg("--find-links").arg(".")
+        .arg("--preview-features").arg("wheel-variants")
+        .arg("ok"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + dep==1.0.0
+     + ok==1.0.0
+    ");
+    Ok(())
+}
+
 /// A refreshed local variant wheel must have compatible platform tags.
 #[test]
 fn refresh_incompatible_variant_wheel() -> Result<()> {
@@ -861,6 +899,62 @@ fn streamed_variant_metadata_requires_one_dist_info_directory() -> Result<()> {
 
     hint: The structure of `ok` (v1.0.0) was invalid:
       Multiple .dist-info directories found: ok-1.0.0, ok-2.0.0
+    ");
+    Ok(())
+}
+
+/// An override replaces variant conditions but keeps the extras that request a dependency.
+#[test]
+fn override_preserves_extra_with_variant_marker() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"parent".parse()?, &"1.0".parse()?)
+        .extras(&BTreeMap::from([
+            ("gpu".parse()?, Vec::new()),
+            ("cpu".parse()?, Vec::new()),
+        ]))
+        .requires(&[
+            "either; extra == 'gpu' or variant_label == 'gpu'".parse()?,
+            "mixed; (extra == 'cpu' and variant_label == 'cpu') or extra == 'gpu'".parse()?,
+        ])
+        .build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"mixed".parse()?, &"2.0".parse()?).build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("overrides.txt")
+        .write_str("either==2\nmixed==2\n")?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["--no-index", "--find-links", ".", "--overrides", "overrides.txt", "parent[cpu]"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    Prepared 2 packages in [TIME]
+    Installed 2 packages in [TIME]
+     + mixed==2.0
+     + parent==1.0
+    ");
+    Ok(())
+}
+
+/// Reject variant markers on unnamed requirements without printing the signed URL.
+#[test]
+fn unnamed_variant_requirement() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context.temp_dir.child("overrides.txt").write_str(
+        "https://example.com/archive.tar.gz?X-Goog-Signature=secret \
+         ; variant_label == 'gpu'\n",
+    )?;
+
+    uv_snapshot!(context.filters(), context.pip_install()
+        .args(["--no-index", "--overrides", "overrides.txt", "dep"]), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Couldn't parse requirement in `overrides.txt` at position 0
+      cause: The marker `variant_label` is only allowed in named dependency specifiers
+             variant_label == 'gpu'
+             ^^^^^^^^^^^^^
     ");
     Ok(())
 }

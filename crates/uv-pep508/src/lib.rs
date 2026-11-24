@@ -1012,7 +1012,11 @@ fn parse_pep508_requirement<T: Pep508Url>(
     let marker = if cursor.peek_char() == Some(';') {
         // Skip past the semicolon
         cursor.next();
-        marker::parse::parse_markers_cursor(cursor, reporter)?
+        marker::parse::parse_markers_cursor_with_context(
+            cursor,
+            marker::parse::MarkerContext::Dependency,
+            reporter,
+        )?
     } else {
         None
     };

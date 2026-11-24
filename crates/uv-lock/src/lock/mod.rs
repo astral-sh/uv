@@ -4397,7 +4397,13 @@ impl Lock {
                     ),
                 ));
             }
-            expected.into_iter().collect()
+            expected
+                .into_iter()
+                .map(|mut requirement| {
+                    requirement.marker = requirement.marker.resolve_variants_false();
+                    requirement
+                })
+                .collect()
         };
 
         let normalized_overrides = {
@@ -5581,7 +5587,13 @@ impl Lock {
         let global_source_overrides = dependency_modifiers
             .global_overrides()
             .filter(|requirement| !matches!(requirement.source, RequirementSource::Registry { .. }))
-            .cloned()
+            .filter_map(|requirement| {
+                let marker = requirement.marker.resolve_dependency_variants()?;
+                Some(Requirement {
+                    marker,
+                    ..requirement.clone()
+                })
+            })
             .collect::<Vec<_>>();
         if !global_source_overrides.is_empty() {
             source_requirements.retain(|requirement| {
@@ -7592,7 +7604,10 @@ impl Package {
 
     /// Intersect a root requirement with the forks that contain this package.
     fn root_requirement_marker(&self, requirement: &Requirement) -> MarkerTree {
-        let marker = requirement.marker;
+        // TODO(konsti): Apply global overrides before evaluating variant markers on script
+        // and projectless group roots. Use the effective marker for audits too. Matching
+        // by name alone can audit a dependency active only in another group.
+        let marker = requirement.marker.resolve_variants_false();
         if self.fork_markers.is_empty() {
             return marker;
         }

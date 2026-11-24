@@ -122,5 +122,14 @@ impl DependencyModifiers {
                     .excludes
                     .contains_for_package(excludes, &requirement.name)
             })
+            // Resolve variant predicates after overrides can replace the original marker,
+            // but before constraints, index selection, or resolution can fork on it.
+            .filter_map(|mut requirement| {
+                let marker = requirement.marker.resolve_dependency_variants()?;
+                if marker != requirement.marker {
+                    requirement.to_mut().marker = marker;
+                }
+                Some(requirement)
+            })
     }
 }

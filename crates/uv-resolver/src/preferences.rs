@@ -60,14 +60,20 @@ impl Preference {
         }
 
         // A false marker cannot select this pin, even during universal resolution.
-        if requirement.marker.is_false() {
+        // Resolving a variant alternative can also leave only an unrequested extra.
+        // TODO(konsti): Check extras on all output pins. If parsing already simplified
+        // a variant expression to an extra-only marker, universal resolution reuses the pin.
+        let marker = requirement.marker.resolve_variants_false();
+        if marker.is_false()
+            || (marker != requirement.marker && !marker.evaluate_optional_environment(None, &[]))
+        {
             return Ok(None);
         }
 
         Ok(Some(Self {
             name: requirement.name,
             version: specifier.version().clone(),
-            marker: requirement.marker,
+            marker,
             // `requirements.txt` doesn't have fork annotations.
             fork_markers: vec![],
             // `requirements.txt` doesn't allow a requirement to specify an explicit index.

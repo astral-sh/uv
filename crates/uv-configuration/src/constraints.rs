@@ -53,6 +53,9 @@ impl Constraints {
                 .push(Requirement {
                     // We add and apply constraints independent of their extras.
                     extras: Box::new([]),
+                    // TODO(konsti): Decide whether to reject variant markers in constraints.
+                    // A constraint has no declaring wheel, even when it constrains a wheel dependency.
+                    marker: requirement.marker.resolve_variants_false(),
                     ..requirement.clone()
                 });
         }
