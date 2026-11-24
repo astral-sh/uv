@@ -8,9 +8,9 @@
 # ///
 """Retain CodSpeed uploads and import public-main measurements into uv-dev.
 
-The upload protocol sends measurement metadata, then PUTs an archive to a signed
-URL. Relaying both requests keeps the original machine and runner metadata with
-the measured profile instead of reconstructing it on the importing runner.
+CodSpeed uploads an archive in one request (metadata v10 and v11) or as an
+S3 multipart upload (v12). Retain the archive with its original measurement
+metadata so uv-dev can replay either protocol under its own identity.
 """
 
 import argparse
@@ -29,8 +29,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Mapping
+import xml.etree.ElementTree as ET
+from collections.abc import Iterable, Iterator, Mapping
+from functools import cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BufferedIOBase
 from pathlib import Path
 
 UPLOAD_URL = "https://api.codspeed.io/upload"
@@ -75,37 +78,120 @@ def upload_request(metadata: dict, token: str | None) -> dict:
     )
 
 
+def storage_request(
+    method: str, url: str, headers: dict, body: Iterable[bytes] | bytes
+) -> tuple[str | None, bytes]:
+    """Use only the storage request supplied by CodSpeed. Never follow redirects."""
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+        ):
+            raise ValueError("Invalid storage endpoint")
+        connection = http.client.HTTPSConnection(
+            parsed.hostname, parsed.port, timeout=600
+        )
+        try:
+            connection.request(
+                method,
+                urllib.parse.urlunsplit(("", "", parsed.path, parsed.query, "")),
+                body=body,
+                headers=headers,
+            )
+            response = connection.getresponse()
+            if not 200 <= response.status < 300:
+                raise RuntimeError(
+                    f"Profile upload failed with status {response.status}"
+                )
+            return response.getheader("ETag"), response.read()
+        finally:
+            connection.close()
+    except (OSError, ValueError, http.client.HTTPException):
+        raise RuntimeError("Profile upload failed") from None
+
+
+def chunks(stream: BufferedIOBase, length: int) -> Iterator[bytes]:
+    while length:
+        chunk = stream.read(min(length, 1024 * 1024))
+        if not chunk:
+            raise ValueError("Incomplete profile upload")
+        length -= len(chunk)
+        yield chunk
+
+
 def upload_profile(url: str, profile: Path, metadata: dict) -> None:
-    parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or not parsed.hostname or parsed.username:
-        raise ValueError("CodSpeed returned an invalid profile upload URL")
+    size = profile.stat().st_size
     headers = {
         "Content-Type": "application/x-tar",
-        "Content-Length": str(profile.stat().st_size),
+        "Content-Length": str(size),
         "Content-MD5": metadata["profileMd5"],
     }
     if encoding := metadata.get("profileEncoding"):
         headers["Content-Encoding"] = encoding
-    connection = http.client.HTTPSConnection(parsed.hostname, parsed.port, timeout=600)
-    try:
-        with profile.open("rb") as stream:
-            connection.request(
-                "PUT",
-                urllib.parse.urlunsplit(("", "", parsed.path, parsed.query, "")),
-                body=stream,
-                headers=headers,
-            )
-        response = connection.getresponse()
-        if not 200 <= response.status < 300:
-            raise RuntimeError(f"Profile upload failed with status {response.status}")
-        response.read()
-    except (OSError, http.client.HTTPException):
-        raise RuntimeError("Profile upload failed") from None
-    finally:
-        connection.close()
+    with profile.open("rb") as stream:
+        storage_request("PUT", url, headers, chunks(stream, size))
+
+
+@cache
+def crc64_table() -> list[int]:
+    """Use the reflected CRC-64/NVME polynomial specified by S3."""
+    table = []
+    for byte in range(256):
+        crc = byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ (0x9A6C9329AC4BC9B5 if crc & 1 else 0)
+        table.append(crc)
+    return table
+
+
+def crc64nvme(data: Iterable[bytes]) -> str:
+    table = crc64_table()
+    mask = 0xFFFFFFFFFFFFFFFF
+    crc = mask
+    for chunk in data:
+        for byte in chunk:
+            crc = table[(crc ^ byte) & 0xFF] ^ (crc >> 8)
+    return base64.b64encode((crc ^ mask).to_bytes(8, "big")).decode()
+
+
+def part_lengths(archive: dict) -> list[int]:
+    size = archive["size"]
+    part_size = archive["partSize"]
+    checksums = archive["partCrc64nvmes"]
+    if (
+        not isinstance(size, int)
+        or not isinstance(part_size, int)
+        or size <= 0
+        or not 0 < part_size <= 5 * 1024**3
+        or not isinstance(checksums, list)
+        or not 1 <= len(checksums) <= 10_000
+        or len(checksums) != (size + part_size - 1) // part_size
+    ):
+        raise ValueError("Invalid CodSpeed profile parts")
+    return [min(part_size, size - offset) for offset in range(0, size, part_size)]
 
 
 def verify_profile(profile: Path, metadata: dict) -> None:
+    if metadata["version"] == 12:
+        archive = metadata["profileArchiveMetadata"]
+        lengths = part_lengths(archive)
+        if profile.stat().st_size != archive["size"]:
+            raise ValueError("Unexpected profile archive size")
+        with profile.open("rb") as stream:
+            for length, expected in zip(
+                lengths, archive["partCrc64nvmes"], strict=True
+            ):
+                actual = crc64nvme(chunks(stream, length))
+                if actual != expected:
+                    raise ValueError("Profile part checksum does not match")
+            if len(lengths) > 1:
+                stream.seek(0)
+                actual = crc64nvme(chunks(stream, archive["size"]))
+            if actual != archive["crc64nvme"]:
+                raise ValueError("Profile archive checksum does not match")
+        return
     digest = hashlib.md5(usedforsecurity=False)
     with profile.open("rb") as stream:
         while chunk := stream.read(1024 * 1024):
@@ -132,12 +218,94 @@ def verify_recording(
         raise ValueError("Measurements belong to a different GitHub Actions run")
     if metadata["runner"]["executor"] != EXECUTORS[mode]:
         raise ValueError("Unexpected CodSpeed executor")
-    if metadata.get("profileEncoding") not in (None, "gzip"):
+    if metadata["version"] not in {10, 11, 12}:
+        raise ValueError("Unsupported CodSpeed upload metadata version")
+    if metadata["version"] == 12:
+        archive = metadata["profileArchiveMetadata"]
+        part_lengths(archive)
+        encoding = archive.get("encoding")
+    else:
+        encoding = metadata.get("profileEncoding")
+    if encoding not in (None, "gzip"):
         raise ValueError("Unsupported profile encoding")
 
 
 def verify_source(metadata: dict, sha: str, run_id: str, mode: str) -> None:
     verify_recording(metadata, sha, run_id, mode, "refs/heads/main", "push")
+
+
+class MultipartUpload:
+    """One CodSpeed upload. Keep presigned requests in memory on this runner."""
+
+    def __init__(self, metadata: dict, upload: dict):
+        self.archive = metadata["profileArchiveMetadata"]
+        self.lengths = part_lengths(self.archive)
+        self.parts = upload["parts"]
+        self.completion = upload["complete"]
+        if len(self.parts) != len(self.lengths):
+            raise ValueError("Unexpected number of CodSpeed upload requests")
+        self.etags: dict[int, str] = {}
+        self.locks = [threading.Lock() for _ in self.parts]
+
+    def capture(
+        self, index: int, source: BufferedIOBase, length: int, partial: Path
+    ) -> str:
+        if length != self.lengths[index]:
+            raise ValueError("Unexpected profile part size")
+        expected = self.archive["partCrc64nvmes"][index]
+        # Parts can arrive out of order. A retry must not overwrite bytes
+        # already acknowledged by storage, even if completion has since run.
+        with self.locks[index]:
+            if index in self.etags:
+                if crc64nvme(chunks(source, length)) != expected:
+                    raise ValueError("Invalid profile part retry")
+                return self.etags[index]
+            offset = index * self.archive["partSize"]
+            with partial.open("r+b") as stream:
+                stream.seek(offset)
+                stream.writelines(chunks(source, length))
+                stream.seek(offset)
+                if crc64nvme(chunks(stream, length)) != expected:
+                    raise ValueError("Profile part checksum does not match")
+                stream.seek(offset)
+                return self.put(index, stream)
+
+    def put(self, index: int, stream: BufferedIOBase) -> str:
+        part = self.parts[index]
+        headers = {key.lower(): value for key, value in part["headers"].items()}
+        length = str(self.lengths[index])
+        if headers.setdefault("content-length", length) != length:
+            raise ValueError("Unexpected signed profile part size")
+        etag, _ = storage_request(
+            "PUT", part["url"], headers, chunks(stream, self.lengths[index])
+        )
+        if not etag or not re.fullmatch(r"[ -~]+", etag):
+            raise ValueError("Invalid ETag in profile part response")
+        self.etags[index] = etag
+        return etag
+
+    def finish(self) -> None:
+        if len(self.etags) != len(self.parts):
+            raise ValueError("Missing profile parts")
+        root = ET.Element("CompleteMultipartUpload")
+        for index in range(len(self.parts)):
+            part = ET.SubElement(root, "Part")
+            ET.SubElement(part, "PartNumber").text = str(index + 1)
+            ET.SubElement(part, "ETag").text = self.etags[index]
+        headers = {
+            key.lower(): value for key, value in self.completion["headers"].items()
+        }
+        headers.setdefault("content-type", "application/xml")
+        _, body = storage_request(
+            "POST", self.completion["url"], headers, ET.tostring(root)
+        )
+        # S3 can send an error in the body of an HTTP 200 response.
+        try:
+            result = ET.fromstring(body.strip())
+        except ET.ParseError:
+            raise ValueError("Invalid profile upload completion response") from None
+        if result.tag.rsplit("}", 1)[-1] != "CompleteMultipartUploadResult":
+            raise ValueError("Profile upload did not complete")
 
 
 class CaptureServer(ThreadingHTTPServer):
@@ -154,12 +322,21 @@ class CaptureServer(ThreadingHTTPServer):
         self.ref = ref
         self.event = event
         self.nonce = secrets.token_urlsafe()
-        self.pending: tuple[dict, str] | None = None
+        self.pending: tuple[dict, str | MultipartUpload] | None = None
+        self.lock = threading.Lock()
+        self.partial = directory / "profile.partial"
         self.complete = False
 
     @property
     def endpoint(self) -> str:
         return f"http://127.0.0.1:{self.server_port}/{self.nonce}"
+
+    def publish(self, metadata: dict) -> None:
+        self.partial.replace(self.directory / "profile.tar")
+        (self.directory / "metadata.json").write_text(
+            json.dumps(metadata) + "\n", encoding="utf-8"
+        )
+        self.complete = True
 
 
 class CaptureHandler(BaseHTTPRequestHandler):
@@ -167,11 +344,13 @@ class CaptureHandler(BaseHTTPRequestHandler):
         # HTTP paths contain the relay nonce; never log requests or headers.
         pass
 
-    def respond(self, status: int, value: dict) -> None:
+    def respond(self, status: int, value: dict, *, etag: str | None = None) -> None:
         body = json.dumps(value).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        if etag is not None:
+            self.send_header("ETag", etag)
         self.end_headers()
         self.wfile.write(body)
 
@@ -181,6 +360,21 @@ class CaptureHandler(BaseHTTPRequestHandler):
             if self.path == f"/{self.server.nonce}/finish":
                 self.respond(200, {"complete": self.server.complete})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
+            if self.path == f"/{self.server.nonce}/complete" and self.server.pending:
+                metadata, upload = self.server.pending
+                if not isinstance(upload, MultipartUpload):
+                    raise ValueError("Unexpected multipart completion")
+                # Build the completion from the ETags storage returned. Neither
+                # the client nor a retained artifact can choose an upload URL.
+                with self.server.lock:
+                    if not self.server.complete:
+                        if len(upload.etags) != len(upload.parts):
+                            raise ValueError("Missing profile parts")
+                        verify_profile(self.server.partial, metadata)
+                        upload.finish()
+                        self.server.publish(metadata)
+                self.respond(200, {})
                 return
             if self.path != f"/{self.server.nonce}/upload":
                 self.respond(404, {})
@@ -198,9 +392,30 @@ class CaptureHandler(BaseHTTPRequestHandler):
                 self.server.event,
             )
             token = self.headers.get("Authorization")
-            response = upload_request(metadata, token)
-            self.server.pending = metadata, response["uploadUrl"]
-            response["uploadUrl"] = f"{self.server.endpoint}/profile"
+            with self.server.lock:
+                if self.server.pending:
+                    raise ValueError("Profile upload already started")
+                response = upload_request(metadata, token)
+                if metadata["version"] == 12:
+                    upload = MultipartUpload(metadata, response["multipartUpload"])
+                    self.server.partial.touch(exist_ok=False)
+                    self.server.pending = metadata, upload
+                    response["multipartUpload"] = {
+                        "parts": [
+                            {
+                                "url": f"{self.server.endpoint}/part/{index}",
+                                "headers": {},
+                            }
+                            for index in range(len(upload.parts))
+                        ],
+                        "complete": {
+                            "url": f"{self.server.endpoint}/complete",
+                            "headers": {},
+                        },
+                    }
+                else:
+                    self.server.pending = metadata, response["uploadUrl"]
+                    response["uploadUrl"] = f"{self.server.endpoint}/profile"
             self.respond(200, response)
         except (KeyError, OSError, RuntimeError, ValueError) as error:
             print(f"CodSpeed capture failed: {type(error).__name__}", flush=True)
@@ -209,29 +424,34 @@ class CaptureHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         assert isinstance(self.server, CaptureServer)
         try:
-            if self.path != f"/{self.server.nonce}/profile" or not self.server.pending:
+            if not self.server.pending:
                 self.respond(404, {})
                 return
-            metadata, upload_url = self.server.pending
+            metadata, upload = self.server.pending
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0:
                 raise ValueError("Empty profile upload")
-            partial = self.server.directory / "profile.partial"
-            with partial.open("wb") as output:
-                remaining = length
-                while remaining:
-                    chunk = self.rfile.read(min(remaining, 1024 * 1024))
-                    if not chunk:
-                        raise ValueError("Incomplete profile upload")
-                    output.write(chunk)
-                    remaining -= len(chunk)
-            verify_profile(partial, metadata)
-            upload_profile(upload_url, partial, metadata)
-            partial.replace(self.server.directory / "profile.tar")
-            (self.server.directory / "metadata.json").write_text(
-                json.dumps(metadata) + "\n", encoding="utf-8"
-            )
-            self.server.complete = True
+            if isinstance(upload, MultipartUpload):
+                match = re.fullmatch(rf"/{self.server.nonce}/part/([0-9]+)", self.path)
+                if not match or int(match[1]) >= len(upload.parts):
+                    self.respond(404, {})
+                    return
+                etag = upload.capture(
+                    int(match[1]), self.rfile, length, self.server.partial
+                )
+                self.respond(200, {}, etag=etag)
+                return
+            if self.path != f"/{self.server.nonce}/profile":
+                self.respond(404, {})
+                return
+            with self.server.lock:
+                if self.server.complete:
+                    raise ValueError("Profile already uploaded")
+                with self.server.partial.open("wb") as output:
+                    output.writelines(chunks(self.rfile, length))
+                verify_profile(self.server.partial, metadata)
+                upload_profile(upload, self.server.partial, metadata)
+                self.server.publish(metadata)
             self.respond(200, {})
         except (KeyError, OSError, RuntimeError, ValueError) as error:
             print(f"CodSpeed capture failed: {type(error).__name__}", flush=True)
@@ -368,7 +588,7 @@ def destination_metadata(source: dict, environment: Mapping[str, str]) -> dict:
         "GITHUB_EVENT_NAME"
     ] not in {"push", "workflow_dispatch"}:
         raise ValueError("Benchmark profiles must be imported on uv-dev main")
-    if source["version"] not in {10, 11}:
+    if source["version"] not in {10, 11, 12}:
         raise ValueError("Unsupported CodSpeed upload metadata version")
     metadata = copy.deepcopy(source)
     owner, name = repository.split("/")
@@ -423,7 +643,14 @@ def import_profiles(directory: Path, source_run: str, source_sha: str) -> None:
         prepared.append((mode, profile, metadata))
     for mode, profile, metadata in prepared:
         response = upload_request(metadata, oidc_token())
-        upload_profile(response["uploadUrl"], profile, metadata)
+        if metadata["version"] == 12:
+            upload = MultipartUpload(metadata, response["multipartUpload"])
+            with profile.open("rb") as stream:
+                for index in range(len(upload.parts)):
+                    upload.put(index, stream)
+            upload.finish()
+        else:
+            upload_profile(response["uploadUrl"], profile, metadata)
         print(f"Imported {mode} profiles from uv run {source_run}")
 
 
