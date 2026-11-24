@@ -84,6 +84,7 @@ def main() -> None:
         raise ValueError("Incomplete workflow job listing")
 
     LOGS.mkdir()
+    event["url"] = f"{event['url']}/attempts/{attempt}"
     event["jobs"] = []
     for job in jobs:
         job_id = job["id"]
@@ -105,6 +106,8 @@ def main() -> None:
             "databaseId": job_id,
             "name": job["name"],
             "conclusion": job["conclusion"],
+            "startedAt": job.get("started_at"),
+            "completedAt": job.get("completed_at"),
             "url": job["html_url"],
         }
         if job["conclusion"] in FAILED:

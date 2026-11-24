@@ -258,6 +258,7 @@ jobs:
 
       - name: "Report workflow failure"
         env:
+          DIAGNOSED_ATTEMPT: ${{ needs.diagnose.outputs.attempt }}
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           ISSUE_REPOSITORY: astral-sh/uv-dev
@@ -278,7 +279,7 @@ jobs:
             exit 1
           fi
 
-          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/attempts/$DIAGNOSED_ATTEMPT"
           jaq --raw-output --arg run_url "$run_url" '
             "Another workflow run encountered this failure: " + $run_url
             + (if (.comment_note | length) > 0 then "\n\n" + .comment_note else "" end)
