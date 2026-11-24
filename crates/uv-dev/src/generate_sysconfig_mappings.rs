@@ -117,13 +117,6 @@ async fn generate() -> Result<String> {
     println!("Downloading python-build-standalone cpython-unix/targets.yml ...");
     let body = reqwest::get(TARGETS_YML_URL).await?.text().await?;
 
-    // The 20261124 release repeats `needs_toolchain` for `aarch64-unknown-linux-musl`.
-    // Drop the redundant entry so the YAML parser can enforce key uniqueness.
-    let body = body.replacen(
-        "\n  needs_toolchain: true\n  docker_image_suffix: .debian13\n  needs_toolchain: true\n",
-        "\n  needs_toolchain: true\n  docker_image_suffix: .debian13\n",
-        1,
-    );
     let parsed: BTreeMap<String, TargetConfig> = astral_yaml_serde::from_str(&body)?;
 
     let mut replacements: BTreeMap<&str, BTreeMap<String, String>> = BTreeMap::new();
