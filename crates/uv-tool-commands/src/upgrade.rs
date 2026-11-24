@@ -11,7 +11,7 @@ use uv_cache::Cache;
 use uv_cache_key::CanonicalUrl;
 use uv_client::BaseClientBuilder;
 use uv_configuration::{
-    Concurrency, Constraints, DryRun, HashCheckingMode, Modifications, TargetTriple,
+    Concurrency, Constraints, DryRun, HashCheckingMode, Modifications, Override, TargetTriple,
 };
 use uv_dispatch::PlatformState;
 use uv_distribution::LoweredExtraBuildDependencies;
@@ -366,7 +366,10 @@ async fn upgrade_tool(
     let lock_manifest = ToolLock::manifest(
         existing_tool_receipt.requirements(),
         &manifest_constraints,
-        &manifest_overrides,
+        manifest_overrides
+            .iter()
+            .cloned()
+            .map(Override::Requirement),
         &manifest_excludes,
         &build_constraints,
         &settings.resolver.dependency_metadata,

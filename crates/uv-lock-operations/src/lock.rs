@@ -821,6 +821,9 @@ async fn do_lock(
                 // metadata that cannot be obtained under `--no-build`.
                 return Err(err.into());
             }
+            Err(LockValidationError::Lock(err)) if err.is_dynamic_version_scope() => {
+                return Err(err.into());
+            }
             Err(LockValidationError::Lock(err)) if err.is_not_pep625() => {
                 // A non-PEP 625-compliant sdist in the lockfile will also be rejected by a fresh
                 // resolve, so short-circuit rather than doing the extra work.
@@ -839,13 +842,13 @@ async fn do_lock(
         None
     };
 
-    let (result, reason) = match existing_lock {
+    match existing_lock {
         // Resolution from the lockfile succeeded.
         Some(ValidatedLock::Satisfies(lock)) => {
             // Print the success message after completing resolution.
             logger.on_complete(lock.len(), start, printer)?;
 
-            (LockResult::Unchanged(lock), None)
+            Ok((LockResult::Unchanged(lock), None))
         }
 
         // The lockfile did not contain enough information to obtain a resolution, fallback
@@ -1043,15 +1046,10 @@ async fn do_lock(
             };
 
             if unchanged {
-                (LockResult::Unchanged(lock), None)
+                Ok((LockResult::Unchanged(lock), None))
             } else {
-                (LockResult::Changed(previous, lock), reason)
+                Ok((LockResult::Changed(previous, lock), reason))
             }
         }
-    };
-
-    if preview.is_enabled(PreviewFeature::RejectDynamicVersionExact) {
-        result.lock().validate_dynamic_version_scopes()?;
     }
-    Ok((result, reason))
 }

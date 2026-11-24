@@ -24674,7 +24674,6 @@ fn lock_metadata_free_dynamic_version_excluded_source() -> Result<()> {
         .arg("--no-index"), @"
     exit_code: 2 (failure)
     ----- stderr -----
-    Resolved 3 packages in [TIME]
     error: Cannot scope `exclude-dependencies` to `provider==1.0.0` because the local package has a dynamic version that is omitted from the lockfile
 
     hint: Remove `version` from the scope or declare a static version for `provider`.

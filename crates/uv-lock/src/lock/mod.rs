@@ -2666,6 +2666,9 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
+        if uv_preview::is_enabled(PreviewFeature::RejectDynamicVersionExact) {
+            lock.validate_dynamic_version_scopes()?;
+        }
         let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
             lock.prune_constraints()
         } else {
@@ -9836,6 +9839,11 @@ impl std::fmt::Display for LockError {
 }
 
 impl LockError {
+    /// Returns true if a version scope targets a dynamic local package.
+    pub fn is_dynamic_version_scope(&self) -> bool {
+        matches!(&*self.kind, LockErrorKind::DynamicVersionScope { .. })
+    }
+
     /// Returns true if the [`LockError`] is a resolver error.
     pub fn is_resolution(&self) -> bool {
         matches!(&*self.kind, LockErrorKind::Resolution { .. })

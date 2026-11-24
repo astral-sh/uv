@@ -5942,6 +5942,91 @@ fn tool_install_lock_repeated_requirements() {
     ");
 }
 
+/// Script overrides must be checked both when creating a tool lock and when reusing it.
+#[test]
+fn tool_install_lock_dynamic_version_scope() -> Result<()> {
+    let context = uv_test::test_context!("3.12").with_tool_dirs();
+    let bin_dir = context.temp_dir.child("bin");
+    let project = context.temp_dir.child("demo");
+    project.child("pyproject.toml").write_str(indoc! {r#"
+        [project]
+        name = "simple-launcher"
+        dynamic = ["version"]
+
+        [build-system]
+        requires = []
+        backend-path = ["."]
+        build-backend = "backend"
+        "#})?;
+    let wheel = "simple_launcher-0.1.0-py3-none-any.whl";
+    fs_err::copy(
+        context.workspace_root.join("test/links").join(wheel),
+        project.child(wheel),
+    )?;
+    project.child("backend.py").write_str(indoc! {r#"
+        import shutil
+        from pathlib import Path
+
+        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
+            wheel = next(Path(__file__).parent.glob("*.whl"))
+            shutil.copy(wheel, wheel_directory)
+            return wheel.name
+        "#})?;
+    context.temp_dir.child("scopes.py").write_str(indoc! {r#"
+        # /// script
+        # dependencies = []
+        # [tool.uv]
+        # override-dependencies = [
+        #   { package = { name = "simple-launcher", version = "2.0" }, dependencies = ["leaf==1"] },
+        # ]
+        # ///
+        "#})?;
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("./demo")
+        .args(["--with-requirements", "scopes.py"])
+        .arg("--offline")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks,reject-dynamic-version-exact")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    error: Cannot scope `override-dependencies` to `simple-launcher==2.0` because the local package has a dynamic version that is omitted from the lockfile
+
+    hint: Remove `version` from the scope or declare a static version for `simple-launcher`.
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("./demo")
+        .args(["--with-requirements", "scopes.py"])
+        .arg("--offline")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 1 package in [TIME]
+    Prepared 1 package in [TIME]
+    Installed 1 package in [TIME]
+     + simple-launcher==0.1.0 (from file://[TEMP_DIR]/demo)
+    Installed 1 executable: simple_launcher
+    ");
+
+    uv_snapshot!(context.filters(), context.tool_install()
+        .arg("./demo")
+        .args(["--with-requirements", "scopes.py"])
+        .arg("--offline")
+        .env(EnvVars::UV_PREVIEW_FEATURES, "tool-install-locks,reject-dynamic-version-exact")
+        .env(EnvVars::PATH, bin_dir.as_os_str()), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Cannot scope `override-dependencies` to `simple-launcher==2.0` because the local package has a dynamic version that is omitted from the lockfile
+
+    hint: Remove `version` from the scope or declare a static version for `simple-launcher`.
+    ");
+
+    Ok(())
+}
+
 #[test]
 fn tool_install_lock_supports_local_wheel() {
     let context = uv_test::test_context!("3.12").with_tool_dirs();

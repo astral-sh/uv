@@ -13,7 +13,7 @@ use uv_cache_info::Timestamp;
 use uv_client::{BaseClientBuilder, RegistryClientBuilder};
 use uv_configuration::{
     Concurrency, Constraints, DependencyMode, DependencyModifiers, DryRun, Excludes, GitLfsSetting,
-    HashCheckingMode, Modifications, Overrides, Reinstall, TargetTriple, Upgrade,
+    HashCheckingMode, Modifications, Override, Overrides, Reinstall, TargetTriple, Upgrade,
 };
 use uv_distribution::LoweredExtraBuildDependencies;
 use uv_distribution_types::{
@@ -466,10 +466,16 @@ pub async fn install(
 
     // Convert to tool options.
     let options = ToolOptions::from(options);
+    let lock_overrides = receipt_overrides
+        .iter()
+        .cloned()
+        .map(Override::Requirement)
+        .chain(spec.override_dependencies.iter().cloned())
+        .collect::<Vec<_>>();
     let lock_manifest = ToolLock::manifest(
         &requirements,
         &receipt_constraints,
-        &receipt_overrides,
+        lock_overrides.iter().cloned(),
         &receipt_excludes,
         &receipt_build_constraints,
         &settings.resolver.dependency_metadata,
@@ -540,7 +546,7 @@ pub async fn install(
             match Box::pin(lock.validate(
                 &requirements,
                 &receipt_constraints,
-                &receipt_overrides,
+                &lock_overrides,
                 &receipt_excludes,
                 &build_constraints,
                 &refresh,
@@ -558,7 +564,9 @@ pub async fn install(
             {
                 Ok(lock) => Some(lock),
                 Err(ToolLockError::Validation(LockValidationError::Lock(err)))
-                    if err.is_resolution() || err.is_no_build() =>
+                    if err.is_resolution()
+                        || err.is_no_build()
+                        || err.is_dynamic_version_scope() =>
                 {
                     return Err(err.into());
                 }
