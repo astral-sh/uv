@@ -725,14 +725,9 @@ async fn unzip_inner<R: tokio::io::AsyncRead + Unpin>(
     }
 }
 
-/// Unpack the given tar archive into the destination directory.
-///
-/// Returns the list of unpacked files and their sizes.
-async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
-    reader: R,
-    dst: &Path,
-) -> Result<Vec<UnhashedFile>, Error> {
-    let decode_policy = DecodePolicy::default()
+/// The tar decoding policy for archive extraction and source distribution metadata reads.
+pub fn tar_decode_policy() -> DecodePolicy {
+    DecodePolicy::default()
         // NOTE: Some encoders (notably CPython's `tarfile`) will pack a 32-byte uname/gname
         // directly into the member header, despite pax saying that the uname/gname should
         // always be NUL terminated and therefore 31 bytes at the most.
@@ -749,8 +744,17 @@ async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
                 // wild thanks to both GNU tar and libarchive encoding `SCHILY.xattr`
                 // as raw binary.
                 .allow_non_utf8_pax_vendor_values(true),
-        );
-    let archive = TarArchive::new(reader).with_policy(decode_policy);
+        )
+}
+
+/// Unpack the given tar archive into the destination directory.
+///
+/// Returns the list of unpacked files and their sizes.
+async fn untar_in<R: tokio::io::AsyncRead + Unpin>(
+    reader: R,
+    dst: &Path,
+) -> Result<Vec<UnhashedFile>, Error> {
+    let archive = TarArchive::new(reader).with_policy(tar_decode_policy());
 
     let mut files = Vec::new();
     RecordingArchive::new(archive, &mut files)

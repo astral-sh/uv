@@ -37,6 +37,7 @@ use uv_configuration::{KeyringProviderType, TrustedPublishing};
 use uv_distribution_filename::{DistFilename, SourceDistExtension, SourceDistFilename};
 use uv_distribution_types::{IndexCapabilities, IndexUrl};
 use uv_extract::hash::Hasher;
+use uv_extract::stream::tar_decode_policy;
 use uv_fs::{ProgressReader, Simplified};
 use uv_metadata::read_archive_metadata;
 use uv_pypi_types::{HashAlgorithm, HashDigest, Metadata23, MetadataError};
@@ -1018,11 +1019,9 @@ async fn hash_file<const COUNT: usize>(
 async fn source_dist_pkg_info(file: &Path) -> Result<Vec<u8>, PublishPrepareError> {
     let reader = BufReader::new(File::open(&file).await?);
     let decoded = async_compression::tokio::bufread::GzipDecoder::new(reader);
-    // TODO(ww): Consider allowing vendor pax extensions while parsing here?
-    // We shouldn't encounter those with any normal Python build backend, but users
-    // can supply arbitrary dists so we may have to loosen here until PyPI itself
-    // restricts further.
-    let mut members = TarArchive::new(decoded).members();
+    let mut members = TarArchive::new(decoded)
+        .with_policy(tar_decode_policy())
+        .members();
     let mut pkg_infos = Vec::new();
 
     while let Some(member) = members.next().await.map_err(PublishPrepareError::Decode)? {
