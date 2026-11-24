@@ -1,0 +1,6 @@
+{
+  "Version": "14.0",
+  "CanonicalName": "macosx14.0",
+  "MaximumDeploymentTarget": "14.0.99",
+  "DefaultDeploymentTarget": "11.0"
+}
