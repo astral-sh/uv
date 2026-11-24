@@ -36,15 +36,15 @@ pub struct PyVenvConfiguration {
     /// The `PYTHONHOME` directory containing the base Python executable.
     pub(super) home: Option<PathBuf>,
     /// Was the virtual environment created with the `virtualenv` package?
-    pub(super) virtualenv: bool,
+    virtualenv: bool,
     /// Was the virtual environment created with the `uv` package?
-    pub(super) uv: bool,
+    uv: bool,
     /// Is the virtual environment relocatable?
-    pub(super) relocatable: bool,
+    relocatable: bool,
     /// Was the virtual environment populated with seed packages?
-    pub(super) seed: bool,
+    seed: bool,
     /// Should the virtual environment include system site packages?
-    pub(super) include_system_site_packages: bool,
+    include_system_site_packages: bool,
     /// The Python version the virtual environment was created with
     pub(super) version: Option<Version>,
     /// The creation location of a local project environment.
