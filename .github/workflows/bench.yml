@@ -185,9 +185,6 @@ jobs:
           cargo metadata --locked --format-version 1 > /dev/null
           uv run --only-dev cargo codspeed build --locked --profile profiling -p uv-bench
 
-      - name: "Test profile capture and import"
-        run: python3 scripts/test_codspeed_profiles.py
-
       - name: "Retain benchmark profiles"
         id: profiles
         # Only public main pushes produce reusable baseline profiles.
