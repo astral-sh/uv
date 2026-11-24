@@ -9817,7 +9817,11 @@ impl std::error::Error for LockError {
 
 impl uv_errors::Hinted for LockError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        if let Some(hint) = &self.hint {
+        if let LockErrorKind::DynamicVersionScope { name, .. } = &*self.kind {
+            uv_errors::Hints::from(format!(
+                "Remove `version` from the scope or declare a static version for `{name}`."
+            ))
+        } else if let Some(hint) = &self.hint {
             uv_errors::Hints::from(hint.to_string())
         } else {
             uv_errors::Hints::none()
@@ -10202,7 +10206,7 @@ impl std::fmt::Display for WheelTagHint {
 #[derive(DebugNoInline, thiserror::Error)]
 enum LockErrorKind {
     #[error(
-        "Cannot scope `{setting}` to `{name}=={version}` because the local package has a dynamic version that is omitted from the lockfile. Remove `version` from the scope or declare a static version for `{name}`."
+        "Cannot scope `{setting}` to `{name}=={version}` because the local package has a dynamic version that is omitted from the lockfile"
     )]
     DynamicVersionScope {
         setting: &'static str,
