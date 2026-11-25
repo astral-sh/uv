@@ -266,7 +266,7 @@ impl ResolverEnvironment {
 
     /// Returns the bounding Python versions that can satisfy this
     /// resolver environment's marker, if it's constrained.
-    pub(crate) fn requires_python(&self) -> Option<RequiresPythonRange> {
+    fn requires_python(&self) -> Option<RequiresPythonRange> {
         let Kind::Universal {
             markers: pep508_marker,
             ..
