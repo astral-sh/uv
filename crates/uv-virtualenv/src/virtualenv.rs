@@ -51,6 +51,25 @@ fn install_distutils_patch(interpreter: &Interpreter) -> bool {
     interpreter.python_tuple() < (3, 10)
 }
 
+/// Replace `{{ KEY }}` placeholders in a single pass so substituted values are never re-scanned.
+fn render_template(template: &str, replacements: &[(&str, &str)]) -> String {
+    let mut output = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find("{{ ") {
+        output.push_str(&rest[..start]);
+        rest = &rest[start..];
+        if let Some((key, value)) = replacements.iter().find(|(key, _)| rest.starts_with(key)) {
+            output.push_str(value);
+            rest = &rest[key.len()..];
+        } else {
+            output.push_str("{{ ");
+            rest = &rest["{{ ".len()..];
+        }
+    }
+    output.push_str(rest);
+    output
+}
+
 /// Very basic `.cfg` file format writer.
 fn write_cfg(f: &mut impl Write, data: &[(String, String)]) -> io::Result<()> {
     for (key, value) in data {
@@ -525,20 +544,20 @@ pub(crate) fn create(
             _ => Cow::Borrowed(bin_name),
         };
 
-        let template = if *name == "activate" {
-            Cow::Owned(template.replace(
-                "{{ RELOCATABLE }}",
-                if relocatable { "true" } else { "false" },
-            ))
-        } else {
-            Cow::Borrowed(*template)
-        };
-        let activator = template
-            .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
-            .replace("{{ BIN_NAME }}", &bin_name)
-            .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
-            .replace("{{ PATH_SEP }}", path_sep)
-            .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
+        let activator = render_template(
+            template,
+            &[
+                (
+                    "{{ RELOCATABLE }}",
+                    if relocatable { "true" } else { "false" },
+                ),
+                ("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir),
+                ("{{ BIN_NAME }}", &bin_name),
+                ("{{ VIRTUAL_PROMPT }}", &virtual_prompt),
+                ("{{ PATH_SEP }}", path_sep),
+                ("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages),
+            ],
+        );
         fs_err::write(scripts.join(name), activator)?;
     }
 
@@ -960,4 +979,34 @@ fn copy_launcher_windows(
     }
 
     Err(Error::NotFound(base_python.user_display().to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_template;
+
+    #[test]
+    fn render_template_does_not_rescan_values() {
+        let template =
+            "VIRTUAL_ENV='{{ VIRTUAL_ENV_DIR }}'\nPATH=\"$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH\"\n";
+        let rendered = render_template(
+            template,
+            &[
+                ("{{ VIRTUAL_ENV_DIR }}", "/srv/envs/x{{ BIN_NAME }}y"),
+                ("{{ BIN_NAME }}", "bin"),
+            ],
+        );
+        assert_eq!(
+            rendered,
+            "VIRTUAL_ENV='/srv/envs/x{{ BIN_NAME }}y'\nPATH=\"$VIRTUAL_ENV/bin:$PATH\"\n"
+        );
+    }
+
+    #[test]
+    fn render_template_keeps_unknown_braces() {
+        assert_eq!(
+            render_template("{{ OTHER }} {{ PATH_SEP }} {{", &[("{{ PATH_SEP }}", ":")]),
+            "{{ OTHER }} : {{"
+        );
+    }
 }
