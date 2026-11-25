@@ -1,9 +1,11 @@
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use itertools::Itertools;
 use tracing::trace;
 
+use uv_configuration::{ForkStrategy, ResolutionMode};
 use uv_distribution_types::{RequiresPython, RequiresPythonRange};
 use uv_pep440::VersionSpecifiers;
 use uv_pep508::{MarkerEnvironment, MarkerTree};
@@ -70,6 +72,27 @@ pub struct ResolverEnvironment {
     kind: Kind,
 }
 
+/// The initial set of universal resolver forks and how they should be scheduled.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum InitialForks {
+    /// User-configured environments (for example, `[tool.uv] environments`) or an empty set for an
+    /// unconstrained universal resolution. These are scheduled according to the effective
+    /// [`ForkStrategy`] and [`ResolutionMode`].
+    Environments(Arc<[MarkerTree]>),
+    /// Forks reused from an existing lockfile's `resolution-markers`. Because they already reflect
+    /// a completed resolution's fork order, they are solved in that order rather than re-sorted
+    /// globally by Python lower bound.
+    Lock(Arc<[MarkerTree]>),
+}
+
+impl InitialForks {
+    fn markers(&self) -> &[MarkerTree] {
+        match self {
+            Self::Environments(markers) | Self::Lock(markers) => markers,
+        }
+    }
+}
+
 /// The specific kind of resolver environment.
 ///
 /// Note that it is explicitly intended that this type remain unexported from
@@ -92,14 +115,14 @@ enum Kind {
     },
     /// We're solving for all possible marker environments.
     Universal {
-        /// The initial set of "fork preferences." These will come from the
-        /// lock file when available, or the list of supported environments
-        /// explicitly written into the `pyproject.toml`.
+        /// The initial set of "fork preferences." These come either from the
+        /// lock file when available, or from the list of supported environments
+        /// explicitly written into `pyproject.toml`.
         ///
         /// Note that this may be empty, which means resolution should begin
         /// with no forks. Or equivalently, a single fork whose marker
         /// expression matches all marker environments.
-        initial_forks: Arc<[MarkerTree]>,
+        initial_forks: InitialForks,
         /// The markers associated with this resolver fork.
         markers: MarkerTree,
         /// Conflicting group inclusions.
@@ -139,9 +162,8 @@ impl ResolverEnvironment {
     /// resolution.
     ///
     /// The set of marker expressions given corresponds to an initial
-    /// seeded set of resolver branches. This might come from a lock file
-    /// corresponding to the set of forks produced by a previous resolution, or
-    /// it might come from a human crafted set of marker expressions.
+    /// seeded set of resolver branches, such as a user-configured list of
+    /// supported environments (`[tool.uv] environments`).
     ///
     /// The "normal" case is that the initial forks are empty. When empty,
     /// resolution will create forks as needed to deal with potentially
@@ -155,8 +177,28 @@ impl ResolverEnvironment {
     /// of writing, how the order of dependencies specified is also significant
     /// but has no specific guarantees around it).
     pub fn universal(initial_forks: Vec<MarkerTree>) -> Self {
+        Self::from_initial_forks(InitialForks::Environments(initial_forks.into()))
+    }
+
+    /// Create a resolver environment for producing a multi-platform resolution
+    /// seeded with fork markers from an existing lockfile.
+    ///
+    /// Unlike [`Self::universal`], the seeded forks are solved in their given
+    /// order without re-sorting globally by Python lower bound. A fresh
+    /// resolution builds nested forks depth-first (for example, Python splits
+    /// nested within platform forks), so globally re-sorting those markers on a
+    /// subsequent `--upgrade-package` would reorder `resolution-markers`
+    /// relative to a fresh lock.
+    pub fn universal_from_lock(initial_forks: Vec<MarkerTree>) -> Self {
+        if initial_forks.is_empty() {
+            return Self::universal(initial_forks);
+        }
+        Self::from_initial_forks(InitialForks::Lock(initial_forks.into()))
+    }
+
+    fn from_initial_forks(initial_forks: InitialForks) -> Self {
         let kind = Kind::Universal {
-            initial_forks: initial_forks.into(),
+            initial_forks,
             markers: MarkerTree::TRUE,
             include: Arc::new(crate::FxHashbrownSet::default()),
             exclude: Arc::new(crate::FxHashbrownSet::default()),
@@ -235,6 +277,22 @@ impl ResolverEnvironment {
         crate::marker::requires_python(pep508_marker)
     }
 
+    /// Compare resolver environments by their lower Python bounds.
+    pub(crate) fn cmp_requires_python(&self, other: &Self) -> Ordering {
+        // A higher `requires-python` requirement indicates a _higher-priority_ fork.
+        //
+        // This ordering ensures that we prefer choosing the highest version for each fork based on
+        // its `requires-python` requirement.
+        //
+        // The reverse would prefer choosing fewer versions, at the cost of using older package
+        // versions on newer Python versions. For example, if reversed, we'd prefer to solve `<3.7`
+        // before solving `>=3.7`, since the resolution produced by the former might work for the
+        // latter, but the inverse is unlikely to be true.
+        let self_bound = self.requires_python().unwrap_or_default();
+        let other_bound = other.requires_python().unwrap_or_default();
+        self_bound.lower().cmp(other_bound.lower())
+    }
+
     /// For a universal resolution, return the markers of the current fork.
     pub(crate) fn fork_markers(&self) -> Option<MarkerTree> {
         match self.kind {
@@ -268,7 +326,7 @@ impl ResolverEnvironment {
                 let mut markers = *lhs;
                 markers = markers.and(rhs);
                 let kind = Kind::Universal {
-                    initial_forks: Arc::clone(initial_forks),
+                    initial_forks: initial_forks.clone(),
                     markers,
                     include: Arc::clone(include),
                     exclude: Arc::clone(exclude),
@@ -330,7 +388,7 @@ impl ResolverEnvironment {
                     }
                 }
                 let kind = Kind::Universal {
-                    initial_forks: Arc::clone(initial_forks),
+                    initial_forks: initial_forks.clone(),
                     markers: *markers,
                     include: Arc::new(include),
                     exclude: Arc::new(exclude),
@@ -351,6 +409,8 @@ impl ResolverEnvironment {
     pub(crate) fn initial_forked_states<'index>(
         &self,
         init: ForkState<'index>,
+        fork_strategy: ForkStrategy,
+        resolution_mode: ResolutionMode,
     ) -> Result<Vec<ForkState<'index>>, ResolveError> {
         let Kind::Universal {
             ref initial_forks,
@@ -361,10 +421,11 @@ impl ResolverEnvironment {
         else {
             return Ok(vec![init]);
         };
-        if initial_forks.is_empty() {
+        let markers = initial_forks.markers();
+        if markers.is_empty() {
             return Ok(vec![init]);
         }
-        initial_forks
+        let mut forked_states: Vec<_> = markers
             .iter()
             .rev()
             .filter_map(|&initial_fork| {
@@ -382,7 +443,37 @@ impl ResolverEnvironment {
                 env = env.narrow_environment(combined.pep508());
                 Some(Ok(init.clone().with_env(env)))
             })
-            .collect()
+            .collect::<Result<Vec<_>, ResolveError>>()?;
+
+        match initial_forks {
+            InitialForks::Environments(_) => {
+                // Apply the same Python-bound scheduling used for dependency-created forks. Since
+                // states are popped from the end of the stack, sort lower Python bounds last for
+                // `fewest` and higher Python bounds last for `requires-python`. There's no
+                // `cmp_upper_bounds` tiebreak here: it counts upper-bounded specifiers among a
+                // fork's dependencies, which an initial state doesn't have yet.
+                match (fork_strategy, resolution_mode) {
+                    (
+                        ForkStrategy::Fewest,
+                        ResolutionMode::Highest
+                        | ResolutionMode::Lowest
+                        | ResolutionMode::LowestDirect,
+                    )
+                    | (ForkStrategy::RequiresPython, ResolutionMode::Lowest) => {
+                        forked_states.sort_by(|a, b| a.env.cmp_requires_python(&b.env).reverse());
+                    }
+                    (
+                        ForkStrategy::RequiresPython,
+                        ResolutionMode::Highest | ResolutionMode::LowestDirect,
+                    ) => {
+                        forked_states.sort_by(|a, b| a.env.cmp_requires_python(&b.env));
+                    }
+                }
+            }
+            InitialForks::Lock(_) => {}
+        }
+
+        Ok(forked_states)
     }
 
     /// Narrow the [`PythonRequirement`] if this resolver environment

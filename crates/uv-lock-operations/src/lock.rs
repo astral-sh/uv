@@ -918,22 +918,22 @@ async fn do_lock(
             // `preferences-dependent-forking` packse scenario). To avoid this, we store the forks in the
             // lockfile. We read those after all the lockfile filters, to allow the forks to change when
             // the environment changed, e.g. the python bound check above can lead to different forking.
-            let resolver_env = ResolverEnvironment::universal(
-                forks_lock
-                    .map(|lock| {
-                        lock.fork_markers()
-                            .iter()
-                            .copied()
-                            .map(UniversalMarker::combined)
-                            .collect()
-                    })
-                    .unwrap_or_else(|| {
-                        environments
-                            .cloned()
-                            .map(SupportedEnvironments::into_markers)
-                            .unwrap_or_default()
-                    }),
-            );
+            let resolver_env = if let Some(lock) = forks_lock {
+                ResolverEnvironment::universal_from_lock(
+                    lock.fork_markers()
+                        .iter()
+                        .copied()
+                        .map(UniversalMarker::combined)
+                        .collect(),
+                )
+            } else {
+                ResolverEnvironment::universal(
+                    environments
+                        .cloned()
+                        .map(SupportedEnvironments::into_markers)
+                        .unwrap_or_default(),
+                )
+            };
 
             // Expand the available extras for each workspace member.
             let member_requirements = ExtrasResolver::new(&hasher, state.index(), database)

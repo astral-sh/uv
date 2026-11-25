@@ -1,0 +1,42 @@
+name = "lock-fork-marker-order"
+description = '''
+This test checks that reusing forks from an existing lockfile (for example via
+`--upgrade-package`) preserves the `resolution-markers` order produced by a
+fresh resolution when platform forks contain nested Python-version forks.
+'''
+
+[testgen]
+disable = true
+
+[resolver_options]
+universal = true
+
+[expected]
+satisfiable = true
+
+[root]
+requires_python = ">=3.11,<3.13"
+requires = [
+  "a==1.0.0 ; sys_platform == 'linux'",
+  "a==2.0.0 ; sys_platform != 'linux'",
+]
+
+[packages.a.versions."1.0.0"]
+requires_python = ">=3.11"
+requires = [
+  "b==1.0.0 ; python_version < '3.12'",
+  "b==2.0.0 ; python_version >= '3.12'",
+]
+
+[packages.a.versions."2.0.0"]
+requires_python = ">=3.11"
+requires = [
+  "b==1.0.0 ; python_version < '3.12'",
+  "b==2.0.0 ; python_version >= '3.12'",
+]
+
+[packages.b.versions."1.0.0"]
+requires_python = ">=3.11"
+
+[packages.b.versions."2.0.0"]
+requires_python = ">=3.11"

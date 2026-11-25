@@ -32325,6 +32325,335 @@ fn lock_fork_strategy_with_python_environments() -> Result<()> {
     Ok(())
 }
 
+/// Re-locking with `--upgrade-package` reuses the existing lockfile's `resolution-markers` as
+/// initial forks. When platform forks contain nested Python-version forks, reusing those markers
+/// must not reorder them relative to a fresh `uv lock` or `uv lock --upgrade`.
+///
+/// See: <https://github.com/astral-sh/uv/issues/22040>
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_upgrade_package_preserves_resolution_marker_order() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/lock-fork-marker-order.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = [
+            "a==1.0.0 ; sys_platform == 'linux'",
+            "a==2.0.0 ; sys_platform != 'linux'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    let initial_lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(initial_lock, @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.11, <3.13"
+        resolution-markers = [
+            "python_full_version >= '3.12' and sys_platform == 'linux'",
+            "python_full_version < '3.12' and sys_platform == 'linux'",
+            "python_full_version >= '3.12' and sys_platform != 'linux'",
+            "python_full_version < '3.12' and sys_platform != 'linux'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.12' and sys_platform == 'linux'",
+            "python_full_version < '3.12' and sys_platform == 'linux'",
+        ]
+        dependencies = [
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.12'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.12'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:46fcf65233b28698c7859ef43a5385f742d9a83fb52ccd8d0c1429d941064a50", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:849a73ccdc022903991213e8c8b2ce333a4bbd7a00c80314ac21fb4f2da5554d", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.12' and sys_platform != 'linux'",
+            "python_full_version < '3.12' and sys_platform != 'linux'",
+        ]
+        dependencies = [
+            { name = "b", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.12'" },
+            { name = "b", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.12'" },
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:592a33780f6b7b08bd45ca2f210c68ea8efc745717c58d46b681ea0f1a2e0752", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:b8f2a1a0e339df1db34bad46f4a4f4ffdf2ff13bed9e747de580f29f76b8ea44", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.12' and sys_platform == 'linux'",
+            "python_full_version < '3.12' and sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-1.0.0.tar.gz", hash = "sha256:9f853fd3ac2b14ba933fa348619e85f736acdfca49a9a5fae7aa0664ccde30ac", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-1.0.0-py3-none-any.whl", hash = "sha256:8ec51a8b747c8cf400eacf857240cbe167fc6a1823c14549233f8b86b7ec1da0", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "b"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.12' and sys_platform == 'linux'",
+            "python_full_version >= '3.12' and sys_platform != 'linux'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/b-2.0.0.tar.gz", hash = "sha256:544cb1f71750d8a7c0bc470a1deb2020f04dcc7c33c4239912aec04d649d796a", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/b-2.0.0-py3-none-any.whl", hash = "sha256:8a6378af51d9cae53e467caff7e33c1606469dd80985ea930e0fb4ca98f93efb", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform == 'linux'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "sys_platform != 'linux'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "sys_platform != 'linux'", specifier = "==2.0.0" },
+            { name = "a", marker = "sys_platform == 'linux'", specifier = "==1.0.0" },
+        ]
+        "#);
+    });
+
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("b").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), initial_lock);
+
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 5 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), initial_lock);
+
+    Ok(())
+}
+
+/// Configured `[tool.uv] environments` forks should still be sorted by `fork-strategy` on a fresh
+/// lock, keep that order on `--upgrade-package`, and re-sort when `environments` changes.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_upgrade_package_preserves_environments_fork_order() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let server = PackseServer::new("fork/fork-strategy-environments.toml");
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = [
+            "a<=1.0.0 ; python_version < '3.12'",
+            "a<=2.0.0 ; python_version >= '3.12'",
+        ]
+
+        [tool.uv]
+        fork-strategy = "requires-python"
+        environments = [
+            "python_version == '3.11'",
+            "python_version == '3.12'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    let initial_lock = context.read("uv.lock");
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(initial_lock, @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.11, <3.13"
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+            "python_full_version < '3.12'",
+        ]
+        supported-markers = [
+            "python_full_version < '3.12'",
+            "python_full_version >= '3.12'",
+        ]
+
+        [options]
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version < '3.12'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:c3fcce2546460649c16b57883cf8b2ee43b02a1abaa1ff82f36faf7e551881d3", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3569209a9ecaea7636fa3b0ed97d6a9d50fccad1399a7dcf45caad2cbe59ae50", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "a"
+        version = "2.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        resolution-markers = [
+            "python_full_version >= '3.12'",
+        ]
+        sdist = { url = "http://[LOCALHOST]/files/a-2.0.0.tar.gz", hash = "sha256:f04a987d93ab70a7ae7b47fc34226d808822483dd50d87dcc8acf36011964f16", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-2.0.0-py3-none-any.whl", hash = "sha256:498db1c24445774dde1dddcb558593590642d426a15b384c9f870fa89ddd24b4", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a", version = "1.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version < '3.12'" },
+            { name = "a", version = "2.0.0", source = { registry = "http://[LOCALHOST]/simple/" }, marker = "python_full_version >= '3.12'" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version < '3.12'", specifier = "<=1.0.0" },
+            { name = "a", marker = "python_full_version >= '3.12'", specifier = "<=2.0.0" },
+        ]
+        "#);
+    });
+
+    // Reusing the lockfile's forks keeps the sorted `requires-python` order and both versions.
+    uv_snapshot!(context.filters(), context.lock().arg("--upgrade-package").arg("a").arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 3 packages in [TIME]
+    ");
+
+    assert_eq!(context.read("uv.lock"), initial_lock);
+
+    // Changing `[tool.uv] environments` discards the lockfile's forks and re-applies
+    // `fork-strategy` sorting to the configured environments.
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11,<3.13"
+        dependencies = [
+            "a<=1.0.0 ; python_version < '3.12'",
+            "a<=2.0.0 ; python_version >= '3.12'",
+        ]
+
+        [tool.uv]
+        fork-strategy = "fewest"
+        environments = [
+            "python_version == '3.12'",
+            "python_version == '3.11'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().arg("--index-url").arg(server.index_url()), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Ignoring existing lockfile due to change in fork strategy: `requires-python` vs. `fewest`
+    Resolved 2 packages in [TIME]
+    Updated a v1.0.0, v2.0.0 -> v1.0.0
+    ");
+
+    insta::with_settings!({
+        filters => context.filters(),
+    }, {
+        assert_snapshot!(context.read("uv.lock"), @r#"
+        version = 1
+        revision = 5
+        requires-python = ">=3.11, <3.13"
+        resolution-markers = [
+            "python_full_version < '3.12'",
+            "python_full_version >= '3.12'",
+        ]
+        supported-markers = [
+            "python_full_version >= '3.12'",
+            "python_full_version < '3.12'",
+        ]
+
+        [options]
+        fork-strategy = "fewest"
+        exclude-newer = "2024-03-25T00:00:00Z"
+
+        [[package]]
+        name = "a"
+        version = "1.0.0"
+        source = { registry = "http://[LOCALHOST]/simple/" }
+        sdist = { url = "http://[LOCALHOST]/files/a-1.0.0.tar.gz", hash = "sha256:c3fcce2546460649c16b57883cf8b2ee43b02a1abaa1ff82f36faf7e551881d3", upload-time = "2024-03-24T00:00:00Z" }
+        wheels = [
+            { url = "http://[LOCALHOST]/files/a-1.0.0-py3-none-any.whl", hash = "sha256:3569209a9ecaea7636fa3b0ed97d6a9d50fccad1399a7dcf45caad2cbe59ae50", upload-time = "2024-03-24T00:00:00Z" },
+        ]
+
+        [[package]]
+        name = "project"
+        version = "0.1.0"
+        source = { virtual = "." }
+        dependencies = [
+            { name = "a" },
+        ]
+
+        [package.metadata]
+        requires-dist = [
+            { name = "a", marker = "python_full_version < '3.12'", specifier = "<=1.0.0" },
+            { name = "a", marker = "python_full_version >= '3.12'", specifier = "<=2.0.0" },
+        ]
+        "#);
+    });
+
+    Ok(())
+}
+
 /// Correctly narrow the Python requirement when upper bounds are present.
 ///
 /// See: <https://github.com/astral-sh/uv/issues/6911>
