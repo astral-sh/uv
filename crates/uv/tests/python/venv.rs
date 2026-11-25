@@ -1936,6 +1936,68 @@ fn verify_pyvenv_cfg_relocatable_env_var() {
     pyvenv_cfg.assert(predicates::str::contains("relocatable = true"));
 }
 
+/// A prompt containing shell metacharacters must not be executed when the
+/// activation script is sourced, even if prompt expansion is enabled
+/// afterwards. See astral-sh/uv#23376.
+#[test]
+#[cfg(unix)]
+fn venv_prompt_command_substitution_is_not_executed() {
+    let context = uv_test::test_context!("3.12");
+
+    let marker = context.temp_dir.child("ve-pwn");
+    let prompt = format!("x$(touch {})y", marker.path().display());
+
+    // Create a virtual environment with a prompt containing command
+    // substitution.
+    context
+        .venv()
+        .arg(context.venv.as_os_str())
+        .arg("--clear")
+        .arg("--python")
+        .arg("3.12")
+        .arg("--prompt")
+        .arg(&prompt)
+        .assert()
+        .success();
+
+    // Source the activation script with prompt expansion off, then turn it
+    // on and expand the prompt: neither step may execute the prompt value.
+    let activate = context.venv.child("bin").child("activate");
+    let output = std::process::Command::new("bash")
+        .arg("--noprofile")
+        .arg("--norc")
+        .arg("-c")
+        .arg(format!(
+            "shopt -u promptvars; . '{}'; shopt -s promptvars; printf 'VEP=%s\\n' \"$VIRTUAL_ENV_PROMPT\"; printf 'PS1=%s\\n' \"${{PS1@P}}\"",
+            activate.path().display()
+        ))
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "bash failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // The prompt value must be preserved verbatim.
+    assert!(
+        stdout.contains(&format!("VEP={prompt}")),
+        "prompt was mangled: {stdout}"
+    );
+
+    // ... and shown in the prompt ...
+    assert!(
+        stdout.contains(&marker.path().display().to_string()),
+        "prompt missing from PS1: {stdout}"
+    );
+
+    // ... but the command substitution must not have run.
+    marker.assert(predicates::path::missing());
+}
+
 /// `--no-relocatable` takes precedence over `UV_VENV_RELOCATABLE=1`.
 #[test]
 fn no_relocatable_overrides_relocatable_env_var() {

@@ -103,8 +103,8 @@ _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/{{ BIN_NAME }}:$PATH"
 export PATH
 
-if [ "x{{ VIRTUAL_PROMPT }}" != x ] ; then
-    VIRTUAL_ENV_PROMPT="{{ VIRTUAL_PROMPT }}"
+if [ 'x{{ VIRTUAL_PROMPT }}' != x ] ; then
+    VIRTUAL_ENV_PROMPT='{{ VIRTUAL_PROMPT }}'
 else
     VIRTUAL_ENV_PROMPT=$(basename "$VIRTUAL_ENV")
 fi
@@ -118,7 +118,41 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1-}"
-    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    if [ -n "${BASH_VERSION-}" ]; then
+        # Escape the prompt for PS1 even if prompt expansion is enabled after
+        # activation, so a prompt value containing command substitution cannot
+        # be executed. A nonprinting marker separates a high byte from the
+        # next escape under legacy multibyte locales.
+        _virtualenv_escape_prompt () {
+            # A read-only LC_ALL pins the shell to its current locale.
+            local LC_ALL=C || :
+            local _VIRTUAL_INDEX=0 _VIRTUAL_MARK= _VIRTUAL_CHARACTER
+            while [ "$_VIRTUAL_INDEX" -lt "${#1}" ]; do
+                _VIRTUAL_CHARACTER=${1:_VIRTUAL_INDEX:1}
+                _VIRTUAL_INDEX=$((_VIRTUAL_INDEX + 1))
+                case $_VIRTUAL_CHARACTER in
+                    \\) _VIRTUAL_PROMPT+="$_VIRTUAL_MARK\\\\\\\\" ;;
+                    \$ | \`) _VIRTUAL_PROMPT+="$_VIRTUAL_MARK\\$_VIRTUAL_CHARACTER" ;;
+                    *) _VIRTUAL_PROMPT+=$_VIRTUAL_CHARACTER ;;
+                esac
+                # $'...' inside a double-quoted ${...} stays literal in posix mode and without extquote
+                case $_VIRTUAL_CHARACTER in
+                    [\ -~]) _VIRTUAL_MARK= ;;
+                    *) _VIRTUAL_MARK=$'\001\002' ;;
+                esac
+            done
+        }
+        _VIRTUAL_PROMPT=
+        # Bash can warn when restoring an unavailable locale on return.
+        _virtualenv_escape_prompt "$VIRTUAL_ENV_PROMPT" 2>/dev/null
+        unset -f _virtualenv_escape_prompt
+    else
+        # Non-bash shells do not expand command substitutions from PS1 by
+        # default, so keep the prompt value as-is.
+        _VIRTUAL_PROMPT="$VIRTUAL_ENV_PROMPT"
+    fi
+    PS1="${_VIRTUAL_PROMPT:+(${_VIRTUAL_PROMPT}) }${PS1-}"
+    unset _VIRTUAL_PROMPT
     export PS1
 fi
 
