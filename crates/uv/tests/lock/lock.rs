@@ -47135,6 +47135,8 @@ fn lock_required_environment_wheel_url_fork() -> Result<()> {
         [tool.uv]
         environments = ["platform_machine == 'x86_64'"]
         required-environments = ["sys_platform == 'linux'"]
+        preview-features = ["minimum-libc-version"]
+        minimum-libc-version = {{ glibc = "2.17" }}
     "#, server.file_url("a-1.0.0-py3-none-manylinux_2_17_aarch64.macosx_11_0_x86_64.whl")})?;
 
     let filters: Vec<_> = context

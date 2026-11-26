@@ -14,7 +14,7 @@ use uv_platform_tags::{AbiTag, Tags};
 use uv_pypi_types::MetadataError;
 use uv_resolver_types::VariantsJsonMetadataError;
 
-use crate::prioritized_distribution::IncompatibleDist;
+use crate::prioritized_distribution::{IncompatibleDist, MissingPlatform};
 use crate::pubgrub::Range;
 use crate::resolver::{MetadataUnavailable, VersionFork};
 
@@ -25,6 +25,21 @@ pub enum UnavailableReason {
     Package(UnavailablePackage),
     /// A single version cannot be used.
     Version(UnavailableVersion),
+}
+
+impl UnavailableReason {
+    /// Return a common explanation for two sets of unavailable versions.
+    pub(crate) fn merge(&self, other: &Self) -> Option<Self> {
+        if let (
+            Self::Version(UnavailableVersion::MissingPlatform(left)),
+            Self::Version(UnavailableVersion::MissingPlatform(right)),
+        ) = (self, other)
+        {
+            let platform = left.merge(right)?;
+            return Some(Self::Version(UnavailableVersion::MissingPlatform(platform)));
+        }
+        (self == other).then(|| self.clone())
+    }
 }
 
 impl Display for UnavailableReason {
@@ -104,6 +119,8 @@ pub enum UnavailableVersion {
     UnsatisfiableDependency(UnsatisfiableRequirement),
     /// Version is incompatible because it has no usable distributions
     IncompatibleDist(IncompatibleDist),
+    /// The version lacks wheels for a required environment.
+    MissingPlatform(MissingPlatform),
     /// The wheel metadata was found, but could not be parsed.
     InvalidMetadata,
     /// The wheel metadata was found, but the metadata was inconsistent.
@@ -123,6 +140,7 @@ impl UnavailableVersion {
     fn message(&self) -> Cow<'static, str> {
         match self {
             Self::UnsatisfiableDependency(requirement) => Cow::Owned(requirement.to_string()),
+            Self::MissingPlatform(platform) => Cow::Owned(platform.to_string()),
             Self::IncompatibleDist(invalid_dist) => Cow::Owned(format!("{invalid_dist}")),
             Self::InvalidMetadata => Cow::Borrowed("invalid metadata"),
             Self::InconsistentMetadata => Cow::Borrowed("inconsistent metadata"),
@@ -141,6 +159,7 @@ impl UnavailableVersion {
                 format!("depends on {requirement}")
             }
             Self::IncompatibleDist(invalid_dist) => invalid_dist.singular_message(),
+            Self::MissingPlatform(_) => format!("has {self}"),
             Self::InvalidMetadata => format!("has {self}"),
             Self::InconsistentMetadata => format!("has {self}"),
             Self::InvalidStructure => format!("has {self}"),
@@ -154,6 +173,7 @@ impl UnavailableVersion {
         match self {
             Self::UnsatisfiableDependency(requirement) => format!("depend on {requirement}"),
             Self::IncompatibleDist(invalid_dist) => invalid_dist.plural_message(),
+            Self::MissingPlatform(_) => format!("have {self}"),
             Self::InvalidMetadata => format!("have {self}"),
             Self::InconsistentMetadata => format!("have {self}"),
             Self::InvalidStructure => format!("have {self}"),
@@ -173,6 +193,7 @@ impl UnavailableVersion {
             Self::IncompatibleDist(invalid_dist) => {
                 invalid_dist.context_message(tags, requires_python)
             }
+            Self::MissingPlatform(_) => None,
             Self::InvalidMetadata => None,
             Self::InconsistentMetadata => None,
             Self::InvalidStructure => None,

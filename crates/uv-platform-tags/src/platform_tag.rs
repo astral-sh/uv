@@ -6,7 +6,7 @@ use uv_small_str::SmallString;
 
 use crate::tags::AndroidAbi;
 use crate::tags::IosMultiarch;
-use crate::{Arch, BinaryFormat};
+use crate::{Arch, BinaryFormat, LibcTag, LibcVersion};
 
 /// Opaque release-and-architecture suffix used by [`PlatformTag`] variants that preserve a native
 /// platform-specific suffix.
@@ -187,6 +187,39 @@ impl PlatformTag {
                 | Self::Musllinux { .. }
                 | Self::Linux { .. }
         )
+    }
+
+    /// Extract the libc requirement of a manylinux or musllinux tag.
+    pub fn libc_tag(&self) -> Option<LibcTag> {
+        match *self {
+            Self::Manylinux { major, minor, arch } => {
+                Some(LibcTag::Glibc(arch, LibcVersion::new(major, minor)))
+            }
+            Self::Manylinux1 { arch } => Some(LibcTag::Glibc(arch, LibcVersion::new(2, 5))),
+            Self::Manylinux2010 { arch } => Some(LibcTag::Glibc(arch, LibcVersion::new(2, 12))),
+            Self::Manylinux2014 { arch } => Some(LibcTag::Glibc(arch, LibcVersion::new(2, 17))),
+            Self::Musllinux { major, minor, arch } => {
+                Some(LibcTag::Musl(arch, LibcVersion::new(major, minor)))
+            }
+            Self::Linux { .. }
+            | Self::Any
+            | Self::Macos { .. }
+            | Self::Win32
+            | Self::WinAmd64
+            | Self::WinArm64
+            | Self::WinIa64
+            | Self::Android { .. }
+            | Self::FreeBsd { .. }
+            | Self::NetBsd { .. }
+            | Self::OpenBsd { .. }
+            | Self::Dragonfly { .. }
+            | Self::Haiku { .. }
+            | Self::Illumos { .. }
+            | Self::Solaris { .. }
+            | Self::Pyodide { .. }
+            | Self::PyEmscripten { .. }
+            | Self::Ios { .. } => None,
+        }
     }
 
     /// Returns `true` if the platform is macOS-only.
