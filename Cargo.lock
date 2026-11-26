@@ -8203,6 +8203,7 @@ dependencies = [
  "itertools 0.14.0",
  "owo-colors",
  "pathdiff",
+ "regex",
  "thiserror",
  "tracing",
  "uv-console",

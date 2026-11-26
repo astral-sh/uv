@@ -2202,6 +2202,38 @@ fn create_venv_apostrophe_bat() {
     assert!(!activate_bat.contains("'\"'\"'"));
 }
 
+/// A placeholder in the venv path or prompt should survive template substitution literally.
+///
+/// This is a weird corner case to cater for, but it's easy to cater for and catering for it is
+/// easier than trying to come up with rules for what users should be able to pass here and what
+/// they should not without breaking some weird existing workflow.
+#[test]
+#[cfg(unix)]
+fn create_venv_placeholders_as_params() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    context
+        .venv()
+        .arg("{{ VIRTUAL_PROMPT }}")
+        .arg("--prompt")
+        .arg("{{ VIRTUAL_ENV_DIR }}")
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.external_command("sh")
+        .arg("-c")
+        .arg(indoc! {r#"
+            . './{{ VIRTUAL_PROMPT }}/bin/activate'
+            printf '%s\n' "$VIRTUAL_ENV" "$VIRTUAL_ENV_PROMPT"
+        "#}), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [TEMP_DIR]/{{ VIRTUAL_PROMPT }}
+    {{ VIRTUAL_ENV_DIR }}
+    ");
+}
+
 /// Emulate a ksh without ksh93's `${.sh.file}` parameter using a POSIX shell.
 #[test]
 #[cfg(unix)]

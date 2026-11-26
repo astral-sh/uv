@@ -11,6 +11,7 @@ use console::Term;
 use fs_err::File;
 use itertools::Itertools;
 use owo_colors::OwoColorize;
+use regex::{Captures, regex};
 
 use tracing::{debug, trace};
 
@@ -42,6 +43,17 @@ const ACTIVATE_TEMPLATES: &[(&str, &str)] = &[
     ),
 ];
 const VIRTUALENV_PATCH: &str = include_str!("_virtualenv.py");
+
+/// Replace `{{ NAME }}` placeholders.
+fn render_template<'a>(template: &'a str, replacements: &[(&str, &str)]) -> Cow<'a, str> {
+    regex!(r"\{\{ ([A-Z0-9_]+) \}\}").replace_all(template, |captures: &Captures<'_>| {
+        let (placeholder, [key]) = captures.extract();
+        match replacements.iter().find(|(name, _)| *name == key) {
+            Some((_, value)) => Cow::Borrowed(*value),
+            None => Cow::Owned(placeholder.to_owned()),
+        }
+    })
+}
 
 /// Python 3.10 and later already ignore the distutils install config keys this hook guards
 /// against, while the last pip release supporting Python 3.9 still needs the workaround.
@@ -525,21 +537,18 @@ pub(crate) fn create(
             _ => Cow::Borrowed(bin_name),
         };
 
-        let template = if *name == "activate" {
-            Cow::Owned(template.replace(
-                "{{ RELOCATABLE }}",
-                if relocatable { "true" } else { "false" },
-            ))
-        } else {
-            Cow::Borrowed(*template)
-        };
-        let activator = template
-            .replace("{{ VIRTUAL_ENV_DIR }}", &virtual_env_dir)
-            .replace("{{ BIN_NAME }}", &bin_name)
-            .replace("{{ VIRTUAL_PROMPT }}", &virtual_prompt)
-            .replace("{{ PATH_SEP }}", path_sep)
-            .replace("{{ RELATIVE_SITE_PACKAGES }}", &relative_site_packages);
-        fs_err::write(scripts.join(name), activator)?;
+        let activator = render_template(
+            template,
+            &[
+                ("RELOCATABLE", if relocatable { "true" } else { "false" }),
+                ("VIRTUAL_ENV_DIR", &virtual_env_dir),
+                ("BIN_NAME", &bin_name),
+                ("VIRTUAL_PROMPT", &virtual_prompt),
+                ("PATH_SEP", path_sep),
+                ("RELATIVE_SITE_PACKAGES", &relative_site_packages),
+            ],
+        );
+        fs_err::write(scripts.join(name), activator.as_bytes())?;
     }
 
     let mut pyvenv_cfg_data: Vec<(String, String)> = vec![

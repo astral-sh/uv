@@ -34,5 +34,6 @@ fs-err = { workspace = true }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 pathdiff = { workspace = true }
+regex = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
