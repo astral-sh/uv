@@ -37,12 +37,12 @@ jobs:
     outputs:
       result: ${{ steps.labels.outputs.final-message }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           persist-credentials: false
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.head_sha || format('refs/pull/{0}/head', inputs.pull_request) }}
           path: pull-request
@@ -74,7 +74,7 @@ jobs:
 
       - name: "Determine pull request labels"
         id: labels
-        uses: openai/codex-action@306c6a196a99dcc6582530c396a19d2672d5e9ec # v1.14
+        uses: openai/codex-action@v1.14
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -111,7 +111,7 @@ jobs:
     outputs:
       labels: ${{ steps.validate.outputs.labels }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           persist-credentials: false
@@ -158,7 +158,7 @@ jobs:
     steps:
       - name: "Get repository label token"
         id: token
-        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/simple-token-service@2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}

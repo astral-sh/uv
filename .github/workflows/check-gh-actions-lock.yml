@@ -1,0 +1,24 @@
+# Adapted from:
+# https://github.com/github/gh-actions-lock/blob/main/.github/workflows/verify-lockfile.yml
+
+name: verify-lockfile
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-4' || 'ubuntu-slim' }}
+    env:
+      # renovate: datasource=github-releases depName=github/gh-actions-lock
+      GH_ACTIONS_LOCK_VERSION: v0.5.1
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - run: gh extension install github/gh-actions-lock --pin "${GH_ACTIONS_LOCK_VERSION}"
+      - run: gh actions-lock --verify

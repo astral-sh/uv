@@ -42,7 +42,7 @@ jobs:
     steps:
       - name: "Get policy token"
         id: token
-        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/simple-token-service@2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -52,7 +52,7 @@ jobs:
             pull_requests: write
 
       - name: "Apply AI policy"
-        uses: astral-sh/github-actions/ai-policy@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/ai-policy@2026.11.16.0
         with:
           token: ${{ steps.token.outputs.token }}
           number: ${{ inputs.issue || inputs.pull_request }}

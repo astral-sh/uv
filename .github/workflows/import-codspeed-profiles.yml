@@ -35,7 +35,7 @@ jobs:
       SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
     steps:
       - name: Check out trusted main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -53,7 +53,7 @@ jobs:
       - name: Get public benchmark artifact token
         id: token
         if: ${{ steps.source.outputs.run-id != '' }}
-        uses: astral-sh/github-actions/simple-token-service@67dc9ee1ddc113eccd8116e7b949fb6cdcd89889 # 2026.11.16.0
+        uses: astral-sh/github-actions/simple-token-service@2026.11.16.0
         with:
           exchange-url: ${{ secrets.STS_API_URL }}/exchange
           audience: ${{ secrets.STS_API_URL }}
@@ -63,7 +63,7 @@ jobs:
 
       - name: Download public main profiles
         if: ${{ steps.source.outputs.run-id != '' }}
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8.0.2
         with:
           github-token: ${{ steps.token.outputs.token }}
           repository: astral-sh/uv
