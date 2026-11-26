@@ -1,7 +1,6 @@
 use std::ops::Add;
 use std::path::{Path, PathBuf};
 
-use fs_err as fs;
 use itertools::Itertools;
 use tracing::debug;
 use uv_dirs::user_uv_config_dir;
@@ -185,7 +184,7 @@ impl PythonVersionFile {
     ///
     /// If the file does not exist, `Ok(None)` is returned.
     async fn try_from_path(path: PathBuf) -> Result<Option<Self>, std::io::Error> {
-        match fs::tokio::read_to_string(&path).await {
+        match uv_fs::read_to_string_transcode(&path).await {
             Ok(content) => {
                 debug!(
                     "Reading Python requests from version file at `{}`",

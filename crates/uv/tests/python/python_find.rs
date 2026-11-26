@@ -4,7 +4,10 @@ use std::os::unix::fs::PermissionsExt;
 use anyhow::Result;
 use assert_cmd::assert::OutputAssertExt;
 use assert_fs::prelude::{FileTouch, PathChild};
-use assert_fs::{fixture::FileWriteStr, prelude::PathCreateDir};
+use assert_fs::{
+    fixture::{FileWriteBin, FileWriteStr},
+    prelude::PathCreateDir,
+};
 use indoc::indoc;
 
 use uv_platform::{Arch, Os};
@@ -411,6 +414,50 @@ fn python_find_pin() {
     ----- stdout -----
     [PYTHON-3.11]
     ");
+}
+
+/// A `.python-version` file saved with a UTF-8 byte order mark (e.g., by Notepad) is read as if the
+/// mark were not there.
+#[test]
+fn python_find_pin_utf8_bom() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_binary(b"\xef\xbb\xbf3.12\n")?;
+
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    Ok(())
+}
+
+/// A `.python-version` file saved as UTF-16 (e.g., by `echo 3.12 > .python-version` in Windows
+/// PowerShell) is transcoded rather than rejected as invalid UTF-8.
+#[test]
+fn python_find_pin_utf16() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.11", "3.12"]);
+
+    let contents: Vec<u8> = "\u{feff}3.12\r\n"
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    context
+        .temp_dir
+        .child(".python-version")
+        .write_binary(&contents)?;
+
+    uv_snapshot!(context.filters(), context.python_find(), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    [PYTHON-3.12]
+    ");
+
+    Ok(())
 }
 
 #[test]
