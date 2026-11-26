@@ -29,5 +29,8 @@ dev = [
 ]
 
 [build-system]
-requires = ["flit_core>=3.4,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["uv_build>=0.7,<10000"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
