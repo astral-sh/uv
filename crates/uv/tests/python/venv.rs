@@ -2230,6 +2230,41 @@ fn activate_non_relocatable_venv_ksh() {
 }
 
 #[test]
+#[cfg(unix)]
+fn activate_venv_with_placeholder_in_path() {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    let venv_dir = context.temp_dir.child("env-{{ VIRTUAL_PROMPT }}-dir");
+    let marker = context.temp_dir.child("marker");
+    let prompt = format!("'; touch '{}'; '", marker.path().display());
+
+    context
+        .venv()
+        .arg(venv_dir.as_os_str())
+        .arg("--prompt")
+        .arg(&prompt)
+        .arg("--python")
+        .arg("3.12")
+        .assert()
+        .success();
+
+    let output = context
+        .external_command("sh")
+        .arg("-c")
+        .arg(". \"$1\" && python -c 'import sys; print(sys.prefix)'")
+        .arg("sh")
+        .arg(venv_dir.path().join("bin/activate"))
+        .output()
+        .unwrap();
+
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        venv_dir.path().to_string_lossy()
+    );
+    assert!(!marker.exists());
+}
+
+#[test]
 fn venv_python_preference() {
     let context =
         uv_test::test_context_with_versions!(&["3.12", "3.11"]).with_versions_as_managed(&["3.12"]);
