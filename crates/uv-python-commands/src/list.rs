@@ -11,11 +11,13 @@ use rustc_hash::FxHashSet;
 use uv_cache::Cache;
 use uv_client::BaseClientBuilder;
 use uv_fs::Simplified;
+use uv_platform::Platform;
 use uv_python_discovery::find_all_python_installations;
+use uv_python_managed::ManagedPythonInstallations;
 use uv_python_managed::downloads::{Error as PythonDownloadError, ManagedPythonDownloadList};
 use uv_python_types::{
     EnvironmentPreference, PythonArchitecture, PythonDownloadRequest, PythonDownloads,
-    PythonPreference, PythonRequest, PythonSource,
+    PythonPreference, PythonRequest, PythonSource, python_build_versions_from_env,
 };
 use uv_settings::PythonInstallMirrors;
 
@@ -79,45 +81,34 @@ pub async fn list(
     let base_download_request = if python_preference == PythonPreference::OnlySystem {
         None
     } else {
-        // If the user request cannot be mapped to a download request, we won't show any downloads
+        // Requests that cannot be mapped to a download request cannot match managed installation keys.
         PythonDownloadRequest::from_request(request.as_ref().unwrap_or(&PythonRequest::Any)).map(
             |request| request.with_default_arch(python_arch.map(PythonArchitecture::into_inner)),
         )
     };
 
-    let download_request = if let Some(base_download_request) = base_download_request {
-        match kinds {
-            PythonListKinds::Installed => None,
-            PythonListKinds::Downloads => Some(if all_platforms {
-                base_download_request
-            } else if all_arches {
-                base_download_request.fill_platform()?.with_any_arch()
-            } else {
-                base_download_request.fill_platform()?
-            }),
-            PythonListKinds::Default => {
-                if python_downloads.is_automatic() {
-                    Some(if all_platforms {
-                        base_download_request
-                    } else if all_arches {
-                        base_download_request.fill_platform()?.with_any_arch()
-                    } else {
-                        base_download_request.fill_platform()?
-                    })
-                } else {
-                    // If fetching is not automatic, then don't show downloads as available by default
-                    None
-                }
-            }
-        }
-        // Include pre-release versions
-        .map(|request| request.with_prereleases(true))
+    let include_downloads = match kinds {
+        PythonListKinds::Installed => false,
+        PythonListKinds::Downloads => true,
+        PythonListKinds::Default => python_downloads.is_automatic(),
+    };
+    let managed_request = if let Some(base_download_request) = base_download_request
+        && (include_downloads || all_platforms || all_arches)
+    {
+        let request = if all_platforms {
+            base_download_request
+        } else if all_arches && base_download_request.arch.is_none() {
+            base_download_request.fill_platform()?.with_any_arch()
+        } else {
+            base_download_request.fill_platform()?
+        };
+        Some(request.with_prereleases(true))
     } else {
         None
     };
 
     let mut output = BTreeSet::new();
-    if let Some(download_request) = download_request {
+    if include_downloads && let Some(download_request) = &managed_request {
         let download_list = ManagedPythonDownloadList::new(
             client_builder,
             cache,
@@ -126,7 +117,7 @@ pub async fn list(
         .await?;
 
         let downloads = download_list
-            .iter_matching(&download_request)
+            .iter_matching(download_request)
             // TODO(zanieb): Add a way to show debug downloads, we just hide them for now
             .filter(|download| !download.key().variant().is_debug());
 
@@ -184,6 +175,35 @@ pub async fn list(
                 kind,
                 Either::Left(installation.interpreter().real_executable().to_path_buf()),
             ));
+        }
+
+        if (all_platforms || all_arches)
+            && let Some(request) = &managed_request
+        {
+            // Discovery only returns interpreters that can run on the host. Foreign managed
+            // installations can be identified from their installation keys without running them.
+            let host = Platform::from_env()?;
+            let build_versions = python_build_versions_from_env()?;
+            for installation in ManagedPythonInstallations::from_settings(None)?.find_all()? {
+                if host.supports(installation.platform())
+                    || !request.satisfied_by_key(installation.key())
+                    || build_versions
+                        .get(&installation.implementation())
+                        .is_some_and(|requested_build| {
+                            !installation.matches_build_constraint(requested_build)
+                        })
+                {
+                    continue;
+                }
+                let executable = installation.executable(false);
+                if executable.is_file() {
+                    output.insert((
+                        installation.key().clone(),
+                        Kind::Managed,
+                        Either::Left(executable),
+                    ));
+                }
+            }
         }
     }
 
