@@ -33,6 +33,7 @@ jobs:
       issues: read
       pull-requests: read
     outputs:
+      attempt: ${{ steps.context.outputs.attempt }}
       result: ${{ steps.diagnose.outputs.final-message }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -61,7 +62,7 @@ jobs:
 
           gh run view "$RUN_ID" \
             --repo "$GITHUB_REPOSITORY" \
-            --json databaseId,workflowName,name,event,conclusion,attempt,headBranch,headSha,url,jobs \
+            --json databaseId,workflowName,name,event,conclusion,attempt,headBranch,headSha,url \
             > .workflow-failure-event.json
 
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" \
@@ -89,27 +90,14 @@ jobs:
             exit 0
           fi
 
-          # Fetch jobs separately to avoid gh's limit of 25 per-job log fallbacks.
-          run_attempt="$(jaq -r '.attempt' .workflow-failure-event.json)"
-          jaq -r '
-            .jobs[]
-            | select(.conclusion | . == "action_required" or . == "failure" or . == "startup_failure" or . == "timed_out")
-            | .databaseId
-          ' .workflow-failure-event.json > "$RUNNER_TEMP/workflow-failure-job-ids.txt"
-
-          while IFS= read -r job_id; do
-            gh run view \
-              --repo "$GITHUB_REPOSITORY" \
-              --attempt "$run_attempt" \
-              --job "$job_id" \
-              --log-failed
-          done < "$RUNNER_TEMP/workflow-failure-job-ids.txt" > .workflow-failure-log.txt
+          uv run --script scripts/collect-workflow-failure-logs.py
 
           {
             printf 'Workflow failure diagnosis automation for run %s\n\n' "$RUN_ID"
             cat agents/prompts/diagnose-workflow-failure.md
           } > "$RUNNER_TEMP/diagnose-workflow-failure-prompt.md"
 
+          jaq -r '"attempt=\(.attempt)"' .workflow-failure-event.json >> "$GITHUB_OUTPUT"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: "Diagnose workflow failure"
@@ -171,6 +159,7 @@ jobs:
 
       - name: "Retry flaky workflow failures"
         env:
+          DIAGNOSED_ATTEMPT: ${{ needs.diagnose.outputs.attempt }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           HEAD_SHA: ${{ inputs.head_sha }}
           RUN_ID: ${{ inputs.run }}
@@ -179,6 +168,10 @@ jobs:
             > "$RUNNER_TEMP/workflow-run.json"
 
           run_attempt="$(jaq --raw-output '.run_attempt' "$RUNNER_TEMP/workflow-run.json")"
+          if [ "$run_attempt" != "$DIAGNOSED_ATTEMPT" ]; then
+            echo "The diagnosis is for a different attempt of this workflow run."
+            exit 0
+          fi
           if [ "$run_attempt" -ge "$MAX_FLAKE_RERUN_ATTEMPTS" ]; then
             echo "The workflow run has exhausted its automatic retry budget."
             exit 0
@@ -265,6 +258,7 @@ jobs:
 
       - name: "Report workflow failure"
         env:
+          DIAGNOSED_ATTEMPT: ${{ needs.diagnose.outputs.attempt }}
           DIAGNOSIS: ${{ needs.diagnose.outputs.result }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           ISSUE_REPOSITORY: astral-sh/uv-dev
@@ -285,7 +279,7 @@ jobs:
             exit 1
           fi
 
-          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID"
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/attempts/$DIAGNOSED_ATTEMPT"
           jaq --raw-output --arg run_url "$run_url" '
             "Another workflow run encountered this failure: " + $run_url
             + (if (.comment_note | length) > 0 then "\n\n" + .comment_note else "" end)
