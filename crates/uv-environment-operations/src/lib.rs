@@ -455,6 +455,14 @@ pub fn resolve_project_env(
             if err.kind() == io::ErrorKind::NotFound || path.is_dir() {
                 return Ok(root);
             }
+            if err.kind() == io::ErrorKind::InvalidData
+                && !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles)
+            {
+                return Err(EnvironmentError::InvalidProjectEnvironmentDir(
+                    path.to_path_buf(),
+                    "it is a file".to_string(),
+                ));
+            }
             return Err(err.into());
         }
     };

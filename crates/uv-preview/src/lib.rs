@@ -387,8 +387,9 @@ pub enum PreviewFeature {
     /// cached environments that can be reused later. Explicit environment paths and environments
     /// selected with `--active` are not centralized.
     CentralizedProjectEnvs,
-    /// uv supports `.venv` redirect files ([PEP 832](https://peps.python.org/pep-0832/)). Enabling this
-    /// feature silences the preview warning.
+    /// uv supports `.venv` redirect files ([PEP 832](https://peps.python.org/pep-0832/)). Enabling
+    /// this feature silences the preview warning and makes Python discovery reject empty or
+    /// non-UTF-8 redirect files.
     VenvRedirectFiles,
     /// uv stores a `uv.lock` file alongside each installed tool and reuses it for subsequent
     /// installations and upgrades. The lockfile records the tool's resolved dependencies and also

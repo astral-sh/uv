@@ -119,7 +119,17 @@ pub(crate) fn virtualenv_from_working_dir() -> Result<Option<PathBuf>, Error> {
         };
         let redirect = dot_venv.is_file();
         let root = if redirect {
-            read_venv_redirect(&dot_venv)?
+            match read_venv_redirect(&dot_venv) {
+                Ok(target) => target,
+                // Without preview, a file that doesn't contain a path isn't a redirect.
+                Err(err)
+                    if err.kind() == io::ErrorKind::InvalidData
+                        && !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles) =>
+                {
+                    continue;
+                }
+                Err(err) => return Err(err.into()),
+            }
         } else if metadata.is_dir() || metadata.is_symlink() {
             dot_venv
         } else {
