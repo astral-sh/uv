@@ -8545,7 +8545,7 @@ fn no_deps_valid_extra() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a package with `--no-deps`, including an invalid extra. We don't warn here.
+/// Resolve a package with `--no-deps`, including an invalid extra.
 #[test]
 fn no_deps_invalid_extra() -> Result<()> {
     let context = uv_test::test_context!("3.12");
@@ -8563,6 +8563,7 @@ fn no_deps_invalid_extra() -> Result<()> {
         # via -r requirements.in
 
     ----- stderr -----
+    warning: The package `flask==3.0.2` does not have an extra named `empty`
     Resolved 1 package in [TIME]
     "
     );
