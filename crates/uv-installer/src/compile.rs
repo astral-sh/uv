@@ -19,6 +19,10 @@ use uv_macros::DebugNoInline;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
 
+mod serc;
+
+pub use serc::{compile_serc_files, compile_serc_tree};
+
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
 const DEFAULT_COMPILE_TIMEOUT: Duration = Duration::from_mins(1);
@@ -40,6 +44,45 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
+    #[error("serc does not support {0}; expected CPython")]
+    NativeImplementation(String),
+    #[error("unsupported Python version \"{0}\"; expected 3.12, 3.13, 3.14, or 3.15")]
+    NativeVersion(String),
+    #[error("serc does not support this interpreter's bytecode magic number")]
+    NativeMagicNumber,
+    #[error("serc does not support this interpreter's bytecode cache tag")]
+    NativeCacheTag,
+    #[error("serc does not support {setting} ({variable})")]
+    NativeSetting {
+        setting: &'static str,
+        variable: &'static str,
+    },
+    #[error("Failed to install serc")]
+    SercInstall(#[source] anyhow::Error),
+    #[error("Failed to start serc")]
+    SercSubcommand(#[source] io::Error),
+    #[error("Failed to send source paths to serc")]
+    SercStdin(#[source] io::Error),
+    #[error("Invalid compilation summary from serc")]
+    SercOutput(#[source] serde_json::Error),
+    #[error(
+        "serc reported {compiled} compiled and {skipped} skipped files for {submitted} source paths"
+    )]
+    SercOutputCount {
+        compiled: usize,
+        skipped: usize,
+        submitted: usize,
+    },
+    #[error("serc timed out after {}s", .0.as_secs_f32())]
+    SercTimeout(Duration),
+    #[error("serc exited with {status}:\n{stderr}")]
+    SercFailure {
+        status: std::process::ExitStatus,
+        stderr: String,
+    },
+    #[cfg(windows)]
+    #[error("Source path cannot be encoded as UTF-8 for serc: {}", .0.user_display())]
+    SercPathEncoding(PathBuf),
     #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]
@@ -159,6 +202,32 @@ async fn wait_for_workers(
     Ok(())
 }
 
+/// Walk regular Python source files, ignoring entries removed during traversal.
+fn python_sources(dir: &Path) -> impl Iterator<Item = Result<PathBuf, CompileError>> {
+    WalkDir::new(dir)
+        .into_iter()
+        // Avoid temporary files created during compilation.
+        .filter_entry(|entry| entry.file_name() != "__pycache__")
+        .filter_map(|entry| match entry {
+            // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
+            Ok(entry)
+                if entry.file_type().is_file()
+                    && entry.path().extension().is_some_and(|ext| ext == "py") =>
+            {
+                Some(Ok(entry.into_path()))
+            }
+            Ok(_) => None,
+            Err(err)
+                if err
+                    .io_error()
+                    .is_some_and(|err| err.kind() == io::ErrorKind::NotFound) =>
+            {
+                None
+            }
+            Err(err) => Some(Err(err.into())),
+        })
+}
+
 /// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
 /// that calls `compileall.compile_file`.
 ///
@@ -205,35 +274,13 @@ pub async fn compile_tree(
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
     let mut send_error = None;
-    let walker = WalkDir::new(dir)
-        .into_iter()
-        // Otherwise we stumble over temporary files from `compileall`.
-        .filter_entry(|dir| dir.file_name() != "__pycache__");
-    for entry in walker {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                if err
-                    .io_error()
-                    .is_some_and(|err| err.kind() == io::ErrorKind::NotFound)
-                {
-                    // The directory was removed, just ignore it
-                    continue;
-                }
-                return Err(err.into());
-            }
-        };
-        // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
-        if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
-            source_files += 1;
-            if let Err(err) = sender.send(entry.path().to_owned()).await {
-                // The workers exited.
-                // If e.g. something with the Python interpreter is wrong, the workers have exited
-                // with an error. We try to report this informative error and only if that fails,
-                // report the send error.
-                send_error = Some(err);
-                break;
-            }
+    for file in python_sources(dir) {
+        let file = file?;
+        source_files += 1;
+        if let Err(err) = sender.send(file).await {
+            // Report the worker failure before the send error.
+            send_error = Some(err);
+            break;
         }
     }
 

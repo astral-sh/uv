@@ -1297,7 +1297,7 @@ impl CacheBucket {
             Self::SourceDistributions => "sdists-v11",
             Self::FlatIndex => "flat-index-v7",
             Self::Git => "git-v2",
-            Self::Interpreter => "interpreter-v6",
+            Self::Interpreter => "interpreter-v7",
             Self::Simple => "simple-v28",
             Self::Wheels => "wheels-v8",
             // Note that when bumping this, you'll also need to bump
