@@ -40,12 +40,12 @@ test-group = 'serial'
 # Managed Python tests may download several interpreter archives.
 [[profile.ci-macos.overrides]]
 platform = 'cfg(target_os = "macos")'
-filter = 'test(/^python_(find|install|upgrade)::/)'
+filter = 'test(/^python_(find|install|upgrade|module)::/)'
 slow-timeout = { period = "10s", terminate-after = 24 }
 
 [[profile.ci-windows.overrides]]
 platform = 'cfg(target_os = "windows")'
-filter = 'test(/^python_(find|install|upgrade)::/)'
+filter = 'test(/^python_(find|install|upgrade|module)::/)'
 test-group = 'io-bound'
 priority = 1 # Start earlier so these can complete before the end
 
