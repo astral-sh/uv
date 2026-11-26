@@ -3415,6 +3415,42 @@ fn uninstall_last_patch() {
     );
 }
 
+/// When the minor version link cannot be created, the error should name the link.
+///
+/// Some failures come from following the new junction, e.g., Windows refuses to traverse it
+/// with "untrusted mount point (os error 448)" when the process enforces `RedirectionGuard`,
+/// and the underlying error does not include a path. Here, a regular file at the link path
+/// cannot be replaced with a junction.
+#[cfg(windows)]
+#[test]
+fn python_install_minor_version_link_error() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_filtered_python_keys()
+        .with_filtered_exe_suffix()
+        .with_managed_python_dirs()
+        // Windows translates error messages.
+        .with_filter((
+            r"`: .* \(os error 267\)",
+            "`: The directory name is invalid. (os error 267)",
+        ));
+
+    let managed_dir = context.temp_dir.child("managed");
+    let platform_key = platform_key_from_env().unwrap();
+
+    managed_dir.create_dir_all().unwrap();
+    managed_dir
+        .child(format!("cpython-3.12-{platform_key}"))
+        .touch()
+        .unwrap();
+
+    uv_snapshot!(context.filters(), context.python_install().arg("3.12.8"), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Failed to create Python minor version link directory at `managed/cpython-3.12-[PLATFORM]`
+      cause: failed to remove directory `[TEMP_DIR]/managed/cpython-3.12-[PLATFORM]`: The directory name is invalid. (os error 267)
+    ");
+}
+
 /// After uninstalling the last patch for a minor version, the minor version link
 /// (symlink on Unix, junction on Windows) should be removed.
 ///

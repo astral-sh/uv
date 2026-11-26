@@ -65,8 +65,8 @@ pub enum Error {
     CanonicalizeExecutable(#[source] io::Error),
     #[error("Failed to create Python executable link")]
     LinkExecutable(#[source] io::Error),
-    #[error("Failed to create Python minor version link directory")]
-    PythonMinorVersionLinkDirectory(#[source] io::Error),
+    #[error("Failed to create Python minor version link directory at `{}`", _0.user_display())]
+    PythonMinorVersionLinkDirectory(PathBuf, #[source] io::Error),
     #[error("Failed to create directory for Python executable link")]
     ExecutableDirectory(#[source] io::Error),
     #[error("Failed to read Python installation directory")]
@@ -887,7 +887,10 @@ impl PythonMinorVersionLink {
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
             Err(err) => {
-                return Err(Error::PythonMinorVersionLinkDirectory(err));
+                return Err(Error::PythonMinorVersionLinkDirectory(
+                    self.symlink_directory.clone(),
+                    err,
+                ));
             }
         }
         Ok(())
