@@ -10,6 +10,11 @@ authors = { workspace = true }
 license = { workspace = true }
 
 [features]
+# Use the FIPS 140-3 validated aws-lc-rs module as the TLS crypto provider.
+#
+# Building with this feature requires the toolchain needed by `aws-lc-fips-sys` (CMake, Go and a
+# C compiler).
+fips = ["rustls/fips"]
 test-pypi = []
 
 [lib]
