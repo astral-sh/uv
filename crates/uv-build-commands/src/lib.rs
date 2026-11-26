@@ -612,9 +612,10 @@ async fn build_package(
             .chain(build_constraints_from_workspace.iter().cloned()),
     );
 
-    let hash_checking = match build_hash_checking {
-        HashCheckingMode::Require => Some(HashCheckingMode::Require),
-        HashCheckingMode::Verify => hash_checking,
+    let hash_checking = match (build_isolation, build_hash_checking) {
+        (BuildIsolation::Shared, _) => None,
+        (_, HashCheckingMode::Require) => Some(HashCheckingMode::Require),
+        (_, HashCheckingMode::Verify) => hash_checking,
     };
     let hasher = if let Some(hash_checking) = hash_checking {
         // `uv build --require-hashes` requires hashes only for command-line build constraints;
