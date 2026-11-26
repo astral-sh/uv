@@ -22,7 +22,7 @@ use uv_environment_operations::{
 };
 use uv_fs::Simplified;
 use uv_install_operations::loggers::DefaultInstallLogger;
-use uv_lock_operations::{LockMode, LockOperation, LockTarget};
+use uv_lock_operations::{LockCommand, LockMode, LockOperation, LockTarget};
 use uv_normalize::{DefaultExtras, PackageName};
 use uv_pep440::{BumpCommand, PrereleaseKind, Version};
 use uv_preview::Preview;
@@ -467,7 +467,7 @@ async fn print_frozen_version(
 ) -> Result<ExitStatus> {
     let target = LockTarget::Workspace(project.workspace());
     let lock = target
-        .read_frozen(frozen_source.into())
+        .read_frozen(frozen_source.into(), LockCommand::Version)
         .await
         .map_err(UvError::from)?;
 
@@ -597,6 +597,7 @@ async fn lock_and_sync(
     // Lock and sync the environment, if necessary.
     let lock = match Box::pin(
         LockOperation::new(
+            LockCommand::Version,
             mode,
             &settings.resolver,
             &client_builder,
