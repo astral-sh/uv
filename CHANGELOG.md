@@ -1,8 +1,5 @@
 # Changelog
 
-<!-- prettier-ignore-start -->
-
-
 ## 0.13.10
 
 Released on 2026-11-24.
@@ -464,7 +461,3 @@ See [changelogs/0.2.x](./changelogs/0.2.x.md)
 ## 0.1.x
 
 See [changelogs/0.1.x](./changelogs/0.1.x.md)
-
-<!-- prettier-ignore-end -->
-
-

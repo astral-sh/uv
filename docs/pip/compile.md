@@ -69,7 +69,9 @@ $ uv pip compile --group foo
 
 !!! important
 
-    A `--group` flag has to be added to pip-tools' `pip compile`, [although they're considering it](https://github.com/jazzband/pip-tools/issues/2062). We expect to support whatever syntax and semantics they adopt.
+    A `--group` flag has to be added to pip-tools' `pip compile`,
+    [although they're considering it](https://github.com/jazzband/pip-tools/issues/2062). We expect
+    to support whatever syntax and semantics they adopt.
 
 To specify the project directory where groups should be sourced from:
 

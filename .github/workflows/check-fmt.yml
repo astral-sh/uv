@@ -20,14 +20,17 @@ jobs:
         run: rustup component add rustfmt
       - run: cargo fmt --all --check
 
-  prettier:
+  markdown:
     timeout-minutes: 10
     runs-on: ${{ github.repository_owner == 'astral-sh' && 'github-ubuntu-24.04-x86_64-2' || 'ubuntu-slim' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: npx prettier@3.9.0 --check .
+      - uses: $/.github/actions/setup-uv-toolchain
+        with:
+          enable-cache: auto
+      - run: uv run --locked --only-group=check rumdl fmt --check .
 
   python:
     timeout-minutes: 10

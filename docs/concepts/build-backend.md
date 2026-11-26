@@ -20,8 +20,8 @@ required to build a
 
 !!! tip
 
-    While the backend supports a number of options for configuring your project structure, when build scripts or
-    a more flexible project layout are required, consider using the
+    While the backend supports a number of options for configuring your project structure, when
+    build scripts or a more flexible project layout are required, consider using the
     [hatchling](https://hatch.pypa.io/latest/config/build/#build-system) build backend instead.
 
 ## Using the uv build backend

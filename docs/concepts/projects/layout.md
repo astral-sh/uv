@@ -50,8 +50,9 @@ use [`uvx`](../../guides/tools.md) or
 
 !!! tip
 
-    If you don't want uv to manage the project environment, set [`managed = false`](../../reference/settings.md#managed)
-    to disable automatic locking and syncing of the project. For example:
+    If you don't want uv to manage the project environment, set
+    [`managed = false`](../../reference/settings.md#managed) to disable automatic locking and
+    syncing of the project. For example:
 
     ```toml title="pyproject.toml"
     [tool.uv]

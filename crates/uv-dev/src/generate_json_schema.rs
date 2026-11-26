@@ -1,8 +1,7 @@
 use std::path::PathBuf;
-use std::process::Command;
 
 use anstream::println;
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use pretty_assertions::StrComparison;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -96,30 +95,7 @@ fn generate() -> Result<String> {
     let generator = schemars::SchemaGenerator::new(settings);
     let schema = generator.into_root_schema_for::<CombinedOptions>();
 
-    let json = serde_json::to_string_pretty(&schema).unwrap();
-
-    // Format with prettier
-    let output = Command::new("npx")
-        .args(["prettier@3.9.0", "--stdin-filepath", "uv.schema.json"])
-        .current_dir(ROOT_DIR)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .context("Failed to spawn prettier")?;
-
-    std::io::Write::write_all(&mut output.stdin.as_ref().unwrap(), json.as_bytes())
-        .context("Failed to write to prettier stdin")?;
-
-    let output = output
-        .wait_with_output()
-        .context("Failed to run prettier")?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("prettier failed: {stderr}");
-    }
-
-    let mut output = String::from_utf8(output.stdout).context("prettier output is not UTF-8")?;
+    let mut output = serde_json::to_string_pretty(&schema)?;
 
     for (value, replacement) in REPLACEMENTS {
         assert_ne!(
@@ -132,5 +108,6 @@ fn generate() -> Result<String> {
         output = after;
     }
 
+    output.push('\n');
     Ok(output)
 }

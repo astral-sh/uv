@@ -42,8 +42,9 @@ Alternatively, `uv build <SRC>` will build the package in the specified director
 
     By default, `uv build` respects `tool.uv.sources` when resolving build dependencies from the
     `build-system.requires` section of the `pyproject.toml`. When publishing a package, we recommend
-    running `uv build --no-sources` to ensure that the package builds correctly when `tool.uv.sources`
-    is disabled, as is the case when using other build tools, like [`pypa/build`](https://github.com/pypa/build).
+    running `uv build --no-sources` to ensure that the package builds correctly when
+    `tool.uv.sources` is disabled, as is the case when using other build tools, like
+    [`pypa/build`](https://github.com/pypa/build).
 
 ## Updating your version
 

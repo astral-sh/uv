@@ -175,6 +175,19 @@ wheels = [
 ]
 
 [[package]]
+name = "astral-dev-toolchain-rumdl"
+version = "0.3.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/12/e32fa122f505a7dabf368905b3ef783b1563233928a296de0edbe64a1a10/astral_dev_toolchain_rumdl-0.3.2-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:83fefa1d1ae798996c74f85c0366a5d97b6b53e170bba7acc2d9fd5a8e7782c5", size = 8005149, upload-time = "2026-11-13T17:37:19.064Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/5d/56bea495216735f5d133abf94b76bb1f274ea6ad3a7b5682154d3e1da8bf/astral_dev_toolchain_rumdl-0.3.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:a1c2b73dc30ab6caf57e62bdff3662e07d6e7a441990b2e30ae53590ce1b472f", size = 7480304, upload-time = "2026-11-13T17:37:21.231Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/cb/09dfc857931e79fb2826e4783deadcc9035d0f4d6bb8c062b46d444c4b12/astral_dev_toolchain_rumdl-0.3.2-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6f39466f25097f04b4d090cbaf22ac60f10e30e3fff5daff5710a9b9290a9ae8", size = 7725148, upload-time = "2026-11-13T17:37:23.745Z" },
+    { url = "https://files.pythonhosted.org/packages/76/6a/8182cda7b25123d10f18d82d42249cfccc9b044ccb653916b2250b0a6ef2/astral_dev_toolchain_rumdl-0.3.2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:97f7834a1e81626b59e5f963f58ec93ba3661d941ebd8cc7d9b0b64a761042dd", size = 8264837, upload-time = "2026-11-13T17:37:26.322Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/e9/1d25b066cc3a2eb6b714afc7019fe5c48f0e6e31a31400f0561a1f88febc/astral_dev_toolchain_rumdl-0.3.2-py3-none-win_amd64.whl", hash = "sha256:ece54aca6eb036269aa9d884ad28acbf9f7f63d29f948ce0c522ad26d8fec4d1", size = 8512173, upload-time = "2026-11-13T17:37:28.17Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/17/6b109a6fc00b5f4583a831453c0ab1ec20f6f2a26b43588942835aa9aade/astral_dev_toolchain_rumdl-0.3.2-py3-none-win_arm64.whl", hash = "sha256:9009bf2fcc8865ac5b567a1e6963a231260002debc052f99ba03b139ee9c510f", size = 7845956, upload-time = "2026-11-13T17:37:30.683Z" },
+]
+
+[[package]]
 name = "babel"
 version = "2.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1845,6 +1858,7 @@ source = { editable = "." }
 check = [
     { name = "astral-dev-toolchain-cargo-shear" },
     { name = "astral-dev-toolchain-jaq" },
+    { name = "astral-dev-toolchain-rumdl" },
     { name = "ruff" },
     { name = "ty" },
     { name = "validate-pyproject", extra = ["all", "store"] },
@@ -1858,6 +1872,7 @@ dev = [
     { name = "astral-dev-toolchain-cargo-shear" },
     { name = "astral-dev-toolchain-cargo-xwin" },
     { name = "astral-dev-toolchain-jaq" },
+    { name = "astral-dev-toolchain-rumdl" },
     { name = "ruff" },
     { name = "ty" },
     { name = "validate-pyproject", extra = ["all", "store"] },
@@ -1900,6 +1915,7 @@ release = ">=3.12"
 check = [
     { name = "astral-dev-toolchain-cargo-shear", specifier = ">=1.13.4" },
     { name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" },
+    { name = "astral-dev-toolchain-rumdl", specifier = ">=0.3.2" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "ty", specifier = ">=0.0.106" },
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" },
@@ -1913,6 +1929,7 @@ dev = [
     { name = "astral-dev-toolchain-cargo-shear", specifier = ">=1.13.4" },
     { name = "astral-dev-toolchain-cargo-xwin", specifier = ">=0.23.1" },
     { name = "astral-dev-toolchain-jaq", specifier = ">=3.1.1" },
+    { name = "astral-dev-toolchain-rumdl", specifier = ">=0.3.2" },
     { name = "ruff", specifier = ">=0.16.2" },
     { name = "ty", specifier = ">=0.0.106" },
     { name = "validate-pyproject", extras = ["all", "store"], specifier = ">=0.25" },

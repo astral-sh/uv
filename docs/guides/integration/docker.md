@@ -37,8 +37,6 @@ The following distroless images are available:
 
 And the following derived images are available:
 
-<!-- prettier-ignore-start -->
-
 - Based on `alpine:3.23`:
     - `ghcr.io/astral-sh/uv:alpine`
     - `ghcr.io/astral-sh/uv:alpine3.23`
@@ -86,8 +84,6 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:python3.13-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.12-trixie-slim`
     - `ghcr.io/astral-sh/uv:python3.11-trixie-slim`
-
-<!-- prettier-ignore-end -->
 
 As with the distroless image, each derived image is published with uv version tags as
 `ghcr.io/astral-sh/uv:{major}.{minor}.{patch}-{base}` and
@@ -170,8 +166,9 @@ RUN uv sync --locked
 
 !!! important
 
-    It is best practice to add `.venv` to a [`.dockerignore` file](https://docs.docker.com/build/concepts/context/#dockerignore-files)
-    in your repository to prevent it from being included in image builds. The project virtual
+    It is best practice to add `.venv` to a
+    [`.dockerignore` file](https://docs.docker.com/build/concepts/context/#dockerignore-files) in
+    your repository to prevent it from being included in image builds. The project virtual
     environment is dependent on your local platform and should be created from scratch in the image.
 
 Then, to start your application by default:
@@ -207,9 +204,9 @@ RUN uv run some_script.py
 !!! tip
 
     Alternatively, the
-    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path) can
-    be set before syncing to install to the system Python environment and skip environment activation
-    entirely.
+    [`UV_PROJECT_ENVIRONMENT` setting](../../concepts/projects/config.md#project-environment-path)
+    can be set before syncing to install to the system Python environment and skip environment
+    activation entirely.
 
 ### Using installed tools
 
@@ -613,4 +610,5 @@ Verified OK
 
     These examples use `latest`, but best practice is to verify the attestation for a specific
     version tag, e.g., `ghcr.io/astral-sh/uv:0.13.10`, or (even better) the specific image digest,
-    such as `ghcr.io/astral-sh/uv@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff`.
+    such as
+    `ghcr.io/astral-sh/uv@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff`.

@@ -15,8 +15,8 @@ and deploy your Lambda functions.
 
 !!! tip
 
-    Check out the [`uv-aws-lambda-example`](https://github.com/astral-sh/uv-aws-lambda-example) project for
-    an example of best practices when using uv to deploy an application to AWS Lambda.
+    Check out the [`uv-aws-lambda-example`](https://github.com/astral-sh/uv-aws-lambda-example)
+    project for an example of best practices when using uv to deploy an application to AWS Lambda.
 
 ## Getting started
 
@@ -131,7 +131,8 @@ CMD ["app.main.handler"]
 
 !!! tip
 
-    To deploy to ARM-based AWS Lambda runtimes, replace `public.ecr.aws/lambda/python:3.13` with `public.ecr.aws/lambda/python:3.13-arm64`.
+    To deploy to ARM-based AWS Lambda runtimes, replace `public.ecr.aws/lambda/python:3.13` with
+    `public.ecr.aws/lambda/python:3.13-arm64`.
 
 We can build the image with, e.g.:
 
@@ -384,7 +385,8 @@ CMD ["app.main.handler"]
 
 !!! tip
 
-    To deploy to ARM-based AWS Lambda runtimes, replace `public.ecr.aws/lambda/python:3.13` with `public.ecr.aws/lambda/python:3.13-arm64`.
+    To deploy to ARM-based AWS Lambda runtimes, replace `public.ecr.aws/lambda/python:3.13` with
+    `public.ecr.aws/lambda/python:3.13-arm64`.
 
 From there, we can build and deploy the updated image as before.
 
@@ -412,7 +414,8 @@ $ uv pip install \
 
 !!! tip
 
-    To deploy to ARM-based AWS Lambda runtimes, replace `x86_64-manylinux2014` with `aarch64-manylinux2014`.
+    To deploy to ARM-based AWS Lambda runtimes, replace `x86_64-manylinux2014` with
+    `aarch64-manylinux2014`.
 
 Following the
 [AWS Lambda documentation](https://docs.aws.amazon.com/lambda/latest/dg/python-package.html), we can
@@ -462,9 +465,10 @@ $ aws lambda update-function-code \
 
 !!! note
 
-    By default, the AWS Management Console assumes a Lambda entrypoint of `lambda_function.lambda_handler`.
-    If your application uses a different entrypoint, you'll need to modify it in the AWS Management Console.
-    For example, the above FastAPI application uses `app.main.handler`.
+    By default, the AWS Management Console assumes a Lambda entrypoint of
+    `lambda_function.lambda_handler`. If your application uses a different entrypoint, you'll need
+    to modify it in the AWS Management Console. For example, the above FastAPI application uses
+    `app.main.handler`.
 
 To test the Lambda, we can invoke it via the AWS Management Console or the AWS CLI, e.g.:
 

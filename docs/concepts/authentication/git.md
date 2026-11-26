@@ -26,8 +26,8 @@ To authenticate over HTTP Basic authentication using a password or token:
 
 !!! note
 
-    When using a GitHub personal access token, the username is arbitrary. GitHub doesn't allow you to
-    use your account name and password in URLs like this, although other hosts may.
+    When using a GitHub personal access token, the username is arbitrary. GitHub doesn't allow you
+    to use your account name and password in URLs like this, although other hosts may.
 
 If there are no credentials present in the URL and authentication is needed, the
 [Git credential helper](#git-credential-helpers) will be queried.
@@ -63,8 +63,8 @@ details.
 
 !!! note
 
-    When using `gh auth login` interactively, the credential helper will be configured automatically.
-    But when using `gh auth login --with-token`, as in the uv
+    When using `gh auth login` interactively, the credential helper will be configured
+    automatically. But when using `gh auth login --with-token`, as in the uv
     [GitHub Actions guide](../../guides/integration/github.md#private-repos), the
     [`gh auth setup-git`](https://cli.github.com/manual/gh_auth_setup-git) command will need to be
     run afterwards to configure the credential helper.

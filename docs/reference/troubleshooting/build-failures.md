@@ -79,7 +79,8 @@ ModuleNotFoundError: No module named 'distutils'
 !!! important
 
     The `--use-pep517` flag should be included with the `pip install` invocation to ensure the same
-    build isolation behavior. uv always uses [build isolation by default](../../pip/compatibility.md#pep-517-build-isolation).
+    build isolation behavior. uv always uses
+    [build isolation by default](../../pip/compatibility.md#pep-517-build-isolation).
 
     We also recommend including the `--force-reinstall` and `--no-cache` options when reproducing
     failures.
@@ -204,7 +205,8 @@ installed.
 
 !!! tip
 
-    To resolve an error where `Python.h` is missing, install the [`python3-dev` package](https://packages.debian.org/trixie/python3-dev).
+    To resolve an error where `Python.h` is missing, install the
+    [`python3-dev` package](https://packages.debian.org/trixie/python3-dev).
 
 ### Module is missing or cannot be imported
 

@@ -32,7 +32,8 @@ $ export UV_INDEX_PRIVATE_REGISTRY_PASSWORD="$JFROG_JWT_TOKEN"
 
 !!! note
 
-    Replace `PRIVATE_REGISTRY` in the environment variable names with the actual index name defined in your `pyproject.toml`.
+    Replace `PRIVATE_REGISTRY` in the environment variable names with the actual index name defined
+    in your `pyproject.toml`.
 
 ## Publishing packages
 
@@ -67,4 +68,5 @@ $ uv publish --index private-registry
 
 !!! note
 
-    The publish environment variables (`UV_PUBLISH_USERNAME` and `UV_PUBLISH_PASSWORD`) do not include the index name.
+    The publish environment variables (`UV_PUBLISH_USERNAME` and `UV_PUBLISH_PASSWORD`) do not
+    include the index name.

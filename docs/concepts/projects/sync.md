@@ -51,9 +51,10 @@ This is equivalent to the `--locked` flag for other commands.
 
 !!! important
 
-    uv will not consider lockfiles outdated when new versions of packages are released — the lockfile
-    needs to be explicitly updated if you want to upgrade dependencies. See the documentation on
-    [upgrading locked package versions](#upgrading-locked-package-versions) for details.
+    uv will not consider lockfiles outdated when new versions of packages are released — the
+    lockfile needs to be explicitly updated if you want to upgrade dependencies. See the
+    documentation on [upgrading locked package versions](#upgrading-locked-package-versions) for
+    details.
 
 ## Creating the lockfile
 
@@ -225,7 +226,8 @@ its dependencies.
 
 !!! important
 
-    On-sync malware checking is in [preview](../preview.md), and is subject to change until stabilized.
+    On-sync malware checking is in [preview](../preview.md), and is subject to change until
+    stabilized.
 
 While syncing, uv can perform a lightweight scan of your lockfile for known malware by checking it
 against [OSV](https://osv.dev). OSV references MAL advisories from the OpenSSF's

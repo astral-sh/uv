@@ -10,11 +10,12 @@ pre-built artifacts that can be installed directly.
 
 !!! important
 
-    When using `uv build`, uv acts as a [build frontend](https://peps.python.org/pep-0517/#terminology-and-goals)
-    and only determines the Python version to use and invokes the build backend. The details of
-    the builds, such as the included files and the distribution filenames, are determined by the build
-    backend, as defined in [`[build-system]`](./config.md#build-systems). Information about build
-    configuration can be found in the respective tool's documentation.
+    When using `uv build`, uv acts as a
+    [build frontend](https://peps.python.org/pep-0517/#terminology-and-goals) and only determines
+    the Python version to use and invokes the build backend. The details of the builds, such as the
+    included files and the distribution filenames, are determined by the build backend, as defined
+    in [`[build-system]`](./config.md#build-systems). Information about build configuration can be
+    found in the respective tool's documentation.
 
 ## Using `uv build`
 

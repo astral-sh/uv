@@ -41,11 +41,11 @@ def format_python(file_path: str, cwd: str) -> None:
         pass
 
 
-def format_prettier(file_path: str, cwd: str) -> None:
-    """Format files with prettier."""
+def format_markdown(file_path: str, cwd: str) -> None:
+    """Format Markdown files with rumdl."""
     try:
         subprocess.run(
-            ["npx", "prettier@3.9.0", "--write", file_path],
+            ["uv", "run", "--locked", "--only-group=check", "rumdl", "fmt", file_path],
             cwd=cwd,
             capture_output=True,
             check=False,
@@ -99,8 +99,8 @@ def format_file(file_path: str, cwd: str) -> None:
         format_rust(file_path, cwd)
     elif ext in (".py", ".pyi"):
         format_python(file_path, cwd)
-    elif ext in (".json5", ".yaml", ".yml", ".md"):
-        format_prettier(file_path, cwd)
+    elif ext == ".md":
+        format_markdown(file_path, cwd)
 
 
 def main() -> None:
