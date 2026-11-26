@@ -64,6 +64,7 @@ struct SkippedRequirement {
 
 enum SkippedReason {
     EnvironmentOrPythonRequirement,
+    InactiveVariant,
     UndefinedExtra,
 }
 
@@ -647,14 +648,19 @@ fn select_requirements(
         }
 
         found_packages.insert(requirement.name.clone());
-        let mut effective_marker = requirement.marker.and(resolution_marker);
+        let marker = requirement.marker.resolve_variants_false();
+        let mut effective_marker = marker.and(resolution_marker);
         if effective_marker.is_false() {
             skipped.push(SkippedRequirement {
                 package: requirement.name.clone(),
                 dependency_type: DependencyType::Production,
                 original_text: dependency.clone(),
                 display_text: display_requirement(&requirement),
-                reason: SkippedReason::EnvironmentOrPythonRequirement,
+                reason: if marker.is_false() && marker != requirement.marker {
+                    SkippedReason::InactiveVariant
+                } else {
+                    SkippedReason::EnvironmentOrPythonRequirement
+                },
             });
             continue;
         }
@@ -806,6 +812,7 @@ fn render_skipped_requirements(skipped: &[SkippedRequirement], printer: Printer)
             SkippedReason::EnvironmentOrPythonRequirement => {
                 "excluded by the project's environments or Python requirement"
             }
+            SkippedReason::InactiveVariant => "its wheel variant marker does not match",
             SkippedReason::UndefinedExtra => {
                 "references an extra that the project does not provide"
             }

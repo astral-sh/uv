@@ -93,9 +93,8 @@ impl RequirementScope {
 impl Requirement {
     /// Returns whether the markers apply for the given environment.
     ///
-    /// When `env` is `None`, this specifically evaluates all marker
-    /// expressions based on the environment to `true`. That is, this provides
-    /// environment independent marker evaluation.
+    /// For evaluation without an interpreter environment, see
+    /// [`uv_pep508::MarkerTree::evaluate_optional_environment`].
     pub fn evaluate_markers(&self, env: Option<&MarkerEnvironment>, extras: &[ExtraName]) -> bool {
         self.marker.evaluate_optional_environment(env, extras)
     }

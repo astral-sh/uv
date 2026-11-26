@@ -4620,6 +4620,45 @@ fn lock_project_with_scoped_override_prerelease() -> Result<()> {
     Ok(())
 }
 
+/// An override for Python 3.13 and later must not enable pre-releases on Python 3.12.
+#[cfg(feature = "test-universal")]
+#[test]
+fn lock_scoped_variant_override_prerelease() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"parent".parse()?, &"1.0".parse()?).build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"dep".parse()?, &"2.0rc1".parse()?).build();
+    context.temp_dir.child(filename).write_binary(&wheel)?;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["parent", "dep; python_version < '3.13'"]
+
+        [tool.uv]
+        environments = ["python_version >= '3.13'", "python_version < '3.13'"]
+
+        [[tool.uv.override-dependencies]]
+        package = { name = "parent" }
+        dependencies = ["dep==2.0rc1; python_version >= '3.13' or variant_label == 'gpu'"]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock()
+        .args(["--no-index", "--find-links", ".", "--prerelease", "explicit"]), @"
+    exit_code: 1 (failure)
+    ----- stderr -----
+    error: No solution found when resolving dependencies for split (markers: python_full_version < '3.13')
+      cause: Because there are no versions of dep{python_full_version < '3.13'} and your project depends on dep{python_full_version < '3.13'}, we can conclude that your project's requirements are unsatisfiable.
+
+    hint: Pre-releases are available for `dep` in the requested range (e.g., 2.0rc1), but pre-releases weren't enabled (try: `--prerelease=allow`)
+    ");
+    Ok(())
+}
+
 /// Do not allow an excluded scoped override to opt a direct dependency into pre-releases.
 #[cfg(feature = "test-universal")]
 #[test]
@@ -34226,6 +34265,79 @@ fn lock_multiple_sources_no_marker() -> Result<()> {
       cause: When multiple sources are provided, each source must include a platform marker (e.g., `marker = "sys_platform == 'linux'"`)
     "#);
 
+    Ok(())
+}
+
+/// A variant predicate must not extend an explicit index pin to other platforms.
+#[cfg(feature = "test-universal")]
+#[test]
+fn inactive_variant_index_pin() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    let (filename, wheel) = WheelBuilder::new(&"dep".parse()?, &"1.0".parse()?).build();
+    context
+        .temp_dir
+        .child("default")
+        .child(filename)
+        .write_binary(&wheel)?;
+    let (filename, wheel) = WheelBuilder::new(&"dep".parse()?, &"2.0".parse()?).build();
+    context
+        .temp_dir
+        .child("linux")
+        .child(filename)
+        .write_binary(&wheel)?;
+
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep; sys_platform == 'win32'"]
+
+        [tool.uv]
+        environments = ["sys_platform == 'linux'", "sys_platform == 'win32'"]
+
+        [tool.uv.workspace]
+        members = ["member"]
+
+        [[tool.uv.index]]
+        url = "default"
+        format = "flat"
+        default = true
+
+        [[tool.uv.index]]
+        name = "linux"
+        url = "linux"
+        format = "flat"
+        explicit = true
+    "#})?;
+    context
+        .temp_dir
+        .child("member/pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "member"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["dep; sys_platform == 'linux' or variant_label == 'gpu'"]
+
+        [tool.uv.sources]
+        dep = { index = "linux" }
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.export().args([
+        "--all-packages", "--no-header", "--no-hashes", "--no-annotate"
+    ]), @"
+    exit_code: 0 (success)
+    ----- stdout -----
+    dep==1.0 ; sys_platform == 'win32'
+    dep==2.0 ; sys_platform == 'linux'
+
+    ----- stderr -----
+    Resolved 4 packages in [TIME]
+    ");
     Ok(())
 }
 

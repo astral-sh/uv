@@ -40,9 +40,16 @@ impl MarkerEnvironment {
         }
     }
 
-    /// Returns of the stringly typed value of the key in the current environment
+    /// Return the string value of an interpreter marker.
+    ///
+    /// An interpreter has no wheel variant label. For that key this accessor returns
+    /// an empty placeholder. Use [`crate::MarkerTree::evaluate`] for comparisons, since
+    /// even an empty label does not match when the wheel label is absent.
     pub fn get_string(&self, key: CanonicalMarkerValueString) -> &str {
         match key {
+            // TODO(konsti): Represent absence explicitly when the evaluator accepts a
+            // declaring wheel. Keep the string accessor for existing interpreter keys.
+            CanonicalMarkerValueString::VariantLabel => "",
             CanonicalMarkerValueString::ImplementationName => self.implementation_name(),
             CanonicalMarkerValueString::OsName => self.os_name(),
             CanonicalMarkerValueString::PlatformMachine => self.platform_machine(),

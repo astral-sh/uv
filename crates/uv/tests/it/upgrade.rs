@@ -261,6 +261,31 @@ fn upgrade_skips_inapplicable_marked_dependency() -> Result<()> {
 }
 
 #[test]
+fn upgrade_skips_inactive_variant_pin() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&[]);
+    let pyproject_toml = r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.12"
+        dependencies = ["bar==1 ; variant_label == 'gpu'"]
+    "#;
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(pyproject_toml)?;
+
+    uv_snapshot!(context.filters(), context.upgrade().arg("bar"), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    warning: Skipping dependency `bar` in `project.dependencies`: `bar==1 ; variant_label == 'gpu'` (its wheel variant marker does not match)
+    ");
+
+    assert_project_unchanged(&context, pyproject_toml);
+    Ok(())
+}
+
+#[test]
 fn upgrade_skips_undefined_extra() -> Result<()> {
     let context = uv_test::test_context_with_versions!(&[]);
     let pyproject_toml = r#"
