@@ -821,6 +821,9 @@ async fn do_lock(
                 // metadata that cannot be obtained under `--no-build`.
                 return Err(err.into());
             }
+            Err(LockValidationError::Lock(err)) if err.is_dynamic_version_scope() => {
+                return Err(err.into());
+            }
             Err(LockValidationError::Lock(err)) if err.is_not_pep625() => {
                 // A non-PEP 625-compliant sdist in the lockfile will also be rejected by a fresh
                 // resolve, so short-circuit rather than doing the extra work.

@@ -376,6 +376,13 @@ mod tests {
         See [installing Python executables](./python-versions.md#installing-python-executables) for
         details about the installation location and handling of existing executables.
 
+        ### `reject-dynamic-version-exact` {#reject-dynamic-version-exact}
+
+        When creating or validating a lockfile, uv rejects overrides and exclusions scoped to an
+        exact version of a local package whose dynamic version is omitted from the lockfile.
+        The version can change between builds, even if the scope does not match the current build.
+        Omit `version` from the scope or declare a static package version.
+
         ### `relocatable-envs-default` {#relocatable-envs-default}
 
         uv creates relocatable virtual environments by default, using relative paths in their entry

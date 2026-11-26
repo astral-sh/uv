@@ -347,7 +347,7 @@ impl ToolLock {
     pub(super) fn manifest(
         requirements: &[Requirement],
         constraints: &[Requirement],
-        overrides: &[Requirement],
+        overrides: impl IntoIterator<Item = Override<Requirement>>,
         excludes: &[ExcludeDependency],
         build_constraints: &[NameRequirementSpecification],
         dependency_metadata: &DependencyMetadata,
@@ -356,7 +356,7 @@ impl ToolLock {
             std::iter::empty::<PackageName>(),
             requirements.iter().cloned(),
             constraints.iter().cloned(),
-            overrides.iter().cloned().map(Override::Requirement),
+            overrides,
             excludes.iter().cloned(),
             build_constraints.iter().cloned(),
             std::iter::empty::<(GroupName, Vec<Requirement>)>(),
@@ -435,7 +435,7 @@ impl ToolLock {
         self,
         requirements: &[Requirement],
         constraints: &[Requirement],
-        overrides: &[Requirement],
+        overrides: &[Override<Requirement>],
         excludes: &[ExcludeDependency],
         build_constraints: &Constraints,
         refresh: &Refresh,
@@ -549,11 +549,6 @@ impl ToolLock {
 
         let requires_python =
             RequiresPython::greater_than_equal_version(&interpreter.python_minor_version());
-        let overrides = overrides
-            .iter()
-            .cloned()
-            .map(Override::Requirement)
-            .collect::<Vec<_>>();
         let Self { root, lock } = self;
         let validated = ValidatedLock::validate(
             lock,
@@ -566,7 +561,7 @@ impl ToolLock {
             &BTreeMap::new(),
             None,
             constraints,
-            &overrides,
+            overrides,
             excludes,
             build_constraints,
             &Conflicts::empty(),

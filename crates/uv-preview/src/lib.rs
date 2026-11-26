@@ -415,6 +415,11 @@ pub enum PreviewFeature {
     /// dependencies. Their metadata is retained so uv can check whether those sources are requested
     /// or stale without network access.
     LockWithoutMetadata,
+    /// When creating or validating a lockfile, uv rejects overrides and exclusions scoped to an
+    /// exact version of a local package whose dynamic version is omitted from the lockfile.
+    /// The version can change between builds, even if the scope does not match the current build.
+    /// Omit `version` from the scope or declare a static package version.
+    RejectDynamicVersionExact,
     /// The `--index` and `--default-index` options accept the names of configured package indexes
     /// as well as URLs. For example, `--index internal` selects the configured index named
     /// `internal`, so its URL does not need to be repeated on the command line.

@@ -322,6 +322,9 @@ impl ValidatedLock {
         {
             LockSatisfaction::Satisfied => {
                 debug!("Existing `uv.lock` satisfies workspace requirements");
+                if preview.is_enabled(PreviewFeature::RejectDynamicVersionExact) {
+                    lock.validate_dynamic_version_scopes()?;
+                }
                 Ok(Self::Satisfies(lock))
             }
             LockSatisfaction::Mismatch(mismatch) => {

@@ -45,6 +45,11 @@ pub struct PackageOverrideTarget {
 }
 
 impl PackageOverrideTarget {
+    /// Return the exact parent version selected by this scope, if any.
+    pub fn version(&self) -> Option<&Version> {
+        self.version.as_ref()
+    }
+
     /// Return the parent package selected by this scope.
     pub fn name(&self) -> &PackageName {
         &self.name

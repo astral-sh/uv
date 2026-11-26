@@ -2681,6 +2681,9 @@ impl Lock {
             vec![],
             fork_markers,
         )?;
+        if uv_preview::is_enabled(PreviewFeature::RejectDynamicVersionExact) {
+            lock.validate_dynamic_version_scopes()?;
+        }
         let lock = if uv_preview::is_enabled(PreviewFeature::ResolutionInputs) {
             lock.prune_constraints()
         } else {
@@ -3818,6 +3821,48 @@ impl Lock {
     /// Returns the TOML representation of this lockfile.
     pub fn to_toml(&self) -> Result<String, toml_edit::ser::Error> {
         serialize::to_toml(self)
+    }
+
+    /// Reject version scopes that could select different dependencies between builds
+    /// without a corresponding change to the locked parent version.
+    pub fn validate_dynamic_version_scopes(&self) -> Result<(), LockError> {
+        let overrides = self
+            .manifest
+            .overrides
+            .iter()
+            .filter_map(|entry| match entry {
+                Override::Requirement(_) => None,
+                Override::Package(entry) => Some((
+                    "override-dependencies",
+                    entry.package.name(),
+                    entry.package.version()?,
+                )),
+            });
+        let excludes = self
+            .manifest
+            .excludes
+            .iter()
+            .filter_map(|entry| match entry {
+                ExcludeDependency::Dependency(_) => None,
+                ExcludeDependency::Package(entry) => {
+                    Some(("exclude-dependencies", entry.package(), entry.version()?))
+                }
+            });
+        for (setting, name, version) in overrides.chain(excludes) {
+            if self
+                .packages_for_name(name)
+                .iter()
+                .any(|package| package.is_dynamic() && package.id.source.is_source_tree())
+            {
+                return Err(LockErrorKind::DynamicVersionScope {
+                    setting,
+                    name: name.clone(),
+                    version: version.clone(),
+                }
+                .into());
+            }
+        }
+        Ok(())
     }
 
     /// Locate every locked version without scanning unrelated sorted packages.
@@ -9826,7 +9871,11 @@ impl std::error::Error for LockError {
 
 impl uv_errors::Hinted for LockError {
     fn hints(&self) -> uv_errors::Hints<'_> {
-        if let Some(hint) = &self.hint {
+        if let LockErrorKind::DynamicVersionScope { name, .. } = &*self.kind {
+            uv_errors::Hints::from(format!(
+                "Remove `version` from the scope or declare a static version for `{name}`."
+            ))
+        } else if let Some(hint) = &self.hint {
             uv_errors::Hints::from(hint.to_string())
         } else {
             uv_errors::Hints::none()
@@ -9841,6 +9890,11 @@ impl std::fmt::Display for LockError {
 }
 
 impl LockError {
+    /// Returns true if a version scope targets a dynamic local package.
+    pub fn is_dynamic_version_scope(&self) -> bool {
+        matches!(&*self.kind, LockErrorKind::DynamicVersionScope { .. })
+    }
+
     /// Returns true if the [`LockError`] is a resolver error.
     pub fn is_resolution(&self) -> bool {
         matches!(&*self.kind, LockErrorKind::Resolution { .. })
@@ -10210,6 +10264,14 @@ impl std::fmt::Display for WheelTagHint {
 /// is with the caller somewhere in such cases.
 #[derive(DebugNoInline, thiserror::Error)]
 enum LockErrorKind {
+    #[error(
+        "Cannot scope `{setting}` to `{name}=={version}` because the local package has a dynamic version that is omitted from the lockfile"
+    )]
+    DynamicVersionScope {
+        setting: &'static str,
+        name: PackageName,
+        version: Version,
+    },
     /// An error that occurs when collecting dependency-group settings.
     #[error(transparent)]
     DependencyGroups(#[from] DependencyGroupError),
