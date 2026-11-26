@@ -9264,7 +9264,7 @@ struct Wheel {
 }
 
 impl Wheel {
-    /// Convert reachable wheels to lock entries, applying index hash requirements only to those wheels.
+    /// Convert wheels to lock entries, applying index hash requirements only to reachable registry wheels.
     fn from_annotated_dist(
         annotated_dist: &AnnotatedDist,
         index_locations: &IndexLocations,
@@ -9284,7 +9284,17 @@ impl Wheel {
             Dist::Built(BuiltDist::Registry(dist)) => &dist.wheels,
             Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => &dist.wheels,
             Dist::Source(_) => return Ok(vec![]),
-            Dist::Built(dist) if !is_reachable(dist.wheel_filename()) => return Ok(vec![]),
+            // Lockfile validation can need a direct wheel's metadata regardless of its marker.
+            Dist::Built(dist)
+                if is_wheel_unreachable_for_marker(
+                    dist.wheel_filename(),
+                    requires_python,
+                    &UniversalMarker::TRUE,
+                    None,
+                ) =>
+            {
+                return Ok(vec![]);
+            }
             Dist::Built(BuiltDist::DirectUrl(dist)) => {
                 return Ok(vec![Self::from_direct_dist(dist, hashes)]);
             }
