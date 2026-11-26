@@ -6578,6 +6578,7 @@ dependencies = [
  "itertools 0.14.0",
  "owo-colors",
  "rustc-hash",
+ "same-file",
  "tempfile",
  "thiserror",
  "tracing",

@@ -61,6 +61,7 @@ fs-err = { workspace = true, features = ["tokio"] }
 itertools = { workspace = true }
 owo-colors = { workspace = true }
 rustc-hash = { workspace = true }
+same-file = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

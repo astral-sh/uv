@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::vec;
@@ -266,6 +267,16 @@ pub(crate) async fn venv(
         _ => on_existing,
     };
 
+    // An overlay may retain packages and files from a user-managed environment.
+    let record_project_location = !relocatable
+        && centralized_workspace.is_none()
+        && project_environment
+            .as_ref()
+            .is_some_and(|(_, selection)| selection.is_default())
+        && (!matches!(on_existing, OnExisting::Allow)
+            || fs_err::symlink_metadata(&path)
+                .is_err_and(|err| err.kind() == io::ErrorKind::NotFound));
+
     // Create the virtual environment.
     let venv = uv_virtualenv::create_venv(
         &path,
@@ -278,6 +289,10 @@ pub(crate) async fn venv(
         upgrade_policy,
     )
     .map_err(VenvError::Creation)?;
+    if record_project_location {
+        venv.record_project_environment_location()
+            .map_err(|err| VenvError::Creation(err.into()))?;
+    }
 
     // Install seed packages.
     if let Seed::Enabled = seed {

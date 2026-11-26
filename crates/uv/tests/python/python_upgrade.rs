@@ -6,6 +6,7 @@ use assert_cmd::assert::OutputAssertExt;
 use assert_fs::fixture::{FileTouch, FileWriteStr};
 use assert_fs::prelude::PathChild;
 use insta::assert_snapshot;
+use uv_fs::Simplified;
 use uv_python_managed::platform_key_from_env;
 use uv_static::EnvVars;
 use uv_test::{LATEST_PYTHON_3_12, TestContext, uv_snapshot};
@@ -639,6 +640,15 @@ fn python_upgrade_build_version() {
     ");
 }
 
+/// Normalize only the expected JSON-encoded project path, including Windows separators.
+fn project_pyvenv_cfg(context: &TestContext) -> Result<String> {
+    let location = serde_json::to_string(context.venv.path().simplified())?;
+    Ok(context.read(".venv/pyvenv.cfg").replace(
+        &format!("uv-project-path = {location}"),
+        r#"uv-project-path = "[VENV]/""#,
+    ))
+}
+
 // A project environment should survive a transparent Python patch upgrade.
 #[test]
 fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
@@ -667,16 +677,17 @@ fn python_sync_transparent_patch_upgrade_reuses_environment() -> Result<()> {
         .success();
 
     // The minor-only `version_info` allows compatibility checks to accept a newer patch.
-    let pyvenv_cfg = context.read(".venv/pyvenv.cfg");
+    let pyvenv_cfg = project_pyvenv_cfg(&context)?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(pyvenv_cfg, @r"
+        assert_snapshot!(pyvenv_cfg, @r#"
         home = [PYTHON_HOME]
         implementation = CPython
         uv = [UV_VERSION]
         version_info = 3.10
         include-system-site-packages = false
         prompt = project
-        ");
+        uv-project-path = "[VENV]/"
+        "#);
     });
 
     context.python_upgrade().arg("3.10").assert().success();
@@ -750,16 +761,17 @@ fn python_sync_honors_pinned_patch_version() -> Result<()> {
     ");
 
     // An exact-patch environment must retain the patch in `version_info`.
-    let pyvenv_cfg = context.read(".venv/pyvenv.cfg");
+    let pyvenv_cfg = project_pyvenv_cfg(&context)?;
     insta::with_settings!({ filters => context.filters() }, {
-        assert_snapshot!(pyvenv_cfg, @r"
+        assert_snapshot!(pyvenv_cfg, @r#"
         home = [PYTHON_HOME]
         implementation = CPython
         uv = [UV_VERSION]
         version_info = 3.10.17
         include-system-site-packages = false
         prompt = project
-        ");
+        uv-project-path = "[VENV]/"
+        "#);
     });
 
     // Install a newer patch version, which moves the mutable `cpython-3.10`
