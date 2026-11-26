@@ -336,6 +336,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "astral-yaml"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ceecf101d3d1683acc194dda360a4093088f8e4470d2a32d3ebe13111887bff"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
+name = "astral-yaml-serde"
+version = "0.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "373a2148cbc078e90d38edd4064a83cd59bc9a3a5daa7c98cfcfae8f48bda704"
+dependencies = [
+ "astral-yaml",
+ "memchr",
+ "serde",
+]
+
+[[package]]
 name = "astral_async_http_range_reader"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2679,12 +2699,6 @@ checksum = "1744e39d1d6a9948f4f388969627434e31128196de472883b39f148769bfe30a"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "libyaml-rs"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e126dda6f34391ab7b444f9922055facc83c07a910da3eb16f1e4d9c45dc777"
 
 [[package]]
 name = "linux-raw-sys"
@@ -6349,6 +6363,7 @@ version = "0.0.102"
 dependencies = [
  "anstream",
  "anyhow",
+ "astral-yaml-serde",
  "blake3",
  "clap",
  "fs-err",
@@ -6398,7 +6413,6 @@ dependencies = [
  "uv-test",
  "uv-workspace",
  "walkdir",
- "yaml_serde",
 ]
 
 [[package]]
@@ -8873,19 +8887,6 @@ name = "xmlwriter"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
-
-[[package]]
-name = "yaml_serde"
-version = "0.10.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33b729a08a9a6be689bbad3e2bf8015926db54b6622cc89c3a5f7dc174b9e918"
-dependencies = [
- "indexmap",
- "itoa",
- "libyaml-rs",
- "ryu",
- "serde",
-]
 
 [[package]]
 name = "yansi"

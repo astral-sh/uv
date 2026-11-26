@@ -117,7 +117,7 @@ async fn generate() -> Result<String> {
     println!("Downloading python-build-standalone cpython-unix/targets.yml ...");
     let body = reqwest::get(TARGETS_YML_URL).await?.text().await?;
 
-    let parsed: BTreeMap<String, TargetConfig> = yaml_serde::from_str(&body)?;
+    let parsed: BTreeMap<String, TargetConfig> = astral_yaml_serde::from_str(&body)?;
 
     let mut replacements: BTreeMap<&str, BTreeMap<String, String>> = BTreeMap::new();
 

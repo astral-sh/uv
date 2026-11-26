@@ -12,6 +12,8 @@ exclusions = [
   { name = "astral-reqwest-retry", reason = "Maintained by Astral." },
   { name = "astral-tokio-tar", reason = "Maintained by Astral." },
   { name = "astral-version-ranges", reason = "Maintained by Astral." },
+  { name = "astral-yaml", reason = "Maintained by Astral." },
+  { name = "astral-yaml-serde", reason = "Maintained by Astral." },
   { name = "astral_async_http_range_reader", reason = "Maintained by Astral." },
   { name = "astral_async_zip", reason = "Maintained by Astral." },
   { name = "tar-codec", reason = "Maintained by Astral." },

@@ -43,6 +43,7 @@ uv-workspace = { workspace = true, features = ["schemars"] }
 # dependencies, to ensure that we're forced to think twice before including them in other crates.
 anstream = { workspace = true }
 anyhow = { workspace = true }
+astral-yaml-serde = { version = "0.0.7", default-features = false }
 blake3 = { workspace = true }
 clap = { workspace = true, features = ["derive", "wrap_help"] }
 fs-err = { workspace = true, features = ["tokio"] }
@@ -67,7 +68,6 @@ tracing-durations-export = { workspace = true, features = ["plot"], optional = t
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 uv-performance-memory-allocator = { workspace = true, optional = true }
 walkdir = { workspace = true }
-yaml_serde = { version = "0.10.7", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 indoc = { workspace = true }
