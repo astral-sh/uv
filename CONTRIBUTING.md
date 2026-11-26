@@ -268,6 +268,21 @@ uv run resolver \
     ../test/requirements/trio.in
 ```
 
+### Measuring Linux startup
+
+On x86-64 Linux with glibc, you can group the functions uv calls during startup. This uses the usual
+PGO training corpus and requires LLVM tools for the active Rust toolchain, `qemu-x86_64` (from
+`qemu-user`), and the default C compiler driver with Rust's bundled LLD.
+
+```shell
+python scripts/build_uv_pgo.py --order-startup
+```
+
+The final link traces `uv --version` and `uv run --locked -- /usr/bin/true` in a local project with
+no dependencies. It then links the same objects in order of first use, so fat LTO runs only once.
+Run the resulting binary natively when benchmarking. Distinguish the OS page cache for the
+executable from uv's cache of packages.
+
 ### CI benchmarks
 
 In `astral-sh/uv-dev`, add `test:benchmarks` to a pull request to enable the simulated and walltime

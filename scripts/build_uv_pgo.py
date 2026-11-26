@@ -144,6 +144,12 @@ def main() -> None:
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
+        "--order-startup",
+        action="store_true",
+        help="Group startup functions in the final Linux x86-64 GNU release link "
+        "(requires qemu-x86_64 and LLD)",
+    )
+    mode.add_argument(
         "--train-only",
         action="store_true",
         help="Only produce <target-dir>/uv.profdata for a subsequent release build",
@@ -154,6 +160,8 @@ def main() -> None:
         help="Only prepare the pinned ecosystem training corpus",
     )
     args = parser.parse_args()
+    if args.order_startup and args.debug:
+        parser.error("--order-startup requires the final release build")
 
     target_dir = (
         args.target_dir
@@ -177,6 +185,11 @@ def main() -> None:
         parser.error(
             f"PGO training requires the host-native target {host}, got {target}"
         )
+    if args.order_startup:
+        if target != "x86_64-unknown-linux-gnu":
+            parser.error("--order-startup requires x86_64-unknown-linux-gnu")
+        if not shutil.which("qemu-x86_64"):
+            parser.error("--order-startup requires qemu-x86_64")
 
     profiler = find_llvm_profdata(host, args.llvm_profdata)
     prepare_corpus(corpus_directory)
@@ -241,6 +254,10 @@ def main() -> None:
             environment.get("RUSTFLAGS"), f"-Cprofile-use={merged_profile}"
         ),
     }
+    if args.order_startup:
+        optimized_environment["CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER"] = str(
+            REPOSITORY_ROOT / "scripts" / "link_uv_startup.py"
+        )
     print(f"Building profile-guided {profile} uv and uvx", flush=True)
     run(cargo_command(target, debug=args.debug), environment=optimized_environment)
     print(
