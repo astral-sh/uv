@@ -214,12 +214,15 @@ pub async fn export(
                     }) {
                     MemberDiscovery::None
                 } else {
-                    MemberDiscovery::Existing
+                    MemberDiscovery::for_sources(&settings.sources, true)
                 },
                 ..DiscoveryOptions::default()
             }
         } else {
-            DiscoveryOptions::default()
+            DiscoveryOptions {
+                members: MemberDiscovery::for_sources(&settings.sources, false),
+                ..DiscoveryOptions::default()
+            }
         };
         let selected_package = if let [name] = package.as_slice() {
             Some(name)
