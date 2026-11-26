@@ -5629,7 +5629,7 @@ fn marker_variants_have_different_extras() -> Result<()> {
 
         [package.optional-dependencies]
         binary = [
-            { name = "psycopg-binary", marker = "implementation_name != 'pypy'" },
+            { name = "psycopg-binary" },
         ]
 
         [[package]]

@@ -38,8 +38,11 @@ impl From<CanonicalMarkerValueVersion> for MarkerValueVersion {
 /// all ADDs, which is in turn used when translating the ADD to DNF. As such, modifying the ordering
 /// will modify the output of marker expressions.
 ///
-/// Critically, any variants that could be involved in a known-incompatible marker pair should
-/// be at the top of the ordering, i.e., given the maximum priority.
+/// In `platform::node_flags`, keys that precede any key involved in an exclusion must
+/// propagate their children's flags. For example, a `PlatformMachine` node can have
+/// implementation tests below it. Only keys after the last exclusion key can skip propagation.
+/// Keep `ImplementationName` before `PlatformPythonImplementation` so the former can
+/// restrict the latter to its implied value.
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub enum CanonicalMarkerValueString {
     /// `os_name`
@@ -50,15 +53,14 @@ pub enum CanonicalMarkerValueString {
     PlatformSystem,
     /// `platform_machine`
     PlatformMachine,
-    /// Deprecated `platform.machine` from <https://peps.python.org/pep-0345/#environment-markers>
+    /// `implementation_name`
+    ImplementationName,
     /// `platform_python_implementation`
     PlatformPythonImplementation,
     /// `platform_release`
     PlatformRelease,
     /// `platform_version`
     PlatformVersion,
-    /// `implementation_name`
-    ImplementationName,
 }
 
 impl From<MarkerValueString> for CanonicalMarkerValueString {

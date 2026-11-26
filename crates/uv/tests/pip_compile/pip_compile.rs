@@ -18211,7 +18211,7 @@ fn markers_on_extra_packages() -> Result<()> {
     #    uv pip compile --cache-dir [CACHE_DIR] --universal requirements.in
     psycopg==3.1.18
         # via -r requirements.in
-    psycopg-binary==3.1.18 ; implementation_name != 'pypy' and platform_python_implementation != 'PyPy'
+    psycopg-binary==3.1.18 ; platform_python_implementation != 'PyPy'
         # via psycopg
     typing-extensions==4.10.0
         # via psycopg

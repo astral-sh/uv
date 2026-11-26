@@ -1142,12 +1142,14 @@ impl Node {
 
 /// An ID representing a reference to a decision node in the [`Interner`].
 ///
-/// Bit zero marks a complemented edge. The next two bits cache properties of the
-/// node for [`platform`].
+/// Bit zero marks a complemented edge. The next bits cache properties of the node
+/// for [`platform`], followed by the index.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct NodeId(usize);
 
 impl NodeId {
+    const INDEX_SHIFT: u32 = (1 | platform::FLAGS).ilog2() + 1;
+
     // The terminal node representing `true`, or a trivially `true` node.
     pub(crate) const TRUE: Self = Self(0);
 
@@ -1156,11 +1158,11 @@ impl NodeId {
 
     /// Create an uncomplemented ID for a newly interned node.
     fn new(index: usize, flags: usize) -> Self {
-        Self(((index + 1) << 3) | flags)
+        Self(((index + 1) << Self::INDEX_SHIFT) | flags)
     }
 
     fn index(self) -> usize {
-        (self.0 >> 3) - 1
+        (self.0 >> Self::INDEX_SHIFT) - 1
     }
 
     /// Returns `true` if this ID represents a complemented edge.
