@@ -61,6 +61,8 @@ pub struct Interpreter {
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
+    cache_tag: Option<Box<str>>,
+    bytecode_magic_number: [u8; 4],
     #[cfg(unix)]
     standalone: bool,
     tags: OnceLock<Tags>,
@@ -106,6 +108,8 @@ impl Interpreter {
             site_packages: info.site_packages,
             stdlib: info.stdlib,
             extension_suffixes: info.extension_suffixes,
+            cache_tag: info.cache_tag,
+            bytecode_magic_number: info.bytecode_magic_number,
             #[cfg(unix)]
             standalone: info.standalone,
             tags: OnceLock::new(),
@@ -113,6 +117,16 @@ impl Interpreter {
             prefix: None,
             real_executable: executable.to_path_buf(),
         })
+    }
+
+    /// The interpreter's tag for bytecode cache filenames.
+    pub fn cache_tag(&self) -> Option<&str> {
+        self.cache_tag.as_deref()
+    }
+
+    /// The interpreter's bytecode format identifier.
+    pub fn bytecode_magic_number(&self) -> [u8; 4] {
+        self.bytecode_magic_number
     }
 
     /// Remove any cached metadata for the given Python executable.
@@ -1190,6 +1204,8 @@ struct InterpreterMetadata {
     site_packages: Vec<PathBuf>,
     stdlib: PathBuf,
     extension_suffixes: Vec<Box<str>>,
+    cache_tag: Option<Box<str>>,
+    bytecode_magic_number: [u8; 4],
     standalone: bool,
     pointer_size: PointerSize,
     gil_disabled: bool,
@@ -1850,6 +1866,8 @@ mod tests {
                 "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12/site-packages"
             ],
             "stdlib": "/home/ferris/.pyenv/versions/3.12.0/lib/python3.12",
+            "cache_tag": "cpython-312",
+            "bytecode_magic_number": [203, 13, 13, 10],
             "extension_suffixes": [".cpython-312-x86_64-linux-gnu.so", ".abi3.so", ".so"],
             "scheme": {
                 "data": "/home/ferris/.pyenv/versions/3.12.0",

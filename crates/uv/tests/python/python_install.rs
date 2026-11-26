@@ -4100,6 +4100,33 @@ fn python_install_compile_bytecode_existing() {
     ");
 }
 
+/// A fully cached standard library still belongs to a compatible interpreter.
+#[test]
+fn python_install_native_bytecode_cached() {
+    let context = uv_test::test_context_with_versions!(&[])
+        .with_managed_python_dirs()
+        .with_empty_python_install_mirror();
+
+    context
+        .python_install()
+        .args([
+            "3.14",
+            "--compile-bytecode",
+            "--preview-features",
+            "native-bytecode",
+        ])
+        .assert()
+        .success();
+
+    uv_snapshot!(context.filters(), context.python_install()
+        .args(["3.14", "--compile-bytecode", "--preview-features", "native-bytecode", "--offline"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Python 3.14 is already installed
+    Bytecode compiled 0 files in [TIME]
+    ");
+}
+
 #[test]
 fn python_install_compile_bytecode_upgrade() {
     let context = uv_test::test_context_with_versions!(&[])

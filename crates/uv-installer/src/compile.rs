@@ -4,6 +4,7 @@ use std::process::Stdio;
 use std::time::Duration;
 use std::{env, io, panic};
 
+use ::serc::ParsePythonVersionError;
 use async_channel::{Receiver, SendError};
 use tempfile::tempdir_in;
 use thiserror::Error;
@@ -16,8 +17,14 @@ use walkdir::WalkDir;
 use uv_configuration::Concurrency;
 use uv_fs::Simplified;
 use uv_macros::DebugNoInline;
+use uv_preview::PreviewFeature;
+use uv_python_interpreter::Interpreter;
 use uv_static::EnvVars;
 use uv_warnings::warn_user;
+
+use self::serc::SercCompiler;
+
+mod serc;
 
 const COMPILEALL_SCRIPT: &str = include_str!("pip_compileall.py");
 /// This is longer than any compilation should ever take.
@@ -40,6 +47,25 @@ pub enum CompileError {
     PythonSubcommand(#[source] io::Error),
     #[error("Failed to create temporary script file")]
     TempFile(#[source] io::Error),
+    #[error("serc does not support {0}; expected CPython")]
+    NativeImplementation(String),
+    #[error(transparent)]
+    NativeVersion(#[from] ParsePythonVersionError),
+    #[error("serc does not support this interpreter's bytecode magic number")]
+    NativeMagicNumber,
+    #[error("serc requires an interpreter with a bytecode cache tag")]
+    NativeCacheTag,
+    #[error("serc does not support {setting} ({variable})")]
+    NativeSetting {
+        setting: &'static str,
+        variable: &'static str,
+    },
+    #[error("Failed to compile `{}` with serc", source_file.user_display())]
+    NativeCompile {
+        source_file: PathBuf,
+        #[source]
+        err: anyhow::Error,
+    },
     #[error(r#"Bytecode compilation failed, expected "{0}", received: "{1}""#)]
     WrongPath(String, String),
     #[error("Failed to write to Python {device}")]
@@ -159,10 +185,40 @@ async fn wait_for_workers(
     Ok(())
 }
 
-/// Bytecode compile all file in `dir` using a pool of Python interpreters running a Python script
-/// that calls `compileall.compile_file`.
+/// Walk regular Python source files, ignoring entries removed during traversal.
+fn python_sources(dir: &Path) -> impl Iterator<Item = Result<PathBuf, CompileError>> {
+    WalkDir::new(dir)
+        .into_iter()
+        // Avoid temporary files created during compilation.
+        .filter_entry(|entry| entry.file_name() != "__pycache__")
+        .filter_map(|entry| match entry {
+            // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
+            Ok(entry)
+                if entry.file_type().is_file()
+                    && entry.path().extension().is_some_and(|ext| ext == "py") =>
+            {
+                Some(Ok(entry.into_path()))
+            }
+            Ok(_) => None,
+            Err(err)
+                if err
+                    .io_error()
+                    .is_some_and(|err| err.kind() == io::ErrorKind::NotFound) =>
+            {
+                None
+            }
+            Err(err) => Some(Err(err.into())),
+        })
+}
+
+/// Bytecode compile all files in `dir` using serc when enabled, or a pool of Python
+/// interpreters running a Python script that calls `compileall.compile_file`.
 ///
-/// All compilation errors are muted (like pip). There is a 60s timeout for each file to handle
+/// Returns `None` when there are no Python sources, or `Some(0)` when the native compiler
+/// does not need to write any bytecode.
+///
+/// Invalid Python source is skipped (like pip). Unsupported native compilation requests are errors.
+/// There is a 60s timeout for each file compiled by Python to handle
 /// a broken `python`. The timeout can be configured with `UV_COMPILE_BYTECODE_TIMEOUT`; a value of
 /// `0` disables the timeout.
 ///
@@ -170,18 +226,32 @@ async fn wait_for_workers(
 /// > Uninstallers should be smart enough to remove .pyc even if it is not mentioned in RECORD.
 ///
 /// We've confirmed that both uv and pip (as of 24.0.0) remove the `__pycache__` directory.
-#[instrument(skip(python_executable))]
+#[instrument(skip(interpreter))]
 pub async fn compile_tree(
     dir: &Path,
-    python_executable: &Path,
+    interpreter: &Interpreter,
     concurrency: &Concurrency,
     cache: &Path,
-) -> Result<usize, CompileError> {
+) -> Result<Option<usize>, CompileError> {
     debug_assert!(
         dir.is_absolute(),
         "compileall doesn't work with relative paths: `{}`",
         dir.display()
     );
+    if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
+        let compiler = SercCompiler::new(interpreter)?;
+        let dir = dir.to_path_buf();
+        return tokio::task::spawn_blocking(move || {
+            let files = python_sources(&dir).collect::<Result<Vec<_>, _>>()?;
+            if files.is_empty() {
+                return Ok(None);
+            }
+            compiler.compile_files(&files).map(Some)
+        })
+        .await
+        .map_err(|_| CompileError::Join)?;
+    }
+    let python_executable = interpreter.sys_executable();
     let worker_count = concurrency.installs;
 
     // A larger buffer is significantly faster than just 1 or the worker count.
@@ -205,35 +275,13 @@ pub async fn compile_tree(
     // Start the producer, sending all `.py` files to workers.
     let mut source_files = 0;
     let mut send_error = None;
-    let walker = WalkDir::new(dir)
-        .into_iter()
-        // Otherwise we stumble over temporary files from `compileall`.
-        .filter_entry(|dir| dir.file_name() != "__pycache__");
-    for entry in walker {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                if err
-                    .io_error()
-                    .is_some_and(|err| err.kind() == io::ErrorKind::NotFound)
-                {
-                    // The directory was removed, just ignore it
-                    continue;
-                }
-                return Err(err.into());
-            }
-        };
-        // https://github.com/pypa/pip/blob/3820b0e52c7fed2b2c43ba731b718f316e6816d1/src/pip/_internal/operations/install/wheel.py#L593-L604
-        if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "py") {
-            source_files += 1;
-            if let Err(err) = sender.send(entry.path().to_owned()).await {
-                // The workers exited.
-                // If e.g. something with the Python interpreter is wrong, the workers have exited
-                // with an error. We try to report this informative error and only if that fails,
-                // report the send error.
-                send_error = Some(err);
-                break;
-            }
+    for file in python_sources(dir) {
+        let file = file?;
+        source_files += 1;
+        if let Err(err) = sender.send(file).await {
+            // Report the worker failure before the send error.
+            send_error = Some(err);
+            break;
         }
     }
 
@@ -243,20 +291,32 @@ pub async fn compile_tree(
 
     wait_for_workers(worker_handles, send_error).await?;
 
-    Ok(source_files)
+    Ok((source_files > 0).then_some(source_files))
 }
 
-/// Bytecode compile the given Python source files using a pool of Python interpreters.
+/// Bytecode compile the given Python source files using serc when enabled, or a pool
+/// of Python interpreters.
 ///
-/// All paths must be absolute. Compilation errors are muted (like pip), while failures to launch
-/// or communicate with the Python workers are returned.
-#[instrument(skip(files, python_executable))]
+/// All paths must be absolute. Invalid Python source is skipped (like pip); unsupported native
+/// compilation requests and failures to launch or communicate with Python workers are returned.
+#[instrument(skip(files, interpreter))]
 pub async fn compile_files(
     files: impl IntoIterator<Item = anyhow::Result<PathBuf>>,
-    python_executable: &Path,
+    interpreter: &Interpreter,
     concurrency: &Concurrency,
     cache: &Path,
 ) -> Result<usize, CompileError> {
+    if uv_preview::is_enabled(PreviewFeature::NativeBytecode) {
+        let compiler = SercCompiler::new(interpreter)?;
+        let files = files
+            .into_iter()
+            .collect::<anyhow::Result<Vec<_>>>()
+            .map_err(CompileError::SourceFiles)?;
+        return tokio::task::spawn_blocking(move || compiler.compile_files(&files))
+            .await
+            .map_err(|_| CompileError::Join)?;
+    }
+    let python_executable = interpreter.sys_executable();
     let mut files = files.into_iter();
     let mut initial_files = Vec::with_capacity(concurrency.installs);
     for file in files.by_ref().take(concurrency.installs) {
