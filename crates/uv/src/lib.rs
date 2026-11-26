@@ -756,7 +756,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .collect::<Result<Vec<_>, _>>()?;
             let groups = GroupsSpecification {
                 root: project_dir.to_path_buf(),
-                groups: args.settings.groups,
+                groups: args.settings.groups.clone(),
+                all_groups: args.settings.all_groups,
             };
 
             Box::pin(commands::pip_compile(
@@ -869,7 +870,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .collect::<Result<Vec<_>, _>>()?;
             let groups = GroupsSpecification {
                 root: project_dir.to_path_buf(),
-                groups: args.settings.groups,
+                groups: args.settings.groups.clone(),
+                all_groups: args.settings.all_groups,
             };
 
             Box::pin(commands::pip_sync(
@@ -970,7 +972,8 @@ pub async fn run(cli: Cli, global_initialization: GlobalInitialization) -> Resul
                 .collect::<Result<Vec<_>, _>>()?;
             let groups = GroupsSpecification {
                 root: project_dir.to_path_buf(),
-                groups: args.settings.groups,
+                groups: args.settings.groups.clone(),
+                all_groups: args.settings.all_groups,
             };
 
             // Special-case: any source trees specified on the command-line are automatically
