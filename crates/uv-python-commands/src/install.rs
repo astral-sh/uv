@@ -1346,7 +1346,11 @@ fn find_matching_bin_link<'a>(
         }
         let target = fs_err::canonicalize(path).ok()?;
 
-        installations.find(|installation| installation.executable(false) == target)
+        installations.find(|installation| {
+            let executable = installation.executable(false);
+            executable == target
+                || fs_err::canonicalize(executable).is_ok_and(|canonical| canonical == target)
+        })
     } else if cfg!(windows) {
         let launcher = Launcher::try_from_path(path).ok()??;
         if !matches!(launcher.kind, LauncherKind::Python) {
@@ -1354,7 +1358,11 @@ fn find_matching_bin_link<'a>(
         }
         let target = dunce::canonicalize(launcher.python_path).ok()?;
 
-        installations.find(|installation| installation.executable(false) == target)
+        installations.find(|installation| {
+            let executable = installation.executable(false);
+            executable == target
+                || dunce::canonicalize(executable).is_ok_and(|canonical| canonical == target)
+        })
     } else {
         unreachable!("Only Unix and Windows are supported")
     }
