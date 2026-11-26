@@ -513,6 +513,9 @@ pub(crate) fn create(
 
         let virtual_prompt = prompt.as_deref().unwrap_or_default();
         let virtual_prompt = match *name {
+            // The bash activator places the prompt in single quotes, so
+            // escape single quotes to keep the value intact and inert.
+            "activate" => escape_posix_for_single_quotes(virtual_prompt),
             "activate.xsh" => Cow::Owned(format!(
                 r#"b"{}".decode("utf-8")"#,
                 virtual_prompt.as_bytes().escape_ascii(),
