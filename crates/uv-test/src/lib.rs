@@ -1238,7 +1238,7 @@ impl TestContext {
                 EnvVars::UV_PYTHON_CACHE_DIR.into(),
                 // Respect `UV_PYTHON_CACHE_DIR` if set, or use the default cache directory.
                 env::var_os(EnvVars::UV_PYTHON_CACHE_DIR).unwrap_or_else(|| {
-                    Cache::from_settings(false, None)
+                    Cache::from_settings(false, None, true)
                         .expect("Failed to determine the shared Python download cache")
                         .bucket(CacheBucket::Python)
                         .into()

@@ -11,7 +11,7 @@ use uv_normalize::PackageName;
 use uv_preview::{Preview, PreviewFeature};
 
 use crate::commands::reporters::{
-    CleaningDirectoryReporter, CleaningPackageReporter, print_removal_summary,
+    CleaningDirectoryReporter, CleaningPackageReporter, RemovalTense, print_removal_summary,
 };
 
 /// Clear the cache, removing all entries or those linked to specific packages.
@@ -82,6 +82,11 @@ pub(crate) async fn cache_clean(
         summary
     };
 
-    print_removal_summary(&summary, "No cache entries found", printer)?;
+    print_removal_summary(
+        &summary,
+        "No cache entries found",
+        RemovalTense::Past,
+        printer,
+    )?;
     Ok(ExitStatus::Success)
 }

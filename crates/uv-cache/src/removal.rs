@@ -56,6 +56,13 @@ impl Remover {
         removal.rm_rf(path.as_ref(), self.reporter.as_deref(), skip_locked_file)?;
         Ok(removal)
     }
+
+    /// Estimate the [`Removal`] that [`Remover::rm_rf`] would perform, without removing anything.
+    pub(crate) fn measure(&self, path: impl AsRef<Path>) -> io::Result<Removal> {
+        let mut removal = Removal::new(self.removal_accounting);
+        removal.measure(path.as_ref())?;
+        Ok(removal)
+    }
 }
 
 /// Estimate the storage reclaimed by removing a non-directory entry.
@@ -276,6 +283,41 @@ impl Removal {
         }
 
         reporter.map(CleanReporter::on_complete);
+
+        Ok(())
+    }
+
+    /// Recursively measure a file or directory and all its contents, without removing it.
+    fn measure(&mut self, path: &Path) -> io::Result<()> {
+        let path = uv_fs::verbatim_path(path);
+
+        let metadata = match fs_err::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err),
+        };
+
+        if !metadata.is_dir() {
+            self.num_files += 1;
+            self.add_file(&path, &metadata);
+            return Ok(());
+        }
+
+        for entry in walkdir::WalkDir::new(&path).contents_first(true) {
+            let entry = entry?;
+
+            if entry.file_type().is_dir() {
+                self.num_dirs += 1;
+            } else {
+                self.num_files += 1;
+
+                if let Ok(metadata) = entry.metadata() {
+                    self.add_file(entry.path(), &metadata);
+                } else {
+                    self.physical_bytes.mark_incomplete();
+                }
+            }
+        }
 
         Ok(())
     }

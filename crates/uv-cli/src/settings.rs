@@ -445,6 +445,7 @@ impl NetworkSettings {
 pub struct CacheSettings {
     pub no_cache: bool,
     pub cache_dir: Option<PathBuf>,
+    pub tracking: bool,
 }
 
 impl CacheSettings {
@@ -464,6 +465,10 @@ impl CacheSettings {
             cache_dir: args
                 .cache_dir
                 .or_else(|| workspace.and_then(|workspace| workspace.globals.cache_dir.clone())),
+            tracking: environment
+                .cache_tracking
+                .combine(workspace.and_then(|workspace| workspace.globals.cache_tracking))
+                .unwrap_or(true),
         }
     }
 }

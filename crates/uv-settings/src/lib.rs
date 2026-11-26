@@ -401,6 +401,7 @@ fn warn_uv_toml_masked_fields(options: &Options) {
                 offline,
                 no_cache,
                 cache_dir,
+                cache_tracking,
                 preview,
                 python_preference,
                 python_downloads,
@@ -505,6 +506,9 @@ fn warn_uv_toml_masked_fields(options: &Options) {
     }
     if cache_dir.is_some() {
         masked_fields.push("cache-dir");
+    }
+    if cache_tracking.is_some() {
+        masked_fields.push("cache-tracking");
     }
     match preview {
         Some(PreviewOption::Preview(_)) => masked_fields.push("preview"),
@@ -756,6 +760,7 @@ impl EnvFlag {
 pub struct EnvironmentOptions {
     pub ruff_path: Option<PathBuf>,
     pub ty_path: Option<PathBuf>,
+    pub cache_tracking: Option<bool>,
     pub skip_wheel_filename_check: Option<bool>,
     pub require_metadata_range_requests: Option<bool>,
     pub hide_build_output: Option<bool>,
@@ -858,6 +863,7 @@ impl EnvironmentOptions {
             )?,
             ruff_path: parse_path_environment_variable(EnvVars::RUFF),
             ty_path: parse_path_environment_variable(EnvVars::TY),
+            cache_tracking: parse_boolish_environment_variable(EnvVars::UV_CACHE_TRACKING)?,
             skip_wheel_filename_check: parse_boolish_environment_variable(
                 EnvVars::UV_SKIP_WHEEL_FILENAME_CHECK,
             )?,

@@ -6117,9 +6117,11 @@ dependencies = [
  "uv-fastid",
  "uv-fs",
  "uv-normalize",
+ "uv-pep440",
  "uv-pypi-types",
  "uv-redacted",
  "uv-static",
+ "uv-warnings",
  "walkdir",
 ]
 

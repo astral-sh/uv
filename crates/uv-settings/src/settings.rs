@@ -335,6 +335,21 @@ pub struct GlobalOptions {
     )]
     pub cache_dir: Option<PathBuf>,
 
+    /// Record which packages each Python environment has installed.
+    ///
+    /// The recorded references allow `uv cache prune --unused` to remove cached packages that
+    /// are no longer installed in any environment. Disabling tracking stops uv from writing
+    /// these records, and therefore prevents `--unused` from reclaiming the corresponding
+    /// cache entries.
+    #[option(
+        default = "true",
+        value_type = "bool",
+        example = r#"
+            cache-tracking = false
+        "#
+    )]
+    pub cache_tracking: Option<bool>,
+
     /// The user's preview configuration.
     #[serde(flatten)]
     pub preview: Option<PreviewOption>,
@@ -452,6 +467,7 @@ struct GlobalOptionsWire {
     offline: Option<bool>,
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
+    cache_tracking: Option<bool>,
 
     preview: Option<bool>,
     preview_features: Option<PreviewFeaturesOption>,
@@ -479,6 +495,7 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             offline,
             no_cache,
             cache_dir,
+            cache_tracking,
             preview,
             preview_features,
             python_preference,
@@ -499,6 +516,7 @@ impl TryFrom<GlobalOptionsWire> for GlobalOptions {
             offline,
             no_cache,
             cache_dir,
+            cache_tracking,
             preview: PreviewOption::try_from(preview, preview_features)?,
             python_preference,
             python_downloads,
@@ -2699,6 +2717,7 @@ struct OptionsWire {
     offline: Option<bool>,
     no_cache: Option<bool>,
     cache_dir: Option<PathBuf>,
+    cache_tracking: Option<bool>,
     preview: Option<bool>,
     preview_features: Option<PreviewFeaturesOption>,
     python_preference: Option<PythonPreference>,
@@ -2810,6 +2829,7 @@ impl TryFrom<OptionsWire> for Options {
             offline,
             no_cache,
             cache_dir,
+            cache_tracking,
             preview,
             preview_features,
             python_preference,
@@ -2895,6 +2915,7 @@ impl TryFrom<OptionsWire> for Options {
                 offline,
                 no_cache,
                 cache_dir,
+                cache_tracking,
                 preview: PreviewOption::try_from(preview, preview_features)?,
                 python_preference,
                 python_downloads,

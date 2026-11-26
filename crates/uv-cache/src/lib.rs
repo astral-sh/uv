@@ -25,6 +25,7 @@ pub use archive::{ArchiveFileId, ArchiveId};
 mod archive;
 #[cfg(feature = "clap")]
 mod cli;
+mod environments;
 mod removal;
 mod wheel;
 
@@ -174,6 +175,9 @@ pub struct Cache {
     temp_dir: Option<Arc<tempfile::TempDir>>,
     /// The storage accounting used when removing cache entries.
     removal_accounting: RemovalAccounting,
+    /// Whether to record the packages installed into each Python environment, so that
+    /// [`Cache::prune_unused`] can identify cache entries that are no longer used.
+    tracking: bool,
 }
 
 impl Cache {
@@ -185,6 +189,7 @@ impl Cache {
             temp_dir: None,
             lock_file: None,
             removal_accounting: RemovalAccounting::Coarse,
+            tracking: true,
         }
     }
 
@@ -197,6 +202,7 @@ impl Cache {
             temp_dir: Some(Arc::new(temp_dir)),
             lock_file: None,
             removal_accounting: RemovalAccounting::Coarse,
+            tracking: true,
         })
     }
 
@@ -223,6 +229,17 @@ impl Cache {
         }
     }
 
+    /// Set whether to record the packages installed into each Python environment.
+    #[must_use]
+    fn with_tracking(self, tracking: bool) -> Self {
+        Self { tracking, ..self }
+    }
+
+    /// Return whether uv records the packages installed into each Python environment.
+    pub fn tracking(&self) -> bool {
+        self.tracking
+    }
+
     /// Create an empty removal summary using the cache's configured accounting.
     pub fn removal(&self) -> Removal {
         Removal::new(self.removal_accounting)
@@ -236,6 +253,7 @@ impl Cache {
             temp_dir,
             lock_file,
             removal_accounting,
+            tracking,
         } = self;
 
         // Release the existing lock, avoid deadlocks from a cloned cache.
@@ -259,6 +277,7 @@ impl Cache {
             temp_dir,
             lock_file: Some(Arc::new(lock_file)),
             removal_accounting,
+            tracking,
         })
     }
 
@@ -272,6 +291,7 @@ impl Cache {
             temp_dir,
             lock_file,
             removal_accounting,
+            tracking,
         } = self;
 
         match LockedFile::acquire_no_wait(
@@ -285,6 +305,7 @@ impl Cache {
                 temp_dir,
                 lock_file: Some(Arc::new(lock_file)),
                 removal_accounting,
+                tracking,
             }),
             None => Err(Self {
                 root,
@@ -292,6 +313,7 @@ impl Cache {
                 lock_file,
                 temp_dir,
                 removal_accounting,
+                tracking,
             }),
         }
     }
@@ -833,6 +855,13 @@ impl Cache {
             .rm_rf(path, false)
     }
 
+    /// Measure a cache path using the cache's configured storage accounting.
+    fn measure_path(&self, path: impl AsRef<Path>) -> io::Result<Removal> {
+        Remover::default()
+            .with_removal_accounting(self.removal_accounting)
+            .measure(path)
+    }
+
     /// Find all references to entries in the archive bucket.
     ///
     /// Archive entries are often referenced by symlinks in other cache buckets. This method
@@ -1280,6 +1309,15 @@ pub enum CacheBucket {
     Builds,
     /// Reusable virtual environments for Python tools and projects.
     Environments,
+    /// Records of the Python environments that reference entries in the archive bucket.
+    ///
+    /// Each record is a `MsgPack` file, named for the root of the environment, that holds the
+    /// packages installed into the environment. [`Cache::prune_unused`] uses the records to
+    /// determine which archive entries are still referenced by an environment.
+    ///
+    /// Cache structure:
+    ///  * `environment-refs-v0/<digest(environment root)>.msgpack`
+    EnvironmentRefs,
     /// Cached Python downloads
     Python,
     /// Downloaded tool binaries (e.g., Ruff).
@@ -1306,6 +1344,7 @@ impl CacheBucket {
             Self::Files => "files-v0",
             Self::Builds => "builds-v0",
             Self::Environments => "environments-v2",
+            Self::EnvironmentRefs => "environment-refs-v0",
             Self::Python => "python-v1",
             Self::Binaries => "binaries-v0",
             Self::Osv => "osv-v1",
@@ -1434,6 +1473,7 @@ impl CacheBucket {
             | Self::Files
             | Self::Builds
             | Self::Environments
+            | Self::EnvironmentRefs
             | Self::Python
             | Self::Binaries
             | Self::Osv => {
@@ -1456,6 +1496,7 @@ impl CacheBucket {
             Self::Files,
             Self::Builds,
             Self::Environments,
+            Self::EnvironmentRefs,
             Self::Python,
             Self::Binaries,
             Self::Osv,
@@ -1665,5 +1706,212 @@ mod tests {
         assert!(victim_dir.is_dir());
         assert!(victim_dir.join("payload.txt").is_file());
         assert!(fs_err::symlink_metadata(symlink).is_err());
+    }
+    #[test]
+    #[cfg(unix)]
+    fn prune_unused_keeps_referenced_entries() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let environment_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        // An environment that installed `foo 1.0.0`.
+        let site_packages = environment_root.path().join("site-packages");
+        fs_err::create_dir_all(site_packages.join("foo-1.0.0.dist-info")).unwrap();
+        cache
+            .track_environment(environment_root.path(), &[site_packages])
+            .unwrap();
+
+        // Two cached wheels: one installed into the environment, and one that isn't.
+        let referenced = cache.bucket(CacheBucket::Archive).join("referenced");
+        let unreferenced = cache.bucket(CacheBucket::Archive).join("unreferenced");
+        fs_err::create_dir_all(&referenced).unwrap();
+        fs_err::create_dir_all(&unreferenced).unwrap();
+        let wheels = cache.bucket(CacheBucket::Wheels).join("pypi").join("foo");
+        fs_err::create_dir_all(&wheels).unwrap();
+        fs_err::os::unix::fs::symlink(&referenced, wheels.join("1.0.0-py3-none-any")).unwrap();
+        fs_err::os::unix::fs::symlink(&unreferenced, wheels.join("2.0.0-py3-none-any")).unwrap();
+
+        let summary = cache.prune_unused(&[], false).unwrap();
+
+        assert_eq!(summary.num_files, 1);
+        assert_eq!(summary.num_dirs, 1);
+        assert!(referenced.is_dir());
+        assert!(fs_err::symlink_metadata(&unreferenced).is_err());
+        assert!(fs_err::symlink_metadata(wheels.join("1.0.0-py3-none-any")).is_ok());
+        assert!(fs_err::symlink_metadata(wheels.join("2.0.0-py3-none-any")).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unused_removes_entries_without_an_environment() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        // A cached wheel that no environment references.
+        let archive = cache.bucket(CacheBucket::Archive).join("archive");
+        fs_err::create_dir_all(&archive).unwrap();
+        let wheels = cache.bucket(CacheBucket::Wheels).join("pypi").join("foo");
+        fs_err::create_dir_all(&wheels).unwrap();
+        let reference = wheels.join("1.0.0-py3-none-any");
+        fs_err::os::unix::fs::symlink(&archive, &reference).unwrap();
+        fs_err::write(wheels.join("1.0.0-py3-none-any.msgpack"), "metadata").unwrap();
+
+        // Without a recorded environment, every entry is considered to be unused.
+        let summary = cache.prune_unused(&[], false).unwrap();
+
+        assert_eq!(summary.num_files, 0);
+        assert_eq!(summary.num_dirs, 0);
+        assert!(archive.is_dir());
+        assert!(reference.is_symlink());
+
+        // An environment that installed a different version of `foo`.
+        let environment_root = tempfile::tempdir().unwrap();
+        let site_packages = environment_root.path().join("site-packages");
+        fs_err::create_dir_all(site_packages.join("foo-2.0.0.dist-info")).unwrap();
+        cache
+            .track_environment(environment_root.path(), &[site_packages])
+            .unwrap();
+
+        let summary = cache.prune_unused(&[], false).unwrap();
+
+        assert_eq!(summary.num_files, 2);
+        assert_eq!(summary.num_dirs, 1);
+        assert!(fs_err::symlink_metadata(&archive).is_err());
+        assert!(fs_err::symlink_metadata(&reference).is_err());
+        assert!(fs_err::symlink_metadata(wheels.join("1.0.0-py3-none-any.msgpack")).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unused_overwrites_environment_records() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let environment_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        let first = environment_root.path().join("first").join("site-packages");
+        fs_err::create_dir_all(first.join("foo-1.0.0.dist-info")).unwrap();
+        cache
+            .track_environment(environment_root.path(), &[first])
+            .unwrap();
+
+        let second = environment_root.path().join("second").join("site-packages");
+        fs_err::create_dir_all(second.join("foo-2.0.0.dist-info")).unwrap();
+        cache
+            .track_environment(environment_root.path(), &[second])
+            .unwrap();
+
+        // The record is replaced, rather than appended to.
+        assert_eq!(
+            fs_err::read_dir(cache.bucket(CacheBucket::EnvironmentRefs))
+                .unwrap()
+                .count(),
+            1
+        );
+
+        let archive = cache.bucket(CacheBucket::Archive).join("archive");
+        fs_err::create_dir_all(&archive).unwrap();
+        let wheels = cache.bucket(CacheBucket::Wheels).join("pypi").join("foo");
+        fs_err::create_dir_all(&wheels).unwrap();
+        fs_err::os::unix::fs::symlink(&archive, wheels.join("1.0.0-py3-none-any")).unwrap();
+
+        // Only the packages in the latest record are kept.
+        let summary = cache.prune_unused(&[], false).unwrap();
+
+        assert_eq!(summary.num_dirs, 1);
+        assert!(fs_err::symlink_metadata(&archive).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unused_removes_stale_environment_records() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let environment_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        let site_packages = environment_root.path().join("site-packages");
+        fs_err::create_dir_all(&site_packages).unwrap();
+        cache
+            .track_environment(environment_root.path(), &[site_packages])
+            .unwrap();
+
+        // The environment is removed after it was recorded.
+        fs_err::remove_dir_all(environment_root.path()).unwrap();
+
+        let summary = cache.prune_unused(&[], false).unwrap();
+
+        assert_eq!(summary.num_files, 1);
+        assert_eq!(summary.num_dirs, 0);
+        assert_eq!(
+            fs_err::read_dir(cache.bucket(CacheBucket::EnvironmentRefs))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn prune_unused_removes_source_distribution_entries() {
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let environment_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        let site_packages = environment_root.path().join("site-packages");
+        fs_err::create_dir_all(site_packages.join("bar-1.0.0.dist-info")).unwrap();
+        cache
+            .track_environment(environment_root.path(), &[site_packages])
+            .unwrap();
+
+        // A cached source distribution, along with the policy of the revision.
+        let archive = cache.bucket(CacheBucket::Archive).join("archive");
+        fs_err::create_dir_all(&archive).unwrap();
+        let revision = cache
+            .bucket(CacheBucket::SourceDistributions)
+            .join("pypi")
+            .join("foo")
+            .join("1.0.0")
+            .join("revision");
+        fs_err::create_dir_all(&revision).unwrap();
+        fs_err::os::unix::fs::symlink(&archive, revision.join("foo-1.0.0-py3-none-any")).unwrap();
+        fs_err::write(revision.with_extension("http"), "policy").unwrap();
+
+        let summary = cache.prune_unused(&[], false).unwrap();
+
+        assert_eq!(summary.num_files, 2);
+        assert_eq!(summary.num_dirs, 2);
+        assert!(fs_err::symlink_metadata(&revision).is_err());
+        assert!(fs_err::symlink_metadata(revision.with_extension("http")).is_err());
+        assert!(fs_err::symlink_metadata(&archive).is_err());
+    }
+
+    #[test]
+    fn prune_unused_rejects_unknown_environment_records() {
+        use std::path::PathBuf;
+
+        use super::{Cache, CacheBucket};
+
+        let cache_root = tempfile::tempdir().unwrap();
+        let cache = Cache::from_path(cache_root.path());
+
+        // A record written by a different version of uv.
+        let records = cache.bucket(CacheBucket::EnvironmentRefs);
+        fs_err::create_dir_all(&records).unwrap();
+        let record = records.join("0000000000000000.msgpack");
+        let contents =
+            rmp_serde::to_vec(&(2_u32, PathBuf::from("/environment"), Vec::<PathBuf>::new()))
+                .unwrap();
+        fs_err::write(&record, contents).unwrap();
+
+        assert!(cache.prune_unused(&[], false).is_err());
     }
 }
