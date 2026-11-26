@@ -61,6 +61,16 @@
         "$ref": "#/definitions/CacheKey"
       }
     },
+    "check": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/CheckOptions"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "check-url": {
       "description": "Check an index URL for existing files to skip duplicate uploads.\n\nThis option allows retrying publishing that failed after only some, but not all files have\nbeen uploaded, and handles error due to parallel uploads of the same file.\n\nBefore uploading, the index is checked. If the exact same file already exists in the index,\nthe file will not be uploaded. If an error occurred during the upload, the index is checked\nagain, to handle cases where the identical file was uploaded twice in parallel.\n\nThe exact behavior will vary based on the index. When uploading to PyPI, uploading the same\nfile succeeds even without `--check-url`, while most other indexes error.\n\nThe index must provide one of the supported hashes (SHA-256, SHA-384, or SHA-512).",
       "anyOf": [
@@ -882,6 +892,38 @@
           },
           "additionalProperties": false,
           "required": ["env"]
+        }
+      ]
+    },
+    "CheckOptions": {
+      "description": "Settings for `uv check`.",
+      "type": "object",
+      "properties": {
+        "tool": {
+          "description": "The tool to run the type check with.\n\nPyrefly must be a project dependency or a dependency in the project's `dev` group, so that\n`uv.lock` pins its version.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CheckTool"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "CheckTool": {
+      "description": "The tool that `uv check` runs.",
+      "oneOf": [
+        {
+          "description": "Use ty.",
+          "type": "string",
+          "const": "ty"
+        },
+        {
+          "description": "Use Pyrefly.",
+          "type": "string",
+          "const": "pyrefly"
         }
       ]
     },

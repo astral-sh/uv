@@ -3463,3 +3463,160 @@ fn check_with_undeclared_dependency() -> Result<()> {
 
     Ok(())
 }
+
+/// Select Pyrefly with `tool.uv.check.tool`, and require it in `uv.lock`, since uv does not
+/// install it on demand.
+#[test]
+fn check_pyrefly_requires_locked_pyrefly() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [tool.uv.check]
+            tool = "pyrefly"
+        "#})?;
+    context.temp_dir.child("main.py").write_str("x = 1")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check(),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: `--tool pyrefly` requires `pyrefly` in `uv.lock`; run `uv add --dev pyrefly` to add it
+    "
+    );
+
+    Ok(())
+}
+
+#[test]
+fn check_pyrefly_rejects_fix() -> Result<()> {
+    let context = uv_test::test_context!("3.12");
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "project"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+        "#})?;
+
+    uv_snapshot!(
+        context.filters(),
+        context.check().arg("--tool").arg("pyrefly").arg("--fix"),
+        @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    error: `--fix` is not supported with `--tool pyrefly`
+    "
+    );
+
+    Ok(())
+}
+
+/// Check the root project with Pyrefly by default, and every member with `--all-packages`.
+/// Pyrefly checks each selected directory as a project and skips the unselected nested members.
+#[test]
+#[cfg(feature = "test-pypi")]
+fn check_pyrefly_workspace_member_selection() -> Result<()> {
+    let context = uv_test::test_context!("3.12")
+        .with_filter((r"--script-command=\S*uv(?:\.exe)?", "--script-command=[UV]"));
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+            [project]
+            name = "root"
+            version = "0.1.0"
+            requires-python = ">=3.12"
+            dependencies = []
+
+            [dependency-groups]
+            dev = ["pyrefly==1.5.0"]
+
+            [tool.uv.workspace]
+            members = ["packages/*"]
+
+            [tool.pyrefly]
+        "#})?;
+    context
+        .temp_dir
+        .child("main.py")
+        .write_str("value: int = 'selected'\n")?;
+    write_workspace_member(&context, "member", "value: int = 'unselected'\n")?;
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--tool")
+            .arg("pyrefly")
+            .arg("--exclude-newer")
+            .arg("2026-11-19T12:00:00Z")
+            .arg("--show-command"),
+        @"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    ERROR `Literal['selected']` is not assignable to `int` [bad-assignment]
+     --> main.py:1:14
+      |
+    1 | value: int = 'selected'
+      |        ---   ^^^^^^^^^^
+      |        |
+      |        declared type
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+    Installed 1 package in [TIME]
+    Running `pyrefly check --color auto --script-command=[UV] --script-command=workspace --script-command=metadata --script-command=--preview-features --script-command=workspace-metadata --script-command=--script --exclude-scripts --extend-project-excludes packages/member -- .`
+     INFO 1 error
+    "
+    );
+
+    uv_snapshot!(
+        context.filters(),
+        context
+            .check()
+            .arg("--tool")
+            .arg("pyrefly")
+            .arg("--exclude-newer")
+            .arg("2026-11-19T12:00:00Z")
+            .arg("--all-packages"),
+        @"
+    exit_code: 1 (failure)
+    ----- stdout -----
+    ERROR `Literal['selected']` is not assignable to `int` [bad-assignment]
+     --> main.py:1:14
+      |
+    1 | value: int = 'selected'
+      |        ---   ^^^^^^^^^^
+      |        |
+      |        declared type
+    ERROR `Literal['unselected']` is not assignable to `int` [bad-assignment]
+     --> packages/member/main.py:1:14
+      |
+    1 | value: int = 'unselected'
+      |        ---   ^^^^^^^^^^^^
+      |        |
+      |        declared type
+
+    ----- stderr -----
+    warning: `uv check` is experimental and may change without warning. Pass `--preview-features check-command` to disable this warning.
+     INFO 2 errors
+    "
+    );
+
+    Ok(())
+}

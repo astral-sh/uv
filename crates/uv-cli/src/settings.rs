@@ -17,13 +17,13 @@ use uv_auth::Service;
 use uv_cache::{CacheArgs, Refresh};
 use uv_client::{Certificates, Connectivity, MetadataRangeRequest};
 use uv_configuration::{
-    ActiveEnvironment, AddBoundsKind, AnnotationStyle, BuildIsolation, BuildOptions, Concurrency,
-    DependencyGroups, DependencyMode, DevMode, DryRun, EditableMode, EnvFile, ExcludeDependency,
-    ExcludeNewer, ExcludeNewerPackage, ExportFormat, ExtrasSpecification, ForkStrategy,
-    GitLfsSetting, HashCheckingMode, IndexStrategy, InitKind, InitProjectKind, InstallOptions,
-    KeyringProviderType, MetadataOutputVersion, Modifications, NoBinary, NoBuild, NoSources,
-    Override, PackageOverride, PipCompileFormat, Prerelease, ProjectBuildBackend, ProxyUrl,
-    PythonUpgrade, PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput,
+    ActiveEnvironment, AddBoundsKind, AnnotationStyle, BuildIsolation, BuildOptions, CheckTool,
+    Concurrency, DependencyGroups, DependencyMode, DevMode, DryRun, EditableMode, EnvFile,
+    ExcludeDependency, ExcludeNewer, ExcludeNewerPackage, ExportFormat, ExtrasSpecification,
+    ForkStrategy, GitLfsSetting, HashCheckingMode, IndexStrategy, InitKind, InitProjectKind,
+    InstallOptions, KeyringProviderType, MetadataOutputVersion, Modifications, NoBinary, NoBuild,
+    NoSources, Override, PackageOverride, PipCompileFormat, Prerelease, ProjectBuildBackend,
+    ProxyUrl, PythonUpgrade, PythonUpgradeSource, Reinstall, RequiredVersion, RequirementsInput,
     ResolutionMode, TargetTriple, ToolRunCommand, TrustedHost, TrustedPublishing, Upgrade,
     VersionControlSystem,
 };
@@ -3025,6 +3025,7 @@ pub struct CheckSettings {
     pub install_mirrors: PythonInstallMirrors,
     pub refresh: Refresh,
     pub settings: ResolverInstallerSettings,
+    pub tool: CheckTool,
     pub ty_version: Option<String>,
     pub show_version: bool,
     pub show_command: bool,
@@ -3067,6 +3068,7 @@ impl CheckSettings {
             no_install_project,
             isolated,
             python,
+            tool,
             ty_version,
             show_version,
             show_command,
@@ -3075,6 +3077,15 @@ impl CheckSettings {
             build,
             refresh,
         } = args;
+
+        let tool = tool
+            .or_else(|| {
+                filesystem
+                    .as_ref()
+                    .and_then(|fs| fs.check.as_ref())
+                    .and_then(|check| check.tool)
+            })
+            .unwrap_or_default();
 
         let filesystem_install_mirrors = filesystem
             .as_ref()
@@ -3145,6 +3156,7 @@ impl CheckSettings {
                 .combine(filesystem_install_mirrors),
             refresh: Refresh::try_from(refresh)?,
             settings,
+            tool,
             ty_version,
             show_version,
             show_command,

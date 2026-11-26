@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::{collections::BTreeMap, num::NonZeroUsize};
 
 use uv_configuration::{
-    AddBoundsKind, AnnotationStyle, BuildIsolation, ExcludeNewer, ExcludeNewerPackage,
+    AddBoundsKind, AnnotationStyle, BuildIsolation, CheckTool, ExcludeNewer, ExcludeNewerPackage,
     ExportFormat, ForkStrategy, IndexStrategy, KeyringProviderType, NoSources, PrereleaseMode,
     PrereleasePackage, ProxyUrl, Reinstall, RequiredVersion, ResolutionMode, TargetTriple,
     TrustedPublishing, Upgrade,
@@ -18,7 +18,7 @@ use uv_redacted::SafeUrl;
 use uv_torch::TorchMode;
 use uv_workspace::pyproject::ExtraBuildDependencies;
 
-use crate::{AuditOptions, FilesystemOptions, Options, PipOptions, PreviewOption};
+use crate::{AuditOptions, CheckOptions, FilesystemOptions, Options, PipOptions, PreviewOption};
 
 pub trait Combine {
     /// Combine two values, preferring the values in `self`.
@@ -76,6 +76,15 @@ impl Combine for Option<AuditOptions> {
     }
 }
 
+impl Combine for Option<CheckOptions> {
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Some(a), Some(b)) => Some(a.combine(b)),
+            (a, b) => a.or(b),
+        }
+    }
+}
+
 macro_rules! impl_combine_or {
     ($name:ident) => {
         impl Combine for Option<$name> {
@@ -88,6 +97,7 @@ macro_rules! impl_combine_or {
 
 impl_combine_or!(AddBoundsKind);
 impl_combine_or!(AnnotationStyle);
+impl_combine_or!(CheckTool);
 impl_combine_or!(ExcludeNewer);
 impl_combine_or!(ExcludeNewerOverride);
 impl_combine_or!(ExcludeNewerValue);
