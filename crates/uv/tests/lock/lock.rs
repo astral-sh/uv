@@ -40418,6 +40418,71 @@ fn lock_x86() -> Result<()> {
 
 #[cfg(feature = "test-universal")]
 #[test]
+fn lock_wheels_by_implementation() -> Result<()> {
+    let context = uv_test::test_context!("3.11");
+    let wheels = context.temp_dir.child("wheels");
+    wheels.create_dir_all()?;
+    let name = "demo".parse()?;
+    let version = "1.0.0".parse()?;
+    for tag in [
+        "py3-none-any",
+        "cp311-cp311-manylinux_2_17_x86_64",
+        // Both 32-bit Linux and Android on Python 3.11 can report Linux x86_64.
+        "cp311-cp311-manylinux_2_17_i686",
+        "cp311-cp311-android_24_x86_64",
+        "cp311-cp311-win_amd64",
+        "cp311-cp311-macosx_11_0_arm64",
+        "pp311-pypy311_pp73-manylinux_2_17_x86_64",
+        "pp311-pypy311_pp73-macosx_11_0_arm64",
+        "cp311.pp311-cp311.pypy311_pp73-macosx_11_0_arm64",
+    ] {
+        let (filename, wheel) = WheelBuilder::new(&name, &version).tag(tag).build();
+        wheels.child(filename).write_binary(&wheel)?;
+    }
+    context
+        .temp_dir
+        .child("pyproject.toml")
+        .write_str(indoc! {r#"
+        [project]
+        name = "project"
+        version = "0.1.0"
+        requires-python = ">=3.11"
+        dependencies = ["demo"]
+
+        [tool.uv]
+        environments = [
+            "implementation_name == 'cpython' and sys_platform == 'linux' and platform_machine == 'x86_64'",
+            "platform_python_implementation == 'PyPy' and sys_platform == 'darwin'",
+            "implementation_name == 'graalpy'",
+        ]
+    "#})?;
+
+    uv_snapshot!(context.filters(), context.lock().args(["--no-index", "--find-links", "wheels"]), @"
+    exit_code: 0 (success)
+    ----- stderr -----
+    Resolved 2 packages in [TIME]
+    ");
+
+    let lock = context.read("uv.lock").parse::<toml_edit::DocumentMut>()?;
+    assert_snapshot!(lock["package"][0], @r#"
+    name = "demo"
+    version = "1.0.0"
+    source = { registry = "wheels" }
+    wheels = [
+        { path = "demo-1.0.0-py3-none-any.whl" },
+        { path = "demo-1.0.0-cp311-cp311-manylinux_2_17_i686.whl" },
+        { path = "demo-1.0.0-cp311-cp311-manylinux_2_17_x86_64.whl" },
+        { path = "demo-1.0.0-cp311-cp311-android_24_x86_64.whl" },
+        { path = "demo-1.0.0-pp311-pypy311_pp73-macosx_11_0_arm64.whl" },
+        { path = "demo-1.0.0-cp311.pp311-cp311.pypy311_pp73-macosx_11_0_arm64.whl" },
+    ]
+    "#);
+
+    Ok(())
+}
+
+#[cfg(feature = "test-universal")]
+#[test]
 fn lock_script() -> Result<()> {
     let context = uv_test::test_context!("3.12");
 
@@ -46628,7 +46693,11 @@ fn lock_required_environment_implementation_name() -> Result<()> {
     let wheels = context.temp_dir.child("wheels");
     wheels.create_dir_all()?;
     let name = "demo".parse()?;
-    for (version, tag) in [("1.0", "py3-none-any"), ("2.0", "cp311-none-any")] {
+    for (version, tag) in [
+        ("1.0", "py3-none-any"),
+        ("1.0", "cp311-none-any"),
+        ("2.0", "cp311-none-any"),
+    ] {
         let (filename, wheel) = WheelBuilder::new(&name, &version.parse()?).tag(tag).build();
         wheels.child(filename).write_binary(&wheel)?;
     }
