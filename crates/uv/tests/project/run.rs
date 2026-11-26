@@ -1984,6 +1984,24 @@ fn run_with_overlay_interpreter() -> Result<()> {
     Resolved 4 packages in [TIME]
     ");
 
+    // The copied entry point should use the overlay interpreter even if a child changes PATH.
+    #[cfg(unix)]
+    {
+        let context = context.with_cache_dir("cache with spaces");
+        uv_snapshot!(context.filters(), context.run()
+            .arg("--quiet")
+            .arg("--no-project")
+            .arg("--with")
+            .arg(".")
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(r#"PATH="$PWD/.venv/bin" exec "$VIRTUAL_ENV/bin/main""#), @"
+        exit_code: 0 (success)
+        ----- stdout -----
+        [CACHE_DIR]/builds-[VERSION]/[TMP]/[BIN]/python
+        ");
+    }
+
     Ok(())
 }
 
