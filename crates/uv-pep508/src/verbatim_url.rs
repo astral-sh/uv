@@ -12,6 +12,10 @@ use thiserror::Error;
 #[expect(clippy::disallowed_types, reason = "Supports the opt-in raw URL API")]
 use url::Url;
 use uv_cache_key::{CacheKey, CacheKeyHasher};
+#[cfg(feature = "non-pep508-extensions")]
+use uv_distribution_filename::DistExtension;
+#[cfg(feature = "non-pep508-extensions")]
+use uv_fs::normalize_path;
 
 #[cfg_attr(not(feature = "non-pep508-extensions"), allow(unused_imports))]
 use uv_fs::{normalize_absolute_path, normalize_url_path};
@@ -153,36 +157,19 @@ impl VerbatimUrl {
         input: &str,
         root_dir: Option<&Path>,
     ) -> Result<Self, VerbatimUrlError> {
-        let url = match split_scheme(input) {
-            Some((scheme, ..)) => {
-                match Scheme::parse(scheme) {
-                    Some(_) => {
-                        // Ex) `https://pypi.org/simple`
-                        Self::parse_url(input)?
-                    }
-                    None => {
-                        // Ex) `C:\Users\user\index`
-                        if let Some(root_dir) = root_dir {
-                            Self::from_path_with_fragment(input, Some(root_dir))?
-                        } else {
-                            let absolute_path = std::path::absolute(input).map_err(|err| {
-                                VerbatimUrlError::Absolute(input.to_string(), err)
-                            })?;
-                            Self::from_path_with_fragment(absolute_path, None)?
-                        }
-                    }
-                }
-            }
-            None => {
-                // Ex) `/Users/user/index`
-                if let Some(root_dir) = root_dir {
-                    Self::from_path_with_fragment(input, Some(root_dir))?
-                } else {
-                    let absolute_path = std::path::absolute(input)
-                        .map_err(|err| VerbatimUrlError::Absolute(input.to_string(), err))?;
-                    Self::from_path_with_fragment(absolute_path, None)?
-                }
-            }
+        let url = if split_scheme(input)
+            .and_then(|(scheme, _)| Scheme::parse(scheme))
+            .is_some()
+        {
+            Self::parse_url(input)?
+        } else if let Some(root_dir) = root_dir {
+            Self::from_path_with_fragment(input, Some(root_dir))?
+        } else {
+            // Only the supplied path can contain a fragment. The current directory is literal.
+            let (path, fragment) = split_fragment(Path::new(input), None)?;
+            let absolute = std::path::absolute(path)
+                .map_err(|err| VerbatimUrlError::Absolute(input.to_string(), err))?;
+            Self::from_absolute_path(absolute)?.with_url_fragment(fragment)
         };
         Ok(url.with_given(input))
     }
@@ -224,7 +211,7 @@ impl VerbatimUrl {
         path: impl AsRef<Path>,
         base_dir: Option<&Path>,
     ) -> Result<Self, VerbatimUrlError> {
-        let (path, fragment) = split_fragment(path.as_ref());
+        let (path, fragment) = split_fragment(path.as_ref(), base_dir)?;
         let url = if let Some(base_dir) = base_dir {
             Self::from_path(path, base_dir)?
         } else {
@@ -584,6 +571,10 @@ pub enum VerbatimUrlError {
     #[error("relative path without a working directory: {0}")]
     WorkingDirectory(PathBuf),
 
+    /// A bare path can be read in a way that drops an archive checksum.
+    #[error("Ambiguous hash in path `{}`. Use a `file:` URL with `%23` for a literal `#` and put the checksum in the URL fragment.", .0.display())]
+    AmbiguousHash(PathBuf),
+
     /// Received a path that could not be converted to a URL.
     #[error("path could not be converted to a URL: {0}")]
     UrlConversion(PathBuf),
@@ -708,7 +699,7 @@ pub fn split_scheme(s: &str) -> Option<(&str, &str)> {
 
 /// Strip the `file://localhost/` host from a file path.
 #[cfg(feature = "non-pep508-extensions")]
-pub(crate) fn strip_host(path: &str) -> &str {
+fn strip_host(path: &str) -> &str {
     // Ex) `file://localhost/...`.
     if let Some(path) = path
         .strip_prefix("//localhost")
@@ -738,21 +729,113 @@ pub fn looks_like_git_repository<P: SerializationPolicy>(url: &SafeUrl<P>) -> bo
             .is_some_and(|segments| segments.count() == 2)
 }
 
-/// Split the fragment from a URL.
-///
-/// For example, given `file:///home/ferris/project/scripts#hash=somehash`, returns
-/// `("/home/ferris/project/scripts", Some("hash=somehash"))`.
+/// Read the distribution checksums in a file URL fragment. Split fields before decoding
+/// them so an escaped `&` or `=` stays part of its field.
+pub fn file_url_hashes(fragment: &str) -> impl Iterator<Item = (Cow<'_, str>, Cow<'_, str>)> {
+    fragment
+        .split('&')
+        .filter_map(file_url_field)
+        .filter(|(name, _)| is_hash_name(name))
+}
+
+fn file_url_field(field: &str) -> Option<(Cow<'_, str>, Cow<'_, str>)> {
+    if !field.contains('=') {
+        return None;
+    }
+    url::form_urlencoded::parse(field.as_bytes()).next()
+}
+
+fn is_hash_name(name: &str) -> bool {
+    matches!(name, "md5" | "sha256" | "sha384" | "sha512" | "blake2b")
+}
+
+/// In a bare path, `sha256=cache/pkg.whl` spans directory components. Fragment fields
+/// before or after this text still have their usual meaning.
 #[cfg(feature = "non-pep508-extensions")]
-fn split_fragment(path: &Path) -> (Cow<'_, Path>, Option<&str>) {
-    let Some(s) = path.to_str() else {
-        return (Cow::Borrowed(path), None);
-    };
+fn bare_fragment_fields(fragment: &str) -> impl Iterator<Item = (Cow<'_, str>, Cow<'_, str>)> {
+    fragment
+        .split('&')
+        .filter(|field| !field.contains(std::path::is_separator))
+        .filter_map(file_url_field)
+}
 
-    let Some((path, fragment)) = s.split_once('#') else {
-        return (Cow::Borrowed(path), None);
+/// Split a bare local requirement without shortening a requested archive path to a sibling.
+#[cfg(feature = "non-pep508-extensions")]
+fn split_fragment<'a>(
+    path: &'a Path,
+    base_dir: Option<&Path>,
+) -> Result<(&'a Path, Option<&'a str>), VerbatimUrlError> {
+    let Some(input) = path.to_str() else {
+        return Ok((path, None));
     };
+    if !input.contains('#') {
+        return Ok((path, None));
+    }
+    let base = base_dir.unwrap_or(Path::new(""));
+    // File URLs normalize `..` lexically. Inspect the same path the installer will open.
+    let resolve = |candidate: &Path| normalize_path(base.join(candidate));
+    let filename_start = input.rfind(std::path::is_separator).map_or(0, |i| i + 1);
+    let filename = &input[filename_start..];
+    // The archive name can contain literal hashes and can itself be followed by a fragment.
+    let archive_end = std::iter::once(filename.len())
+        .chain(filename.rmatch_indices('#').map(|(i, _)| i))
+        .find(|&end| DistExtension::from_path(&filename[..end]).is_ok())
+        .map(|end| filename_start + end);
+    let path_end = archive_end.unwrap_or(filename_start);
+    let mut source_end = resolve(path).exists().then_some(input.len());
 
-    (Cow::Owned(PathBuf::from(path)), Some(fragment))
+    for (index, _) in input.rmatch_indices('#') {
+        let prefix = &input[..index];
+        let fragment = &input[index + 1..];
+        if prefix.is_empty() {
+            continue;
+        }
+        let candidate = resolve(Path::new(prefix));
+        let viable = if index >= path_end {
+            candidate.exists()
+        } else {
+            let Ok(metadata) = candidate.metadata() else {
+                continue;
+            };
+            // A terminal egg name can end in an archive extension on either a wheel or a
+            // source directory. A directory cannot absorb a subsequent path component.
+            let recognized_field =
+                bare_fragment_fields(fragment).any(|(name, _)| match name.as_ref() {
+                    "egg" | "subdirectory" => {
+                        metadata.is_file() || (index >= filename_start && metadata.is_dir())
+                    }
+                    name => metadata.is_file() && is_hash_name(name),
+                });
+            let parameter_with_separator = metadata.is_file()
+                && archive_end.is_none()
+                && fragment
+                    .split_once(std::path::is_separator)
+                    .is_some_and(|(field, _)| field.contains('='));
+            recognized_field || parameter_with_separator
+        };
+        if !viable {
+            continue;
+        }
+
+        if let Some(end) = source_end {
+            // Only a viable shorter source can supply a checksum that this path would swallow.
+            if bare_fragment_fields(&input[index + 1..end]).any(|(name, _)| is_hash_name(&name)) {
+                return Err(VerbatimUrlError::AmbiguousHash(path.to_path_buf()));
+            }
+        } else {
+            source_end = Some(index);
+        }
+    }
+    // A requirement can be parsed before its archive exists.
+    let split = source_end.or_else(|| {
+        let (prefix, fragment) = input[path_end..].split_once('#')?;
+        let end = path_end + prefix.len();
+        (end != 0 && (archive_end.is_some() || fragment.contains('='))).then_some(end)
+    });
+    Ok(match split {
+        Some(end) if end < input.len() => (Path::new(&input[..end]), Some(&input[end + 1..])),
+        _ => (path, None),
+    })
 }
 
 /// A supported URL scheme for PEP 508 direct-URL requirements.
@@ -961,41 +1044,59 @@ mod tests {
 
     #[test]
     #[cfg(feature = "non-pep508-extensions")]
-    fn fragment() {
+    fn fragment() -> Result<(), VerbatimUrlError> {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"));
         assert_eq!(
-            split_fragment(Path::new(
-                "file:///home/ferris/project/scripts#hash=somehash"
-            )),
+            split_fragment(Path::new("Cargo.toml#one#two&sha256=digest"), Some(base))?,
+            (Path::new("Cargo.toml"), Some("one#two&sha256=digest"))
+        );
+        assert_eq!(
+            split_fragment(
+                Path::new("Cargo.toml#note=x#sha256=text&sha256=digest"),
+                Some(base)
+            )?,
             (
-                Cow::Owned(PathBuf::from("file:///home/ferris/project/scripts")),
-                Some("hash=somehash")
+                Path::new("Cargo.toml"),
+                Some("note=x#sha256=text&sha256=digest")
             )
         );
         assert_eq!(
-            split_fragment(Path::new("file:home/ferris/project/scripts#hash=somehash")),
-            (
-                Cow::Owned(PathBuf::from("file:home/ferris/project/scripts")),
-                Some("hash=somehash")
-            )
+            split_fragment(Path::new("Cargo.toml#note=a/b&sha256=digest"), Some(base))?,
+            (Path::new("Cargo.toml"), Some("note=a/b&sha256=digest"))
         );
         assert_eq!(
-            split_fragment(Path::new("/home/ferris/project/scripts#hash=somehash")),
-            (
-                Cow::Owned(PathBuf::from("/home/ferris/project/scripts")),
-                Some("hash=somehash")
-            )
+            split_fragment(
+                Path::new("Cargo.toml#sha256=digest&egg=demo.whl"),
+                Some(base)
+            )?,
+            (Path::new("Cargo.toml"), Some("sha256=digest&egg=demo.whl"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "non-pep508-extensions")]
+    fn missing_archive_with_hash_in_its_name_or_directory() -> Result<(), VerbatimUrlError> {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let filename = Path::new("src#label.tar.gz");
+        assert_eq!(split_fragment(filename, Some(base))?, (filename, None));
+        assert_eq!(
+            split_fragment(Path::new("src#egg=demo.whl"), Some(base))?,
+            (Path::new("src"), Some("egg=demo.whl"))
         );
         assert_eq!(
-            split_fragment(Path::new("file:///home/ferris/project/scripts")),
+            split_fragment(Path::new("missing/../Cargo.toml#opaque"), Some(base))?,
+            (Path::new("missing/../Cargo.toml"), Some("opaque"))
+        );
+        let missing = Path::new("Cargo.toml#tag=1/missing.whl#sha256=digest");
+        assert_eq!(
+            split_fragment(missing, Some(base))?,
             (
-                Cow::Borrowed(Path::new("file:///home/ferris/project/scripts")),
-                None
+                Path::new("Cargo.toml#tag=1/missing.whl"),
+                Some("sha256=digest")
             )
         );
-        assert_eq!(
-            split_fragment(Path::new("")),
-            (Cow::Borrowed(Path::new("")), None)
-        );
+        Ok(())
     }
 
     #[test]

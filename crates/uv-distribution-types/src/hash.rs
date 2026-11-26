@@ -1,4 +1,5 @@
-use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, Hashes};
+use uv_pep508::{VerbatimUrl, file_url_hashes};
+use uv_pypi_types::{HashAlgorithm, HashDigest, HashDigests, HashError, Hashes};
 use uv_redacted::SafeUrl;
 
 /// Hash generation and validation policy for an archive.
@@ -173,6 +174,20 @@ pub fn satisfies_require_hashes(digest: &HashDigest) -> bool {
     }
 }
 
+/// Read the digests declared by a requirement. Preserve repeated file URL fields so the
+/// verification policy can check them against each other and against requirement-file hashes.
+pub(crate) fn requirement_url_hashes(url: &VerbatimUrl) -> Result<HashDigests, HashError> {
+    let Some(fragment) = url.fragment() else {
+        return Ok(HashDigests::empty());
+    };
+    if url.scheme() == "file" {
+        return file_url_hashes(fragment)
+            .map(|(name, value)| HashDigest::new(name.parse()?, value.as_ref()))
+            .collect();
+    }
+    Ok(Hashes::parse_url_fragment(fragment)?.map_or_else(HashDigests::empty, HashDigests::from))
+}
+
 /// Read a URL's declared hash for resolution, excluding MD5, which `--require-hashes` rejects.
 pub fn parse_url_hashes(url: &SafeUrl) -> Option<HashDigests> {
     let hashes = url
@@ -215,9 +230,32 @@ impl Hashed for &[HashDigest] {
 mod tests {
     use std::str::FromStr;
 
-    use uv_pypi_types::{HashDigest, HashError};
+    use uv_pep508::VerbatimUrl;
+    use uv_pypi_types::{HashAlgorithm, HashDigest, HashError};
 
-    use super::ArchiveHashPolicy;
+    use super::{ArchiveHashPolicy, requirement_url_hashes};
+
+    #[test]
+    fn file_url_hashes_decode_fields_and_preserve_duplicates()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let digest = "ab".repeat(32);
+        let encoded = "%61b".repeat(32);
+        let sha512 = "cd".repeat(64);
+        let url = VerbatimUrl::parse_url(format!(
+            "file:///pkg.whl#egg=ok%26sha256%3Dignored&%73ha256={encoded}&sha512={sha512}&sha256={}",
+            digest.to_ascii_uppercase()
+        ))?;
+        let sha256 = HashDigest::new(HashAlgorithm::Sha256, digest)?;
+        assert_eq!(
+            requirement_url_hashes(&url)?.as_slice(),
+            [
+                sha256.clone(),
+                HashDigest::new(HashAlgorithm::Sha512, sha512)?,
+                sha256
+            ]
+        );
+        Ok(())
+    }
 
     /// Current call paths reject missing required hashes before reaching this helper, so test
     /// the defensive empty-policy case directly.
