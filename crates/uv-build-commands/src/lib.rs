@@ -29,7 +29,7 @@ use uv_distribution_filename::{
     DistFilename, SourceDistExtension, SourceDistFilename, WheelFilename,
 };
 use uv_distribution_types::{
-    ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
+    BuildableSource, ConfigSettings, DependencyMetadata, ExtraBuildVariables, IndexLocations,
     NameRequirementSpecification, PackageConfigSettings, Requirement, SourceDist,
 };
 use uv_errors::{Hinted, Hints};
@@ -1178,7 +1178,7 @@ async fn build_sdist(
                     source.path(),
                     None,
                     version_id,
-                    dist,
+                    dist.map(BuildableSource::Dist).as_ref(),
                     sources,
                     BuildKind::Sdist,
                     build_output,
@@ -1291,7 +1291,7 @@ async fn build_wheel(
                     source.path(),
                     None,
                     version_id,
-                    dist,
+                    dist.map(BuildableSource::Dist).as_ref(),
                     &sources,
                     BuildKind::Wheel,
                     build_output,
