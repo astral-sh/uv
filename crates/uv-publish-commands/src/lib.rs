@@ -25,7 +25,6 @@ use uv_publish::{
 };
 use uv_redacted::SafeUrl;
 use uv_settings::EnvironmentOptions;
-use uv_static::TarBackend;
 use uv_warnings::{warn_user, warn_user_once};
 
 use crate::reporters::PublishReporter;
@@ -162,7 +161,6 @@ pub async fn publish(
         &upload_client,
         &oidc_client,
         client_builder.retry_policy(),
-        TarBackend::from_env(),
     )
     .with_credentials_prompt(credentials_prompt.clone());
     if let Some(index_url) = check_url {

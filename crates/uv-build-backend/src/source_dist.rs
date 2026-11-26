@@ -13,7 +13,7 @@ use globset::{Glob, GlobSet};
 use itertools::Itertools;
 use rustc_hash::FxHashSet;
 use std::io;
-use std::io::{BufReader, Cursor, Read, Write};
+use std::io::{BufReader, Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
@@ -21,13 +21,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tar_codec::{ArchiveBuilder as _, Builder, EntryMetadata, FilePayload, TarEncoder};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio_tar::{EntryType, Header};
 use tracing::{debug, trace};
 use uv_distribution_filename::{SourceDistExtension, SourceDistFilename};
 use uv_fs::{Simplified, normalize_path};
 use uv_globfilter::{GlobDirFilter, PortableGlobParser};
 use uv_pypi_types::BuildKind;
-use uv_static::TarBackend;
 use uv_warnings::warn_user_once;
 use walkdir::WalkDir;
 
@@ -37,7 +35,6 @@ pub fn build_source_dist(
     source_dist_directory: &Path,
     uv_version: &str,
     show_warnings: bool,
-    tar_backend: TarBackend,
 ) -> Result<SourceDistFilename, Error> {
     let pyproject_toml = PyProjectToml::parse(&source_tree.join("pyproject.toml"))?;
     let filename = SourceDistFilename {
@@ -52,16 +49,8 @@ pub fn build_source_dist(
     }
 
     let temp_file = uv_fs::tempfile_in(source_dist_directory)?;
-    match tar_backend {
-        TarBackend::TarCodec => {
-            let writer = TarCodecGzWriter::new(temp_file.as_file(), &source_dist_path);
-            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
-        }
-        TarBackend::TokioTar => {
-            let writer = TokioTarGzWriter::new(temp_file.as_file(), &source_dist_path);
-            write_source_dist(source_tree, writer, uv_version, show_warnings)?;
-        }
-    }
+    let writer = TarGzWriter::new(temp_file.as_file(), &source_dist_path);
+    write_source_dist(source_tree, writer, uv_version, show_warnings)?;
     temp_file
         .persist(&source_dist_path)
         .map_err(|err| Error::Persist(source_dist_path.clone(), err.error))?;
@@ -422,26 +411,12 @@ impl<W: Write + Unpin> AsyncWrite for SyncWriter<W> {
     }
 }
 
-struct TokioTarGzWriter<W: Write + Unpin + Send> {
-    path: PathBuf,
-    tar: tokio_tar::Builder<SyncWriter<GzEncoder<W>>>,
-}
-
-impl<W: Write + Unpin + Send> TokioTarGzWriter<W> {
-    fn new(writer: W, path: impl Into<PathBuf>) -> Self {
-        let path = path.into();
-        let gzip = GzEncoder::new(writer, Compression::default());
-        let tar = tokio_tar::Builder::new_non_terminated(SyncWriter::new(gzip));
-        Self { path, tar }
-    }
-}
-
-struct TarCodecGzWriter<W: Write + Unpin> {
+struct TarGzWriter<W: Write + Unpin> {
     path: PathBuf,
     tar: Builder<TarEncoder<SyncWriter<GzEncoder<W>>>>,
 }
 
-impl<W: Write + Unpin> TarCodecGzWriter<W> {
+impl<W: Write + Unpin> TarGzWriter<W> {
     fn new(writer: W, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
         let gzip = GzEncoder::new(writer, Compression::default());
@@ -476,80 +451,10 @@ fn normalize_toml10_datetimes(value: &mut toml::Value) {
     }
 }
 
-impl<W: Write + Unpin + Send> DirectoryWriter for TokioTarGzWriter<W> {
-    fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
-        let mut header = Header::new_gnu();
-        // Work around bug in Python's std tar module
-        // https://github.com/python/cpython/issues/141707
-        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
-        header.set_entry_type(EntryType::Regular);
-        header.set_size(bytes.len() as u64);
-        // Reasonable default to avoid 0o000 permissions, the user's umask will be applied on
-        // unpacking.
-        header.set_mode(0o644);
-        block_on(
-            self.tar
-                .append_data(&mut header, path, SyncReader::new(Cursor::new(bytes))),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
-        Ok(())
-    }
-
-    fn write_file(&mut self, path: &str, file: &Path) -> Result<(), Error> {
-        let metadata = fs_err::metadata(file)?;
-        let mut header = Header::new_gnu();
-        // Work around bug in Python's std tar module
-        // https://github.com/python/cpython/issues/141707
-        // https://github.com/astral-sh/uv/pull/17043#issuecomment-3636841022
-        header.set_entry_type(EntryType::Regular);
-        // Preserve the executable bit, especially for scripts
-        #[cfg(unix)]
-        let executable_bit = metadata.permissions().mode() & 0o111 != 0;
-        // Windows has no executable bit
-        #[cfg(not(unix))]
-        let executable_bit = false;
-
-        header.set_mode(if executable_bit { 0o755 } else { 0o644 });
-        header.set_size(metadata.len());
-        let reader = BufReader::new(File::open(file)?);
-        block_on(
-            self.tar
-                .append_data(&mut header, path, SyncReader::new(reader)),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
-        Ok(())
-    }
-
-    fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
-        let mut header = Header::new_gnu();
-        // Directories are always executable, which means they can be listed.
-        header.set_mode(0o755);
-        header.set_entry_type(EntryType::Directory);
-        header.set_size(0);
-        block_on(
-            self.tar
-                .append_data(&mut header, directory, SyncReader::new(io::empty())),
-        )
-        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
-        Ok(())
-    }
-
-    fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
-        let path = self.path;
-        let writer =
-            block_on(self.tar.into_inner()).map_err(|err| Error::TarWrite(path.clone(), err))?;
-        writer
-            .into_inner()
-            .finish()
-            .map_err(|err| Error::TarWrite(path, err))?;
-        Ok(())
-    }
-}
-
-impl<W: Write + Unpin> DirectoryWriter for TarCodecGzWriter<W> {
+impl<W: Write + Unpin> DirectoryWriter for TarGzWriter<W> {
     fn write_bytes(&mut self, path: &str, bytes: &[u8]) -> Result<(), Error> {
         block_on(self.tar.add_file(path, bytes, EntryMetadata::default()))
-            .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
@@ -569,20 +474,20 @@ impl<W: Write + Unpin> DirectoryWriter for TarCodecGzWriter<W> {
             payload,
             EntryMetadata::default().executable(executable_bit),
         ))
-        .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+        .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
     fn write_directory(&mut self, directory: &str) -> Result<(), Error> {
         block_on(self.tar.add_directory(directory))
-            .map_err(|err| Error::TarCodecWrite(self.path.clone(), err))?;
+            .map_err(|err| Error::TarWrite(self.path.clone(), err))?;
         Ok(())
     }
 
     fn close(self, _dist_info_dir: &str) -> Result<(), Error> {
         let path = self.path;
         let encoder = block_on(self.tar.finish_into_inner())
-            .map_err(|err| Error::TarCodecWrite(path.clone(), err))?;
+            .map_err(|err| Error::TarWrite(path.clone(), err))?;
         encoder
             .into_inner()
             .into_inner()

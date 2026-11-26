@@ -3975,20 +3975,6 @@ fn python_install_armv7() {
     // The gnuabi build for armv7l contains duplicate terminfo symlinks.
     uv_snapshot!(context.filters(), context
         .python_install()
-        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
-        .arg("cpython-3.12.12-linux-armv7-gnueabi"), @"
-    exit_code: 0 (success)
-    ----- stderr -----
-    Installed Python 3.12.12 in [TIME]
-     + cpython-3.12.12-[PLATFORM] (python3.12)
-    ");
-
-    context.python_uninstall().arg("--all").assert().success();
-
-    // Exercise the legacy tar backend against the same archive.
-    uv_snapshot!(context.filters(), context
-        .python_install()
-        .env(EnvVars::UV_LEGACY_TAR_BACKEND, "1")
         .arg("cpython-3.12.12-linux-armv7-gnueabi"), @"
     exit_code: 0 (success)
     ----- stderr -----

@@ -3666,28 +3666,13 @@ fn venv_included_in_sdist() -> Result<()> {
 
     context.venv().arg("--clear").assert().success();
 
-    // The astral-tokio-tar fallback recognizes the external virtual-environment link.
-    uv_snapshot!(context.filters(), context.build().env(EnvVars::UV_LEGACY_TAR_BACKEND, "1"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    Building source distribution...
-    error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-[VERSION]/[TMP]/project-0.1.0/.venv/bin/python`
-      cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
-
-    hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
-    ");
-
     // Point the virtual environment at the test interpreter's `python/3.12/python3` shim to
     // exercise a base interpreter outside `bin`, as in Gentoo's test layout.
     let venv_python = context.venv.child("bin").child("python");
     fs_err::remove_file(&venv_python)?;
     venv_python.symlink_to_file(context.root.child("python").child("3.12").child("python3"))?;
 
-    // The default tar-codec backend reports a structured unsafe-link error with the same
-    // user-facing hint, regardless of the base interpreter's installation layout.
-    uv_snapshot!(context.filters(), context.build().env_remove(EnvVars::UV_LEGACY_TAR_BACKEND), @r#"
+    uv_snapshot!(context.filters(), context.build(), @r#"
     exit_code: 2 (failure)
     ----- stderr -----
     Building source distribution...
@@ -3697,17 +3682,6 @@ fn venv_included_in_sdist() -> Result<()> {
 
     hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
     "#);
-
-    uv_snapshot!(context.filters(), context.build().arg("-q").env(EnvVars::UV_LEGACY_TAR_BACKEND, "1"), @"
-    exit_code: 2 (failure)
-    ----- stderr -----
-    error: Failed to build `[TEMP_DIR]/`
-      cause: Invalid tar file
-      cause: failed to unpack `[CACHE_DIR]/sdists-[VERSION]/[TMP]/project-0.1.0/.venv/bin/python`
-      cause: symlink path `[PYTHON-3.12]` is absolute, but external symlinks are not allowed
-
-    hint: The source distribution includes a virtual environment. Virtual environments must be excluded from source distributions.
-    ");
 
     uv_snapshot!(context.filters(), context.build().arg("-qq"), @"
     exit_code: 2 (failure)

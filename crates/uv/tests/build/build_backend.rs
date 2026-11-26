@@ -14,6 +14,7 @@ use std::process::Command;
 use tar_codec::{Archive as _, TarArchive, extract::ExtractPolicy};
 use tempfile::TempDir;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
+#[cfg(any(feature = "test-pypi", all(unix, feature = "test-git")))]
 use uv_static::EnvVars;
 #[cfg(feature = "test-pypi")]
 use uv_test::copy_dir_ignore;
@@ -655,7 +656,6 @@ fn build_sdist_with_full_group_name() -> Result<()> {
         .success();
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
         .arg("--offline")
         .arg(sdist.path()), @"
     exit_code: 0 (success)
@@ -711,7 +711,6 @@ fn build_sdist_with_long_group_name() -> Result<()> {
         .success();
 
     uv_snapshot!(context.filters(), context.pip_install()
-        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
         .arg("--offline")
         .arg(sdist.path()), @"
     exit_code: 0 (success)
@@ -728,8 +727,7 @@ fn build_sdist_with_long_group_name() -> Result<()> {
 #[test]
 fn build_sdist_with_long_path() -> Result<()> {
     let context = uv_test::test_context!("3.12");
-    let legacy_dir = TempDir::new()?;
-    let default_dir = TempDir::new()?;
+    let dist_dir = TempDir::new()?;
 
     context
         .temp_dir
@@ -759,41 +757,8 @@ fn build_sdist_with_long_path() -> Result<()> {
 
     uv_snapshot!(context
         .build_backend()
-        .env(EnvVars::UV_LEGACY_TAR_BACKEND, "1")
         .arg("build-sdist")
-        .arg(legacy_dir.path()), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    foo-1.0.0.tar.gz
-    ");
-
-    uv_snapshot!(context.python_command()
-        .arg("-c")
-        .arg(indoc! {r#"
-            import gzip
-            import sys
-            import tarfile
-
-            with gzip.open(sys.argv[1], mode="rb") as archive:
-                header = archive.read(512)
-                assert header[257:265] == b"ustar  \x00"
-
-            with tarfile.open(sys.argv[1], mode="r:gz") as archive:
-                members = archive.getmembers()
-                assert all(not member.pax_headers for member in members)
-                print(f"GNU members: {len(members)}")
-        "#})
-        .arg(legacy_dir.path().join("foo-1.0.0.tar.gz")), @"
-    exit_code: 0 (success)
-    ----- stdout -----
-    GNU members: 10
-    ");
-
-    uv_snapshot!(context
-        .build_backend()
-        .env_remove(EnvVars::UV_LEGACY_TAR_BACKEND)
-        .arg("build-sdist")
-        .arg(default_dir.path()), @"
+        .arg(dist_dir.path()), @"
     exit_code: 0 (success)
     ----- stdout -----
     foo-1.0.0.tar.gz
@@ -828,7 +793,7 @@ fn build_sdist_with_long_path() -> Result<()> {
                 print(f"Long path bytes: {len(long_member.name.encode())}")
                 print(f"Streamed bytes: {streamed}")
         "#})
-        .arg(default_dir.path().join("foo-1.0.0.tar.gz"))
+        .arg(dist_dir.path().join("foo-1.0.0.tar.gz"))
         .arg(format!("foo-1.0.0/{long_path}"))
         .arg(format!("foo-1.0.0/{large_path}")), @"
     exit_code: 0 (success)

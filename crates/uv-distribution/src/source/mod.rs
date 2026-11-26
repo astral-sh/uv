@@ -2863,7 +2863,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source,
             ext,
             self.build_context.cache(),
-            self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &HTTP_DEFAULT_HASH_ALGORITHMS,
                 hash_policy,
@@ -2896,7 +2895,6 @@ impl<'a, T: BuildContext> SourceDistributionBuilder<'a, T> {
             source,
             ext,
             self.build_context.cache(),
-            self.build_context.tar_backend(),
             ArchiveValidation {
                 extra_algorithms: &[],
                 hash_policy: ArtifactHashPolicy::required(hash_policy),

@@ -39,7 +39,6 @@ use uv_resolver::{
     ExcludeNewer, FlatIndex, Flexibility, InMemoryIndex, Manifest, OptionsBuilder,
     PythonRequirement, Resolver, ResolverEnvironment,
 };
-use uv_static::TarBackend;
 use uv_types::{
     AnyErrorBuild, BuildArena, BuildContext, BuildIsolation, BuildStack, EmptyInstalledPackages,
     HashStrategy, HashVerification, InFlight, ResolvedRequirements, SourceTreeEditablePolicy,
@@ -177,7 +176,6 @@ pub struct BuildDispatch<'a> {
     workspace_cache: WorkspaceCache,
     concurrency: Concurrency,
     preview: Preview,
-    tar_backend: TarBackend,
 }
 
 impl<'a> BuildDispatch<'a> {
@@ -240,7 +238,6 @@ impl<'a> BuildDispatch<'a> {
             workspace_cache,
             concurrency,
             preview,
-            tar_backend: TarBackend::from_env(),
         }
     }
 
@@ -295,10 +292,6 @@ impl<'a> BuildDispatch<'a> {
 #[allow(refining_impl_trait)]
 impl BuildContext for BuildDispatch<'_> {
     type SourceDistBuilder = SourceBuild;
-
-    fn tar_backend(&self) -> TarBackend {
-        self.tar_backend
-    }
 
     fn interpreter(&self) -> impl Future<Output = &Interpreter> + '_ {
         future::ready(self.interpreter)
@@ -693,7 +686,6 @@ impl BuildContext for BuildDispatch<'_> {
         debug!("Performing direct build for {identifier}");
 
         let output_dir = output_dir.to_path_buf();
-        let tar_backend = self.tar_backend;
         let filename = tokio::task::spawn_blocking(move || -> Result<_, BuildBackendError> {
             let filename = match build_kind {
                 BuildKind::Wheel => {
@@ -712,7 +704,6 @@ impl BuildContext for BuildDispatch<'_> {
                         &output_dir,
                         uv_version::version(),
                         sources.is_none(),
-                        tar_backend,
                     )?;
                     DistFilename::SourceDistFilename(source_dist)
                 }

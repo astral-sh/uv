@@ -311,22 +311,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "astral-tokio-tar"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "821ed36daf7c40d00a7b62759f9833fb279fb7c87dd989ec0a4d626dcd8d1dca"
-dependencies = [
- "futures-core",
- "libc",
- "portable-atomic",
- "rustc-hash",
- "rustix",
- "tokio",
- "tokio-stream",
- "zerocopy",
-]
-
-[[package]]
 name = "astral-version-ranges"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5912,7 +5896,6 @@ dependencies = [
  "uv-resolver",
  "uv-resolver-types",
  "uv-settings",
- "uv-static",
  "uv-types",
  "uv-workspace",
 ]
@@ -5965,7 +5948,6 @@ name = "uv-build-backend"
 version = "0.0.102"
 dependencies = [
  "anstream",
- "astral-tokio-tar",
  "astral-version-ranges",
  "astral_async_zip",
  "base64 0.23.1",
@@ -6004,7 +5986,6 @@ dependencies = [
  "uv-platform-tags",
  "uv-preview",
  "uv-pypi-types",
- "uv-static",
  "uv-toml",
  "uv-version",
  "uv-warnings",
@@ -6442,7 +6423,6 @@ dependencies = [
  "uv-python-interpreter",
  "uv-requirements",
  "uv-resolver",
- "uv-static",
  "uv-types",
  "uv-version",
  "uv-workspace",
@@ -6642,7 +6622,6 @@ name = "uv-extract"
 version = "0.0.102"
 dependencies = [
  "anyhow",
- "astral-tokio-tar",
  "astral_async_zip",
  "async-compression",
  "blake2",
@@ -7357,12 +7336,10 @@ dependencies = [
  "anstream",
  "astral-reqwest-middleware",
  "astral-reqwest-retry",
- "astral-tokio-tar",
  "async-compression",
  "base64 0.23.1",
  "fastrand",
  "fs-err",
- "futures",
  "glob",
  "insta",
  "itertools 0.14.0",
@@ -7417,7 +7394,6 @@ dependencies = [
  "uv-publish",
  "uv-redacted",
  "uv-settings",
- "uv-static",
  "uv-warnings",
 ]
 
@@ -8178,7 +8154,6 @@ dependencies = [
  "uv-pypi-types",
  "uv-python-interpreter",
  "uv-redacted",
- "uv-static",
  "uv-workspace",
 ]
 
