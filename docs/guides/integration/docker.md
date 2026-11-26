@@ -57,6 +57,7 @@ And the following derived images are available:
     - `ghcr.io/astral-sh/uv:debian-dhi`
     - `ghcr.io/astral-sh/uv:trixie-dhi`
 - Based on `dhi/python:3.x`:
+    - `ghcr.io/astral-sh/uv:python3.15-dhi`
     - `ghcr.io/astral-sh/uv:python3.14-dhi`
     - `ghcr.io/astral-sh/uv:python3.13-dhi`
     - `ghcr.io/astral-sh/uv:python3.12-dhi`
