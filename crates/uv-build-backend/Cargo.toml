@@ -73,3 +73,4 @@ hex = { workspace = true }
 indoc = { workspace = true }
 insta = { workspace = true }
 regex = { workspace = true, features = ["perf", "unicode"] }
+tar-codec = { workspace = true, features = ["fs"] }
