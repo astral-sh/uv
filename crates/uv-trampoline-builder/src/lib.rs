@@ -8,6 +8,8 @@ use editpe::{
 };
 use fs_err::File;
 use thiserror::Error;
+#[cfg(windows)]
+use windows::Win32::Foundation::HMODULE;
 
 use uv_fs::Simplified;
 
@@ -74,7 +76,9 @@ impl Launcher {
     #[cfg(windows)]
     pub fn try_from_path(path: &Path) -> Result<Option<Self>, Error> {
         use std::os::windows::ffi::OsStrExt;
-        use windows::Win32::System::LibraryLoader::{LOAD_LIBRARY_AS_DATAFILE, LoadLibraryExW};
+        use windows::Win32::System::LibraryLoader::{
+            LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE, LoadLibraryExW,
+        };
 
         let path_wide = path
             .as_os_str()
@@ -88,7 +92,8 @@ impl Launcher {
             LoadLibraryExW(
                 windows::core::PCWSTR(path_wide.as_ptr()),
                 None,
-                LOAD_LIBRARY_AS_DATAFILE,
+                // Exclude writers before looking up offsets that we later read from the file.
+                LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE,
             )
             .ok()
         }) else {
@@ -96,7 +101,28 @@ impl Launcher {
         };
 
         let result = (|| {
-            let Some(kind_data) = read_resource(module, RESOURCE_TRAMPOLINE_KIND) else {
+            // Ordinary executables have no kind resource. Open and verify the
+            // backing file only when the loader finds a resource to read.
+            let mut backing = std::cell::LazyCell::new(|| open_backing_file(module, path));
+            let mut read_resource = |name, limit: usize| -> io::Result<Option<Vec<u8>>> {
+                use std::io::{Read, Seek, SeekFrom};
+
+                let Some((offset, size)) = resource_range(module, name)? else {
+                    return Ok(None);
+                };
+                let (file, file_size) = backing.as_mut().ok_or(io::ErrorKind::InvalidData)?;
+                if u64::from(size) > file_size.saturating_sub(offset) {
+                    return Err(io::ErrorKind::UnexpectedEof.into());
+                }
+                file.seek(SeekFrom::Start(offset))?;
+                let size = (size as usize).min(limit);
+                let mut bytes = Vec::new();
+                bytes.try_reserve_exact(size)?;
+                bytes.resize(size, 0);
+                file.read_exact(&mut bytes)?;
+                Ok(Some(bytes))
+            };
+            let Ok(Some(kind_data)) = read_resource(RESOURCE_TRAMPOLINE_KIND, 1) else {
                 return Ok(None);
             };
             let Some(&kind_value) = kind_data.first() else {
@@ -106,14 +132,16 @@ impl Launcher {
                 return Err(Error::UnprocessableMetadata);
             };
 
-            let Some(path_data) = read_resource(module, RESOURCE_PYTHON_PATH) else {
+            let Ok(Some(path_data)) = read_resource(RESOURCE_PYTHON_PATH, usize::MAX) else {
                 return Ok(None);
             };
             let python_path = PathBuf::from(
                 String::from_utf8(path_data).map_err(|err| Error::InvalidPath(err.utf8_error()))?,
             );
 
-            let script_data = read_resource(module, RESOURCE_SCRIPT_DATA);
+            let Ok(script_data) = read_resource(RESOURCE_SCRIPT_DATA, usize::MAX) else {
+                return Ok(None);
+            };
 
             Ok(Some(Self {
                 kind,
@@ -326,47 +354,112 @@ fn write_resources(launcher_data: &[u8], resources: &[(&str, &[u8])]) -> Result<
     Ok(image.data().to_vec())
 }
 
-/// Safely read a named resource from a loaded PE image.
+/// Compare the backing files directly. A replacement can have the same name as
+/// the file we opened while referring to a different set of resource offsets.
 #[cfg(windows)]
-fn read_resource(handle: windows::Win32::Foundation::HMODULE, name: &str) -> Option<Vec<u8>> {
+#[expect(unsafe_code)]
+fn open_backing_file(module: HMODULE, path: &Path) -> Option<(File, u64)> {
+    use std::ffi::c_void;
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, NTSTATUS};
+    use windows::Win32::System::Memory::{
+        CreateFileMappingW, FILE_MAP_READ, MapViewOfFile, PAGE_READONLY, SEC_IMAGE_NO_EXECUTE,
+        UnmapViewOfFile,
+    };
+
+    // This NT API compares an image view with a data view of the same file.
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtAreMappedFilesTheSame(image: *const c_void, data: *const c_void) -> NTSTATUS;
+    }
+
+    let file = File::open(path).ok()?;
+
+    // SAFETY: The file and data-file module remain open. The temporary image
+    // view is read-only and non-executable, and stays mapped through the comparison.
+    unsafe {
+        let section = CreateFileMappingW(
+            HANDLE(file.as_raw_handle()),
+            None,
+            PAGE_READONLY | SEC_IMAGE_NO_EXECUTE,
+            0,
+            0,
+            None,
+        )
+        .ok()?;
+        let image = MapViewOfFile(section, FILE_MAP_READ, 0, 0, 0);
+        let _ = CloseHandle(section);
+        if image.Value.is_null() {
+            return None;
+        }
+        let data = module.0.map_addr(|addr| addr & !1);
+        let status = NtAreMappedFilesTheSame(image.Value, data);
+        let _ = UnmapViewOfFile(image);
+        if status.0 != 0 {
+            tracing::trace!(
+                "Could not verify the backing file for `{}` (NTSTATUS {:#010x})",
+                path.display(),
+                status.0
+            );
+            return None;
+        }
+    }
+    let size = file.metadata().ok()?.len();
+    Some((file, size))
+}
+
+/// Find the offset and claimed length of a resource without reading its payload.
+#[cfg(windows)]
+fn resource_range(module: HMODULE, name: &str) -> io::Result<Option<(u64, u32)>> {
+    use windows::Win32::Foundation::{
+        ERROR_RESOURCE_NAME_NOT_FOUND, ERROR_SUCCESS, GetLastError, SetLastError,
+    };
     use windows::Win32::System::LibraryLoader::{
         FindResourceW, LoadResource, LockResource, SizeofResource,
     };
+    use windows::core::{HSTRING, PCWSTR};
 
-    let name_wide = name
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-
-    // SAFETY: `name_wide` is null-terminated, `handle` is valid, and the resource pointer is
-    // checked before reading the number of bytes reported by `SizeofResource`.
-    #[allow(unsafe_code)]
-    unsafe {
-        // Find the resource
+    // LDR_IS_DATAFILE: the loader can reuse a DLL already loaded as an image.
+    // Only the data-file layout gives us offsets into the file on disk.
+    if module.0.addr() & 1 == 0 {
+        return Err(io::ErrorKind::InvalidData.into());
+    }
+    let name = HSTRING::from(name);
+    // SAFETY: The module remains loaded and the resource name is null-terminated.
+    // Use the pointer only to compute its offset, without dereferencing it.
+    #[expect(unsafe_code)]
+    let (pointer, size) = unsafe {
         let resource = FindResourceW(
-            Some(handle),
-            windows::core::PCWSTR(name_wide.as_ptr()),
-            windows::core::PCWSTR(RT_RCDATA as usize as *const u16),
+            Some(module),
+            &name,
+            PCWSTR(RT_RCDATA as usize as *const u16),
         );
         if resource.is_invalid() {
-            return None;
+            return match GetLastError() {
+                ERROR_RESOURCE_NAME_NOT_FOUND => Ok(None),
+                error => Err(io::Error::from_raw_os_error(error.0.cast_signed())),
+            };
         }
-
-        // Get resource size and data
-        let size = SizeofResource(Some(handle), resource);
+        // Zero is both a valid payload size and the failure sentinel.
+        SetLastError(ERROR_SUCCESS);
+        let size = SizeofResource(Some(module), resource);
         if size == 0 {
-            return Some(Vec::new());
+            return match GetLastError() {
+                ERROR_SUCCESS => Ok(Some((0, 0))),
+                error => Err(io::Error::from_raw_os_error(error.0.cast_signed())),
+            };
         }
+        let data = LoadResource(Some(module), resource)?;
+        (LockResource(data), size)
+    };
 
-        let data = LoadResource(Some(handle), resource).ok()?;
-        let pointer = LockResource(data).cast::<u8>();
-        if pointer.is_null() {
-            return None;
-        }
-
-        // Copy the resource data into a Vec
-        Some(std::slice::from_raw_parts(pointer, size as usize).to_vec())
-    }
+    // A data-file handle is the mapping's base address with the low bit set.
+    let base = module.0.addr() & !1;
+    let offset = pointer
+        .addr()
+        .checked_sub(base)
+        .ok_or(io::ErrorKind::InvalidData)?;
+    Ok(Some((offset as u64, size)))
 }
 
 /// Construct a Windows script launcher.

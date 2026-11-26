@@ -163,6 +163,91 @@ fn assert_other_resources_unchanged(
 }
 
 #[test]
+fn resource_offsets_require_the_same_file() -> Result<()> {
+    use windows::Win32::Foundation::FreeLibrary;
+    use windows::Win32::System::LibraryLoader::{
+        LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE, LoadLibraryExW,
+    };
+    use windows::core::HSTRING;
+
+    let dir = assert_fs::TempDir::new()?;
+    let original = dir.child("original.exe");
+    let copy = dir.child("copy.exe");
+    let launcher = get_launcher_bin(false)?;
+    fs_err::write(original.path(), launcher)?;
+    fs_err::write(copy.path(), launcher)?;
+
+    let path = HSTRING::from(original.path());
+    // SAFETY: The path is null-terminated and the module stays loaded through both checks.
+    #[expect(unsafe_code)]
+    let (same, different) = unsafe {
+        let module = LoadLibraryExW(&path, None, LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE)?;
+        let same = super::open_backing_file(module, original.path()).is_some();
+        let different = super::open_backing_file(module, copy.path()).is_some();
+        FreeLibrary(module)?;
+        (same, different)
+    };
+    assert!(same);
+    assert!(!different);
+    Ok(())
+}
+
+/// A claimed size beyond EOF must not turn a script into a launcher without a payload.
+#[test]
+fn oversized_resource_is_rejected() -> Result<()> {
+    let temp_dir = assert_fs::TempDir::new()?;
+    let path = temp_dir.child("launcher.exe");
+    let script = b"oversized resource test payload";
+    let mut launcher = write_resources(
+        get_launcher_bin(false)?,
+        &[
+            (RESOURCE_TRAMPOLINE_KIND, &[1, 0]),
+            (RESOURCE_PYTHON_PATH, b"C:/Python312/python.exe"),
+            (RESOURCE_SCRIPT_DATA, script),
+        ],
+    )?;
+    fs_err::write(path.path(), &launcher)?;
+    let parsed = Launcher::try_from_path(path.path())?.context("Missing launcher metadata")?;
+    assert_eq!(parsed.script_data.as_deref(), Some(script.as_slice()));
+
+    // Locate the script's IMAGE_RESOURCE_DATA_ENTRY by its data RVA and size.
+    let offset = u32::try_from(
+        launcher
+            .windows(script.len())
+            .position(|bytes| bytes == script)
+            .context("Missing script")?,
+    )?;
+    let image = PE::parse(&launcher)?;
+    let section = image
+        .sections
+        .iter()
+        .find(|section| {
+            (section.pointer_to_raw_data..section.pointer_to_raw_data + section.size_of_raw_data)
+                .contains(&offset)
+        })
+        .context("Missing script section")?;
+    let rva = section.virtual_address + (offset - section.pointer_to_raw_data);
+    let prefix = [
+        rva.to_le_bytes(),
+        u32::try_from(script.len())?.to_le_bytes(),
+    ]
+    .concat();
+    let mut entries = launcher
+        .windows(prefix.len())
+        .enumerate()
+        .filter(|(_, bytes)| *bytes == prefix);
+    let (entry, _) = entries.next().context("Missing script data entry")?;
+    assert!(entries.next().is_none());
+
+    // Extend the resource one byte past EOF, including when the last page is padded.
+    let size = u32::try_from(launcher.len())? - offset + 1;
+    launcher[entry + 4..entry + 8].copy_from_slice(&size.to_le_bytes());
+    fs_err::write(path.path(), &launcher)?;
+    assert!(Launcher::try_from_path(path.path())?.is_none());
+    Ok(())
+}
+
+#[test]
 fn resources_match_native_windows_updates() -> Result<()> {
     let temp_dir = assert_fs::TempDir::new()?;
 

@@ -8153,6 +8153,7 @@ dependencies = [
  "rcgen",
  "tempfile",
  "thiserror",
+ "tracing",
  "uv-fs",
  "which",
  "windows",
