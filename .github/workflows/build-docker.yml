@@ -143,6 +143,7 @@ jobs:
             images+=(
               "dhi.io/alpine-base:3.23,alpine3.23-dhi,alpine-dhi"
               "dhi.io/debian-base:trixie-debian13,trixie-dhi,debian-dhi"
+              "dhi.io/python:3.15,python3.15-dhi"
               "dhi.io/python:3.14,python3.14-dhi"
               "dhi.io/python:3.13,python3.13-dhi"
               "dhi.io/python:3.12,python3.12-dhi"
