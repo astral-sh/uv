@@ -14,7 +14,7 @@ pub use registry_client::{
 };
 pub(crate) use retry::UvRetryMiddleware;
 pub use retry::{RetriableError, RetryState, retryable_on_request_failure};
-pub use rkyvutil::OwnedArchive;
+pub use rkyvutil::{OwnedArchive, RetainedArchive};
 pub use tls::{CertificateFileError, Certificates};
 
 mod base_client;
