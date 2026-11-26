@@ -146,20 +146,29 @@ impl LockedFileMode {
 
     /// Lock the file, blocking until the lock becomes available if necessary.
     ///
+    /// The blocking lock call is retried if it is interrupted by a signal (`EINTR`).
+    ///
     /// On Android, [`std::fs::File::lock`] is not supported
     /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
     ///
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
     #[cfg(not(target_os = "android"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
-        match self {
-            Self::Exclusive => file.lock()?,
-            Self::Shared => file.lock_shared()?,
+        loop {
+            let result = match self {
+                Self::Exclusive => file.lock(),
+                Self::Shared => file.lock_shared(),
+            };
+            match result {
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
+                result => return result,
+            }
         }
-        Ok(())
     }
 
     /// Lock the file, blocking until the lock becomes available if necessary.
+    ///
+    /// The blocking lock call is retried if it is interrupted by a signal (`EINTR`).
     ///
     /// Android-specific implementation using [`rustix::fs::flock`] because
     /// [`std::fs::File::lock`] always returns `Unsupported` on Android
@@ -174,8 +183,13 @@ impl LockedFileMode {
             Self::Exclusive => rustix::fs::FlockOperation::LockExclusive,
             Self::Shared => rustix::fs::FlockOperation::LockShared,
         };
-        rustix::fs::flock(file.as_fd(), operation)
-            .map_err(|errno| io::Error::from_raw_os_error(errno.raw_os_error()))
+        loop {
+            match rustix::fs::flock(file.as_fd(), operation) {
+                Ok(()) => return Ok(()),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(errno) => return Err(io::Error::from_raw_os_error(errno.raw_os_error())),
+            }
+        }
     }
 }
 
