@@ -66,9 +66,11 @@ be cached for the duration of the command and used for other queries to that ind
 Authentication is not cached across invocations of uv.
 
 When writing an index URL to `pyproject.toml` or `uv.lock`, uv removes the username and password. It
-retains the full query string, including the signature if you provide a signed index URL. For direct
-archive URLs, such as `package @ https://username:password@example.com/foo.whl`, uv also persists
-the username and password because there is no other way to provide them.
+retains the full query string, including the signature if you provide a signed index URL. If
+removing the username and password makes the path or fragment ambiguous, `uv add` refuses to write
+the index to `pyproject.toml`. For direct archive URLs, such as
+`package @ https://username:password@example.com/foo.whl`, uv also persists the username and
+password because there is no other way to provide them.
 
 If credentials were attached to an index URL during `uv add`, uv may fail to fetch dependencies from
 indexes which require authentication on subsequent operations. See the
