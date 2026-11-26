@@ -511,6 +511,66 @@ pub async fn write_atomic_preserve(
     write_atomic_with_permissions(path.as_ref(), data.as_ref(), None).await
 }
 
+/// Like [`write_atomic_preserve`], but refuses to follow a symlink whose target
+/// resolves outside `root`.
+#[cfg(feature = "tokio")]
+pub async fn write_atomic_preserve_within(
+    path: impl AsRef<Path>,
+    root: impl AsRef<Path>,
+    data: impl AsRef<[u8]>,
+) -> std::io::Result<()> {
+    let path = path.as_ref();
+    let root = root.as_ref();
+    if let Ok(metadata) = fs_err::tokio::symlink_metadata(path).await
+        && metadata.file_type().is_symlink()
+    {
+        let canonical_root = fs_err::tokio::canonicalize(root).await?;
+        let resolved_target = match fs_err::tokio::canonicalize(path).await {
+            Ok(target) => target,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                let raw_target = fs_err::tokio::read_link(path).await?;
+                let joined = path
+                    .parent()
+                    .expect("Write path must have a parent")
+                    .join(raw_target);
+                let target_parent = joined.parent().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "Refusing to write through symlink `{}` without a parent directory",
+                            path.display()
+                        ),
+                    )
+                })?;
+                let file_name = joined.file_name().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "Refusing to write through symlink `{}` without a target file name",
+                            path.display()
+                        ),
+                    )
+                })?;
+                fs_err::tokio::canonicalize(target_parent)
+                    .await?
+                    .join(file_name)
+            }
+            Err(err) => return Err(err),
+        };
+        if !resolved_target.starts_with(&canonical_root) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "Refusing to write through symlink `{}` pointing outside `{}`",
+                    path.display(),
+                    root.display()
+                ),
+            ));
+        }
+    }
+    write_atomic_with_permissions(path, data.as_ref(), None).await
+}
+
 /// Like [`write_atomic_preserve`], with optional permissions that override the target's mode.
 #[cfg(feature = "tokio")]
 pub async fn write_atomic_with_permissions(

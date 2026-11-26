@@ -291,8 +291,10 @@ impl PythonVersionFile {
         if let Some(parent) = self.path.parent() {
             fs_err::tokio::create_dir_all(parent).await?;
         }
-        uv_fs::write_atomic_preserve(
+        let root = self.path.parent().unwrap_or_else(|| Path::new("."));
+        uv_fs::write_atomic_preserve_within(
             &self.path,
+            root,
             self.versions
                 .iter()
                 .map(PythonRequest::to_canonical_string)
@@ -301,5 +303,50 @@ impl PythonVersionFile {
                 .as_bytes(),
         )
         .await
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn write_refuses_escaping_symlink_and_preserves_in_dir_symlink() {
+        let outside = tempfile::tempdir().unwrap();
+        let victim = outside.path().join("victim.txt");
+        fs_err::write(&victim, "original-secret\n").unwrap();
+
+        let project = tempfile::tempdir().unwrap();
+        let version_file_path = project.path().join(".python-version");
+        fs_err::os::unix::fs::symlink(&victim, &version_file_path).unwrap();
+
+        let version_file = PythonVersionFile::new(version_file_path.clone())
+            .with_versions(vec![PythonRequest::parse("3.13")]);
+        let err = version_file.write().await.unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(
+            fs_err::read_to_string(&victim).unwrap(),
+            "original-secret\n"
+        );
+
+        // An in-directory symlink is still preserved and updated.
+        fs_err::remove_file(&version_file_path).unwrap();
+        let sub = project.path().join("config");
+        fs_err::create_dir(&sub).unwrap();
+        let in_project_target = sub.join("python-version");
+        fs_err::write(&in_project_target, "3.12\n").unwrap();
+        fs_err::os::unix::fs::symlink(&in_project_target, &version_file_path).unwrap();
+
+        version_file.write().await.unwrap();
+        assert!(
+            fs_err::symlink_metadata(&version_file_path)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            fs_err::read_to_string(&in_project_target).unwrap(),
+            "3.13\n"
+        );
     }
 }
