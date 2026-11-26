@@ -2,7 +2,7 @@ import os
 import sys
 
 from uv import find_uv_bin
-
+hey you are shit
 
 def _detect_virtualenv() -> str:
     """
