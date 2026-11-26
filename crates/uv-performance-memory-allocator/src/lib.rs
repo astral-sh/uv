@@ -1,5 +1,6 @@
 //! The only purpose of this crate is to pull in `mimalloc` on windows and
 //! `tikv-jemallocator` on most other platforms.
+//! Haiku uses its system allocator because the bundled jemalloc cannot build there.
 
 #[cfg(target_os = "windows")]
 #[global_allocator]
@@ -9,6 +10,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
     not(target_os = "windows"),
     not(target_os = "openbsd"),
     not(target_os = "freebsd"),
+    not(target_os = "haiku"),
     any(
         target_arch = "x86_64",
         target_arch = "aarch64",

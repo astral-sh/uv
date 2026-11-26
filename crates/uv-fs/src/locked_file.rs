@@ -106,11 +106,11 @@ impl LockedFileMode {
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
     ///
-    /// On Android, [`std::fs::File::try_lock`] is not supported
-    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    /// On Android and Haiku, [`std::fs::File::try_lock`] is not supported
+    /// (see [rust-lang/rust#148325] for Android), so we use [`rustix::fs::flock`] directly.
     ///
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "haiku")))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
         match self {
             Self::Exclusive => file.try_lock()?,
@@ -122,12 +122,8 @@ impl LockedFileMode {
     /// Try to lock the file and return an error if the lock is already acquired by another process
     /// and cannot be acquired immediately.
     ///
-    /// Android-specific implementation using [`rustix::fs::flock`] because
-    /// [`std::fs::File::try_lock`] always returns `Unsupported` on Android
-    /// (see [rust-lang/rust#148325]).
-    ///
-    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
-    #[cfg(target_os = "android")]
+    /// Use the platform's `flock` when Rust's file-locking API is unavailable.
+    #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn try_lock(self, file: &fs_err::File) -> Result<(), std::fs::TryLockError> {
         use std::os::fd::AsFd;
 
@@ -146,11 +142,11 @@ impl LockedFileMode {
 
     /// Lock the file, blocking until the lock becomes available if necessary.
     ///
-    /// On Android, [`std::fs::File::lock`] is not supported
-    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    /// On Android and Haiku, [`std::fs::File::lock`] is not supported
+    /// (see [rust-lang/rust#148325] for Android), so we use [`rustix::fs::flock`] directly.
     ///
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "haiku")))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
         match self {
             Self::Exclusive => file.lock()?,
@@ -161,12 +157,8 @@ impl LockedFileMode {
 
     /// Lock the file, blocking until the lock becomes available if necessary.
     ///
-    /// Android-specific implementation using [`rustix::fs::flock`] because
-    /// [`std::fs::File::lock`] always returns `Unsupported` on Android
-    /// (see [rust-lang/rust#148325]).
-    ///
-    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
-    #[cfg(target_os = "android")]
+    /// Use the platform's `flock` when Rust's file-locking API is unavailable.
+    #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn lock(self, file: &fs_err::File) -> Result<(), io::Error> {
         use std::os::fd::AsFd;
 
@@ -337,21 +329,19 @@ impl LockedFile {
         match file.persist_noclobber(path.as_ref()) {
             Ok(file) => Ok(fs_err::File::from_parts(file, path.as_ref())),
             Err(err) => {
+                let errno = Errno::from_io_error(&err.error);
                 if err.error.kind() == std::io::ErrorKind::AlreadyExists {
                     fs_err::OpenOptions::new()
                         .read(true)
                         .write(true)
                         .open(path.as_ref())
                         .map_err(Into::into)
-                } else if matches!(
-                    Errno::from_io_error(&err.error),
-                    Some(Errno::NOTSUP | Errno::INVAL)
-                ) {
-                    // Fallback in case `persist_noclobber`, which uses `renameat2` or
-                    // `renameatx_np` under the hood, is not supported by the FS. Linux reports this
-                    // with `EINVAL` and MacOS with `ENOTSUP`. For these reasons and many others,
-                    // there isn't an ErrorKind we can use here, and in fact on MacOS `ENOTSUP` gets
-                    // mapped to `ErrorKind::Other`
+                } else if matches!(errno, Some(Errno::NOTSUP | Errno::INVAL))
+                    || (cfg!(target_os = "haiku") && errno == Some(Errno::PERM))
+                {
+                    // Fall back when the filesystem does not support `persist_noclobber`.
+                    // Linux's `renameat2` reports `EINVAL`, macOS's `renameatx_np` reports
+                    // `ENOTSUP`, and the hard-link fallback reports `EPERM` on Haiku's BFS.
 
                     // There is a race here where another process has just created the file, and we
                     // try to open it and get permission errors because the other process hasn't set
@@ -400,23 +390,19 @@ impl LockedFile {
 
     /// Unlock the file.
     ///
-    /// On Android, [`std::fs::File::unlock`] is not supported
-    /// (see [rust-lang/rust#148325]), so we use [`rustix::fs::flock`] directly.
+    /// On Android and Haiku, [`std::fs::File::unlock`] is not supported
+    /// (see [rust-lang/rust#148325] for Android), so we use [`rustix::fs::flock`] directly.
     ///
     /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "haiku")))]
     fn unlock(&self) -> Result<(), io::Error> {
         self.0.unlock()
     }
 
     /// Unlock the file.
     ///
-    /// Android-specific implementation using [`rustix::fs::flock`] because
-    /// [`std::fs::File::unlock`] always returns `Unsupported` on Android
-    /// (see [rust-lang/rust#148325]).
-    ///
-    /// [rust-lang/rust#148325]: https://github.com/rust-lang/rust/issues/148325
-    #[cfg(target_os = "android")]
+    /// Use the platform's `flock` when Rust's file-locking API is unavailable.
+    #[cfg(any(target_os = "android", target_os = "haiku"))]
     fn unlock(&self) -> Result<(), io::Error> {
         use std::os::fd::AsFd;
 
@@ -447,5 +433,31 @@ impl Drop for LockedFile {
                 );
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "tokio", target_os = "haiku"))]
+mod tests {
+    use std::io;
+
+    use super::{LockedFile, LockedFileMode};
+
+    #[test]
+    fn haiku_file_lock_contention_and_release() -> io::Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let path = tempdir.path().join("lock");
+
+        let first = LockedFile::acquire_no_wait(&path, LockedFileMode::Shared, "test");
+        let second = LockedFile::acquire_no_wait(&path, LockedFileMode::Shared, "test");
+        assert!(first.is_some());
+        assert!(second.is_some());
+        assert!(LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "test").is_none());
+
+        drop(first);
+        assert!(LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "test").is_none());
+
+        drop(second);
+        assert!(LockedFile::acquire_no_wait(&path, LockedFileMode::Exclusive, "test").is_some());
+        Ok(())
     }
 }
