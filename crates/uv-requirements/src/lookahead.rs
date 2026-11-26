@@ -2,8 +2,9 @@ use std::{borrow::Cow, collections::VecDeque, sync::Arc};
 
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tracing::trace;
+use uv_normalize::PackageName;
 
 use uv_configuration::{Constraints, DependencyModifierScope, DependencyModifiers};
 use uv_distribution::{DistributionDatabase, Reporter};
@@ -88,6 +89,21 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
         let mut seen = FxHashSet::default();
         let mut hasher = self.hasher.clone();
 
+        // Track known non-registry sources by package name so that registry-form dependencies
+        // (e.g., `target[feature]` from another local package's metadata) can be matched against
+        // their known direct URLs/paths during lookahead.
+        let mut known_sources: FxHashMap<PackageName, RequirementSource> = FxHashMap::default();
+        for requirement in self.constraints.apply(
+            self.modifiers
+                .apply(DependencyModifierScope::Global, self.requirements),
+        ) {
+            if !matches!(requirement.source, RequirementSource::Registry { .. }) {
+                known_sources
+                    .entry(requirement.name.clone())
+                    .or_insert_with(|| requirement.source.clone());
+            }
+        }
+
         // Queue up the initial requirements.
         let mut queue: VecDeque<_> = self
             .constraints
@@ -146,11 +162,20 @@ impl<'a, Context: BuildContext> LookaheadResolver<'a, Context> {
                         DependencyModifierScope::Package(lookahead.package(), lookahead.version()),
                         lookahead.requirements(),
                     )) {
+                        let mut requirement = requirement.into_owned();
+                        if matches!(requirement.source, RequirementSource::Registry { .. }) {
+                            if let Some(source) = known_sources.get(&requirement.name) {
+                                requirement.source = source.clone();
+                            }
+                        }
                         if !matches!(requirement.source, RequirementSource::Registry { .. })
                             && requirement
                                 .evaluate_markers(env.marker_environment(), lookahead.extras())
                         {
-                            queue.push_back(requirement.into_owned());
+                            known_sources
+                                .entry(requirement.name.clone())
+                                .or_insert_with(|| requirement.source.clone());
+                            queue.push_back(requirement);
                         }
                     }
                     results.push(lookahead);
