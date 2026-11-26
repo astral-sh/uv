@@ -783,6 +783,10 @@ impl VersionMapLazy {
                 match candidate {
                     RegistryFileCandidate::Wheel(filename, compatibility) => {
                         let dist = RegistryBuiltWheel {
+                            rejected_yank: matches!(
+                                compatibility,
+                                WheelCompatibility::Incompatible(IncompatibleWheel::Yanked(_))
+                            ),
                             filename,
                             file: Box::new(file),
                             index: self.index_route.canonical().clone(),

@@ -62,6 +62,7 @@ Ok(
                         "path/to/dir",
                     ),
                 },
+                fallback_wheel: None,
                 sdist: None,
                 wheels: [],
                 fork_markers: [],

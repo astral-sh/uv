@@ -57,7 +57,7 @@ use uv_platform_tags::{
 use uv_preview::PreviewFeature;
 use uv_pypi_types::{
     ConflictItem, ConflictKindRef, ConflictSet, Conflicts, HashAlgorithm, HashDigest, HashDigests,
-    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml,
+    ParsedArchiveUrl, ParsedGitDirectoryUrl, ParsedGitPathUrl, PyProjectToml, Yanked,
 };
 use uv_redacted::{SafeUrl, SafeUrlError};
 use uv_resolver_types::{
@@ -3129,6 +3129,7 @@ impl Lock {
                 || package
                     .wheels
                     .iter()
+                    .chain(package.fallback_wheel.as_deref())
                     .any(|wheel| mismatched(wheel.hash.as_ref()))
             {
                 return Ok(false);
@@ -7010,6 +7011,8 @@ impl TryFrom<LockWire> for Lock {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Package {
     id: PackageId,
+    /// A registry wheel retained solely to provide a source when exporting to pylock.toml.
+    fallback_wheel: Option<Box<Wheel>>,
     sdist: Option<SourceDist>,
     wheels: Vec<Wheel>,
     /// If there are multiple versions or sources for the same package name, we add the markers of
@@ -7053,6 +7056,14 @@ impl Package {
             requires_python,
             wheel_marker,
         )?;
+        let fallback_wheel = if sdist.is_none() && wheels.is_empty() {
+            select_fallback_wheel(annotated_dist, requires_python, None, index_locations)
+                .filter(|wheel| can_lock_fallback(wheel, index_locations))
+                .map(|wheel| Wheel::from_registry_wheel(wheel, index_locations).map(Box::new))
+                .transpose()?
+        } else {
+            None
+        };
         let metadata = if id.source.is_immutable() {
             PackageMetadata::default()
         } else {
@@ -7061,6 +7072,7 @@ impl Package {
         };
         Ok(Self {
             id,
+            fallback_wheel,
             sdist,
             wheels,
             fork_markers,
@@ -7829,6 +7841,8 @@ struct PackageWire {
     #[serde(default)]
     metadata: PackageMetadata,
     #[serde(default)]
+    fallback_wheel: Option<Box<Wheel>>,
+    #[serde(default)]
     sdist: Option<SourceDist>,
     #[serde(default)]
     wheels: Vec<Wheel>,
@@ -7950,7 +7964,7 @@ impl PackageWire {
         // Consistency check
         if !uv_flags::contains(uv_flags::EnvironmentFlags::SKIP_WHEEL_FILENAME_CHECK) {
             if let Some(version) = &self.id.version {
-                for wheel in &self.wheels {
+                for wheel in self.wheels.iter().chain(self.fallback_wheel.as_deref()) {
                     if *version != wheel.filename.version
                         && *version != wheel.filename.version.clone().without_local()
                     {
@@ -7997,6 +8011,7 @@ impl PackageWire {
             metadata: self.metadata,
             default_groups: self.default_groups,
             group_requires_python: self.group_requires_python,
+            fallback_wheel: self.fallback_wheel,
             sdist: self.sdist,
             wheels: self.wheels,
             fork_markers: self
@@ -9437,6 +9452,7 @@ impl Wheel {
                     url.to_url().map_err(LockErrorKind::InvalidUrl)?,
                 ));
                 Ok(RegistryBuiltWheel {
+                    rejected_yank: false,
                     filename,
                     file,
                     index,
@@ -9480,6 +9496,7 @@ impl Wheel {
                         .map_err(LockErrorKind::RegistryVerbatimUrl)?,
                 );
                 Ok(RegistryBuiltWheel {
+                    rejected_yank: false,
                     filename,
                     file,
                     index,
@@ -10754,6 +10771,60 @@ fn canonical_marker_trees(
         .collect()
 }
 
+/// Select a single distribution for pylock.toml when the package marker excludes every wheel.
+/// pip validates that each package has a source before evaluating its marker.
+fn select_fallback_wheel<'a>(
+    node: &'a AnnotatedDist,
+    requires_python: &RequiresPython,
+    tags: Option<&Tags>,
+    index_locations: &IndexLocations,
+) -> Option<&'a RegistryBuiltWheel> {
+    let ResolvedDist::Installable { dist, .. } = &node.dist else {
+        return None;
+    };
+    let wheels = match dist.as_ref() {
+        Dist::Built(BuiltDist::Registry(dist)) => &dist.wheels,
+        Dist::Source(uv_distribution_types::SourceDist::Registry(dist)) => &dist.wheels,
+        _ => return None,
+    };
+    let index = node.index();
+    wheels
+        .iter()
+        .filter(|wheel| Some(&wheel.index) == index && !wheel.rejected_yank)
+        .filter(|wheel| is_wheel_eligible(&wheel.filename, requires_python, tags))
+        .min_by_key(|&wheel| {
+            (
+                !can_lock_fallback(wheel, index_locations),
+                wheel.file.yanked.as_deref().is_some_and(Yanked::is_yanked),
+                wheel.file.hashes.is_empty(),
+                &wheel.file.filename,
+                wheel.file.location.to_url().ok(),
+            )
+        })
+}
+
+/// Check the hash requirements for the optional wheel before recording it in uv.lock.
+fn can_lock_fallback(wheel: &RegistryBuiltWheel, index_locations: &IndexLocations) -> bool {
+    let hashes = &wheel.file.hashes;
+    if let Some(algorithm) = index_locations.hash_algorithm_for(&wheel.index) {
+        hashes.iter().any(|hash| hash.algorithm() == algorithm)
+    } else {
+        !hashes.is_empty() || index_locations.proxy_route_for(&wheel.index).is_none()
+    }
+}
+
+/// Whether a wheel can be locked given the supported Python versions and optional target tags.
+fn is_wheel_eligible(
+    filename: &WheelFilename,
+    requires_python: &RequiresPython,
+    tags: Option<&Tags>,
+) -> bool {
+    // TODO(konsti): Include wheel variants in lockfiles when supported.
+    filename.variant().is_none()
+        && tags.is_none_or(|tags| filename.compatibility(tags).is_compatible())
+        && requires_python.matches_wheel_tag(filename)
+}
+
 /// Filter out wheels that can't be selected for installation due to environment markers.
 ///
 /// For example, a package included under `sys_platform == 'win32'` does not need Linux
@@ -10767,17 +10838,7 @@ fn is_wheel_unreachable_for_marker(
     marker: &UniversalMarker,
     tags: Option<&Tags>,
 ) -> bool {
-    // TODO(konsti): Include wheel variants in lockfiles when supported.
-    if filename.variant().is_some() {
-        return true;
-    }
-    if let Some(tags) = tags
-        && !filename.compatibility(tags).is_compatible()
-    {
-        return true;
-    }
-    // Remove wheels that don't match `requires-python` and can't be selected for installation.
-    if !requires_python.matches_wheel_tag(filename) {
+    if !is_wheel_eligible(filename, requires_python, tags) {
         return true;
     }
 

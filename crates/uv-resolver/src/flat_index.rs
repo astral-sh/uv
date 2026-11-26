@@ -155,6 +155,7 @@ impl FlatDistributions {
                     build_options,
                 );
                 let dist = RegistryBuiltWheel {
+                    rejected_yank: false,
                     filename,
                     file: Box::new(file),
                     index,
