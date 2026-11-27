@@ -29,9 +29,9 @@ static FIXUPS: &[(FixUp, &str)] = &[
         |input| regex!(r"(<=|>=|<|>)\s*(\d+(\.\d+)*)\.\*").replace_all(input, r"${1}${2}"),
         "removing star after comparison operator other than equal and not equal",
     ),
-    // Given `!=3.0*`, rewrite to `!=3.0.*`.
+    // Given `!=3.0*` or `==2.32.3*`, rewrite to `!=3.0.*` or `==2.32.3.*`.
     (
-        |input| regex!(r"(\d\.\d)+\*").replace_all(input, r"${1}.*"),
+        |input| regex!(r"(\d+(?:\.\d+)+)\*").replace_all(input, r"${1}.*"),
         "inserting missing dot",
     ),
     // Given `>=3.6,`, rewrite to `>=3.6`
@@ -220,6 +220,16 @@ mod tests {
         let expected: Requirement =
             Requirement::from_str("pyzmq (>=2.7,!=3.0.*,!=3.1.*,!=3.2.*)").unwrap();
         assert_eq!(actual, expected);
+
+        for (input, want) in [
+            ("requests==2.32.3*", "requests==2.32.3.*"),
+            ("requests==2.32*", "requests==2.32.*"),
+            ("requests==10.20.30*", "requests==10.20.30.*"),
+        ] {
+            let actual: Requirement = LenientRequirement::from_str(input).unwrap().into();
+            let expected: Requirement = Requirement::from_str(want).unwrap();
+            assert_eq!(actual, expected, "input: {input}");
+        }
     }
 
     #[test]
@@ -284,6 +294,12 @@ mod tests {
                 .into();
         let expected: VersionSpecifiers =
             VersionSpecifiers::from_str(">=2.7,!=3.0.*,!=3.1.*,!=3.2.*").unwrap();
+        assert_eq!(actual, expected);
+
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str("==2.32.3*")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str("==2.32.3.*").unwrap();
         assert_eq!(actual, expected);
     }
 
