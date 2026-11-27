@@ -31,7 +31,10 @@ static FIXUPS: &[(FixUp, &str)] = &[
     ),
     // Given `!=3.0*`, rewrite to `!=3.0.*`.
     (
-        |input| regex!(r"(\d\.\d)+\*").replace_all(input, r"${1}.*"),
+        // Capture the whole version, not the last `digit.digit` pair: with `(\d\.\d)+` the
+        // repeated group keeps only its final iteration, so `==2.32.3*` was rewritten to
+        // `==2.3.*` instead of `==2.32.3.*` and resolved a different release series.
+        |input| regex!(r"(\d+(?:\.\d+)+)\*").replace_all(input, r"${1}.*"),
         "inserting missing dot",
     ),
     // Given `>=3.6,`, rewrite to `>=3.6`
@@ -223,6 +226,15 @@ mod tests {
     }
 
     #[test]
+    fn requirement_missing_dot_multidigit() {
+        let actual: Requirement = LenientRequirement::from_str("requests (==2.32.3*)")
+            .unwrap()
+            .into();
+        let expected: Requirement = Requirement::from_str("requests (==2.32.3.*)").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
     fn requirement_trailing_comma() {
         let actual: Requirement = LenientRequirement::from_str("pyzmq >=3.6,").unwrap().into();
         let expected: Requirement = Requirement::from_str("pyzmq >=3.6").unwrap();
@@ -284,6 +296,15 @@ mod tests {
                 .into();
         let expected: VersionSpecifiers =
             VersionSpecifiers::from_str(">=2.7,!=3.0.*,!=3.1.*,!=3.2.*").unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn specifier_missing_dot_multidigit() {
+        let actual: VersionSpecifiers = LenientVersionSpecifiers::from_str("==2.32.3*")
+            .unwrap()
+            .into();
+        let expected: VersionSpecifiers = VersionSpecifiers::from_str("==2.32.3.*").unwrap();
         assert_eq!(actual, expected);
     }
 
