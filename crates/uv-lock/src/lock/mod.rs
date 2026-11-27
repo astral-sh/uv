@@ -1509,6 +1509,9 @@ impl<'a> LockedDependencyBuilder<'a> {
             self.simplification_parent_marker,
             marker,
         );
+        if simplified_marker.as_simplified_marker_tree().is_false() {
+            return;
+        }
         let dependency =
             Dependency::new(self.requires_python, package_id, extras, simplified_marker);
 
@@ -11677,5 +11680,86 @@ wheels = [
                 Path::new("C:/Users/user/links").into()
             ))
         );
+    }
+
+    #[test]
+    fn locked_dependency_builder_drops_false_edge() {
+        let data = r#"
+version = 1
+requires-python = ">=3.10"
+
+[[package]]
+name = "beta"
+version = "2.0"
+source = { registry = "https://pypi.org/simple" }
+"#;
+        let lock: Lock = toml::from_str(data).unwrap();
+        let beta_id = lock.packages[0].id.clone();
+
+        let requires_python =
+            RequiresPython::from_specifiers(">=3.10".parse().expect("valid bounds"));
+        let environment = SimplifiedMarkerTree::new(&requires_python, MarkerTree::TRUE);
+        let parent_marker = UniversalMarker::from_combined(
+            "python_version >= '3.10'".parse().expect("valid marker"),
+        );
+        let builder = LockedDependencyBuilder::new(
+            &requires_python,
+            environment,
+            parent_marker,
+            parent_marker,
+            parent_marker,
+        );
+
+        let mut dependencies = Vec::new();
+        // A forked edge constrained to `< 3.10.2` intersected with `>= 3.11` evaluates to false.
+        let false_marker = UniversalMarker::from_combined(
+            "python_full_version < '3.10.2' and python_version >= '3.11'"
+                .parse()
+                .expect("valid marker"),
+        );
+        builder.add(
+            &mut dependencies,
+            beta_id.clone(),
+            BTreeSet::new(),
+            false_marker,
+        );
+        assert!(
+            dependencies.is_empty(),
+            "dead false-marker edge should not be added: {dependencies:?}"
+        );
+
+        // An edge whose marker simplifies to false only against `parent_marker` is also omitted.
+        let disjoint_parent = UniversalMarker::from_combined(
+            "python_version >= '3.11'".parse().expect("valid marker"),
+        );
+        let fork_builder = LockedDependencyBuilder::new(
+            &requires_python,
+            environment,
+            disjoint_parent,
+            disjoint_parent,
+            disjoint_parent,
+        );
+        let impossible_under_parent = UniversalMarker::from_combined(
+            "python_full_version < '3.10.2'"
+                .parse()
+                .expect("valid marker"),
+        );
+        fork_builder.add(
+            &mut dependencies,
+            beta_id.clone(),
+            BTreeSet::new(),
+            impossible_under_parent,
+        );
+        assert!(
+            dependencies.is_empty(),
+            "edge disjoint with parent marker should not be added: {dependencies:?}"
+        );
+
+        // A satisfiable edge is preserved.
+        let valid_marker = UniversalMarker::from_combined(
+            "python_version >= '3.11'".parse().expect("valid marker"),
+        );
+        builder.add(&mut dependencies, beta_id, BTreeSet::new(), valid_marker);
+        assert_eq!(dependencies.len(), 1);
     }
 }
