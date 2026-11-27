@@ -445,6 +445,13 @@ pub fn resolve_project_env(
     path: &Path,
     cache: &Cache,
 ) -> Result<ProjectEnvironmentRoot, EnvironmentError> {
+    let redirect_files_enabled = uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles);
+    let file_conflict = || {
+        EnvironmentError::InvalidProjectEnvironmentDir(
+            path.to_path_buf(),
+            InvalidEnvironmentKind::NotDirectory.to_string(),
+        )
+    };
     let target = match read_venv_redirect(path) {
         Ok(target) => target,
         Err(err) => {
@@ -454,6 +461,11 @@ pub fn resolve_project_env(
             }
             if err.kind() == io::ErrorKind::NotFound || path.is_dir() {
                 return Ok(root);
+            }
+            // Without the preview feature, a `.venv` file is not a redirect; report the
+            // regular-file conflict instead of a redirect parsing failure.
+            if !redirect_files_enabled && err.kind() == io::ErrorKind::InvalidData {
+                return Err(file_conflict());
             }
             return Err(err.into());
         }
@@ -466,12 +478,15 @@ pub fn resolve_project_env(
                 target: None,
             });
         }
+        if !redirect_files_enabled {
+            return Err(file_conflict());
+        }
         return Err(EnvironmentError::InvalidProjectEnvironmentDir(
             target,
             "no `pyvenv.cfg` file was found".to_string(),
         ));
     }
-    if !uv_preview::is_enabled(PreviewFeature::VenvRedirectFiles) {
+    if !redirect_files_enabled {
         warn_user_once!(
             "Using `.venv` redirect files is experimental and may change without warning. Pass `--preview-features venv-redirect-files` to disable this warning."
         );

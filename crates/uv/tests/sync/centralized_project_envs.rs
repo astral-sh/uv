@@ -811,6 +811,23 @@ fn sync_invalid_venv_redirect_file() -> Result<()> {
     Ok(())
 }
 
+/// Without the `venv-redirect-files` preview feature, an empty `.venv` file is a regular file
+/// that blocks environment creation, not a malformed redirect (astral-sh/uv#23386).
+#[test]
+fn sync_empty_venv_file_without_preview() -> Result<()> {
+    let context = uv_test::test_context_with_versions!(&["3.12"]);
+    write_project(&context, ">=3.12", &[])?;
+    context.temp_dir.child(".venv").write_str("")?;
+
+    uv_snapshot!(context.filters(), context.sync(), @"
+    exit_code: 2 (failure)
+    ----- stderr -----
+    error: Project virtual environment directory `[VENV]/` cannot be used because expected directory but found a file
+    ");
+    assert_eq!(context.read(".venv"), "");
+    Ok(())
+}
+
 #[cfg(windows)]
 #[test]
 fn sync_centralized_env_replaces_existing_empty_directory() -> Result<()> {
