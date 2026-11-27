@@ -122,6 +122,7 @@ jobs:
   build-docker:
     needs:
       - plan
+      - build-release-artifacts
     uses: $/.github/workflows/build-docker.yml
     with:
       plan: ${{ needs.plan.outputs.val }}
