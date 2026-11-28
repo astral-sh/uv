@@ -306,6 +306,19 @@ impl Error for WorkspaceError {
     }
 }
 
+impl uv_errors::Hinted for WorkspaceError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        match self.as_ref() {
+            // Nudge users (especially those migrating from `pip`) toward
+            // `uv init` when they run a project command with no `pyproject.toml`.
+            WorkspaceErrorKind::MissingPyprojectToml => {
+                uv_errors::Hints::from("To create a project, run `uv init`")
+            }
+            _ => uv_errors::Hints::none(),
+        }
+    }
+}
+
 #[derive(thiserror::Error, DebugNoInline)]
 pub enum WorkspaceErrorKind {
     // Workspace structure errors.
