@@ -15,6 +15,7 @@ use reqwest::StatusCode;
 use rustc_hash::FxHashMap;
 
 use uv_configuration::{IndexStrategy, NoBinary, NoBuild};
+use uv_distribution::VariantProviderError;
 use uv_distribution_types::{
     Index, IndexCapabilities, IndexLocations, IndexMetadata, IndexUrl, RequiresPython,
 };
@@ -844,6 +845,11 @@ impl PubGrubReportFormatter<'_> {
                                         output_hints.insert(hint);
                                     }
                                 }
+                                IncompatibleDist::WheelVariant(errors) => {
+                                    output_hints.extend(
+                                        errors.iter().cloned().map(PubGrubHint::VariantProvider),
+                                    );
+                                }
                                 _ => {}
                             }
                         }
@@ -1572,6 +1578,8 @@ pub enum PubGrubHint {
         // excluded from `PartialEq` and `Hash`
         index: IndexUrl,
     },
+    /// A provider required by an incompatible wheel variant failed detection.
+    VariantProvider(VariantProviderError),
     /// There are pre-release versions available for a package, but pre-releases weren't enabled
     /// for that package.
     ///
@@ -1786,6 +1794,7 @@ enum PubGrubHintCore {
     MismatchedWheelName {
         package: PackageName,
     },
+    VariantProvider(VariantProviderError),
     PrereleaseAvailable {
         package: PackageName,
     },
@@ -1876,6 +1885,7 @@ impl From<PubGrubHint> for PubGrubHintCore {
             PubGrubHint::MismatchedWheelName { package, .. } => {
                 Self::MismatchedWheelName { package }
             }
+            PubGrubHint::VariantProvider(error) => Self::VariantProvider(error),
             PubGrubHint::PrereleaseAvailable { package, .. } => {
                 Self::PrereleaseAvailable { package }
             }
@@ -1984,6 +1994,7 @@ impl std::fmt::Display for PubGrubHint {
                     package.cyan(),
                 )
             }
+            Self::VariantProvider(error) => write!(f, "{error}"),
             Self::PrereleaseAvailable {
                 package,
                 version,
