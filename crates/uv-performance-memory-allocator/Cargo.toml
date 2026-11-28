@@ -16,8 +16,11 @@ test = false
 [lints]
 workspace = true
 
-[target.'cfg(all(target_os = "windows"))'.dependencies]
-mimalloc = { version = "0.1.50", default-features = false, features = ["v2"] }
+[target.'cfg(target_os = "windows")'.dependencies]
+mimalloc = {
+    git = "https://github.com/microsoft/mimalloc.git", 
+    rev = "3d27c206f3060aeee3de6d0d9a7909a9e95b273b",
+}
 
 [target.'cfg(all(not(target_os = "windows"), not(target_os = "openbsd"), not(target_os = "freebsd"), any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "powerpc64")))'.dependencies]
 tikv-jemallocator = { version = "0.6.0", default-features = false, features = ["background_threads_runtime_support"] }
