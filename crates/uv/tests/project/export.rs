@@ -13331,6 +13331,7 @@ fn frozen_lockfile_empty_member_group() -> Result<()> {
     fs_err::remove_file(context.temp_dir.join("dep/pyproject.toml"))?;
 
     uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--preview-features", "lock-without-metadata"])
         .args(["--package", "member", "--only-group", "shared"]), @"exit_code: 0 (success)");
 
     Ok(())
@@ -13386,14 +13387,15 @@ fn frozen_lockfile_metadata_free_default_groups() -> Result<()> {
     fs_err::remove_file(context.temp_dir.join("pyproject.toml"))?;
     fs_err::remove_file(context.temp_dir.join("dep/pyproject.toml"))?;
 
-    uv_snapshot!(context.filters(), frozen_export(&context), @"
+    uv_snapshot!(context.filters(), frozen_export(&context)
+        .args(["--preview-features", "lock-without-metadata"]), @"
     exit_code: 0 (success)
     ----- stdout -----
     -e ./dep
     ");
 
     uv_snapshot!(context.filters(), context.tree()
-        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile"]), @"
+        .args(["--frozen", "--universal", "--preview-features", "frozen-lockfile,lock-without-metadata"]), @"
     exit_code: 0 (success)
     ----- stdout -----
     root v1.0.0
@@ -13402,7 +13404,7 @@ fn frozen_lockfile_metadata_free_default_groups() -> Result<()> {
     ");
 
     uv_snapshot!(context.filters(), context.sync()
-        .args(["--frozen", "--offline", "--dry-run", "--no-install-workspace", "--preview-features", "frozen-lockfile"]), @"
+        .args(["--frozen", "--offline", "--dry-run", "--no-install-workspace", "--preview-features", "frozen-lockfile,lock-without-metadata"]), @"
     exit_code: 0 (success)
     ----- stderr -----
     Would use project environment at: .venv

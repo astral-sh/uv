@@ -919,6 +919,7 @@ fn metadata_free_group_python_requirements_in_lockfile() -> Result<()> {
     version = 1
     revision = 5
     requires-python = ">=3.12"
+    requires-preview-features = ["lock-without-metadata"]
 
     [options]
     exclude-newer = "2024-03-25T00:00:00Z"

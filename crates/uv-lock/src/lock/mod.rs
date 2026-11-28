@@ -2980,6 +2980,7 @@ impl Lock {
     #[must_use]
     fn without_package_metadata(mut self) -> Self {
         let workspace_root = self.root().map(|package| package.id.clone());
+        let mut omitted_metadata = false;
         for package in &mut self.packages {
             if matches!(package.id.source, Source::Direct(..) | Source::Git(..)) {
                 continue;
@@ -2997,7 +2998,12 @@ impl Lock {
                     package.dependency_groups.entry(group.clone()).or_default();
                 }
             }
+            omitted_metadata |= package.has_metadata();
             package.metadata = PackageMetadata::default();
+        }
+        if omitted_metadata {
+            self.requires_preview_features
+                .insert(PreviewFeature::LockWithoutMetadata.to_string());
         }
 
         self
