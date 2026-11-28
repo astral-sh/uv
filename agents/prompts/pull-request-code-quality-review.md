@@ -77,9 +77,11 @@ the API from required call ordering. Traits, clones, globals, duplication, and s
 contextual choices, not automatic findings.
 
 If the PR could introduce, expose, worsen, or fix a suspected defect, trace the same input or
-sequence from the same starting state at the merge base (`base` in `revisions.json`) and head.
-Report newly broken behavior, new exposure to an existing defect, and incomplete intended fixes,
-even in unchanged code. Explain what changes for the user. If the defect exists on the base, say so.
+sequence from the same starting state at the merge base (`base` in `revisions.json`) and head. Skip
+issues already present at the merge base unless the PR exposes them, makes them worse, or is
+intended to fix them but leaves the fix incomplete. Report these exceptions and newly broken
+behavior even in unchanged code. Explain what changes for the user and identify any reported issue
+that already existed at the merge base.
 
 Once you've investigated the change, decide which findings to return before assigning priorities.
 
