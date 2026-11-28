@@ -647,8 +647,8 @@ impl ManagedPythonInstallation {
             // We canonicalize the target path of the launcher in case it includes a minor version
             // junction directory. If canonicalization fails, we check against the launcher path
             // directly.
-            dunce::canonicalize(&launcher.python_path).unwrap_or(launcher.python_path)
-                == self.executable(false)
+            let target = dunce::canonicalize(&launcher.python_path).unwrap_or(launcher.python_path);
+            target == self.executable(false) || target == self.executable(true)
         } else {
             unreachable!("Only Windows and Unix are supported")
         }
