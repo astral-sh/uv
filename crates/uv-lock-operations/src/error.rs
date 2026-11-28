@@ -14,7 +14,9 @@ use uv_distribution_types::{
     ExtraBuildRequiresError, IndexCredentialsError, IndexUrlError, RequiresPython,
 };
 use uv_errors::{Hinted, Hints};
-use uv_lock::{Lock, LockError as LockDataError, LockParseError, LockSatisfactionError};
+use uv_lock::{
+    Lock, LockError as LockDataError, LockParseError, LockPreviewError, LockSatisfactionError,
+};
 use uv_macros::DebugNoInline;
 use uv_normalize::{GroupName, PackageName};
 use uv_pep440::VersionSpecifiers;
@@ -147,6 +149,9 @@ pub enum LockError {
     )]
     UnsupportedLockVersion(u32, u32),
 
+    #[error(transparent)]
+    Preview(#[from] LockPreviewError),
+
     #[error(
         "Failed to parse `uv.lock`, which uses an unsupported schema version (v{1}, but only v{0} is supported). Downgrade to a compatible uv version, or remove the `uv.lock` prior to running `uv lock` or `uv sync`."
     )]
@@ -244,6 +249,7 @@ impl From<LockParseError> for LockError {
                 version,
                 source,
             } => Self::UnparsableLockVersion(supported, version, source),
+            LockParseError::Preview(err) => Self::Preview(err),
             LockParseError::Toml(source) => Self::UvLockParse(source),
         }
     }
@@ -253,6 +259,7 @@ impl From<LockError> for UvError {
     fn from(error: LockError) -> Self {
         match error {
             error @ (LockError::LockMismatch { .. }
+            | LockError::Preview(_)
             | LockError::LockFormat(..)
             | LockError::MissingLockfile(..)
             | LockError::LockWorkspaceMismatch(..)) => Self::user(error),
@@ -300,6 +307,7 @@ impl Hinted for LockError {
             Self::OverlappingMarkers(_, rhs, replacement) => {
                 Hints::from(format!("replace `{rhs}` with `{replacement}`"))
             }
+            Self::Preview(error) => error.hints(),
             Self::Resolve(error) => error.hints(),
             Self::Lock(error) => error.hints(),
             Self::PythonSelection(error) => error.hints(),

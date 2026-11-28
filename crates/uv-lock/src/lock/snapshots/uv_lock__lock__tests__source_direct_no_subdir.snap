@@ -6,6 +6,7 @@ Ok(
     Lock {
         version: 1,
         revision: 0,
+        requires_preview_features: {},
         fork_markers: [],
         conflicts: Conflicts(
             [],

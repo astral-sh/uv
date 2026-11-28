@@ -88,6 +88,7 @@ pub struct LockOperation<'env> {
     constraints: Vec<NameRequirementSpecification>,
     first_party_exclusions: BTreeSet<PackageName>,
     refresh: Option<&'env Refresh>,
+    allow_preview_downgrade: bool,
     check_lockfile_contents: bool,
     settings: &'env ResolverSettings,
     client_builder: &'env BaseClientBuilder<'env>,
@@ -119,6 +120,7 @@ impl<'env> LockOperation<'env> {
             constraints: vec![],
             first_party_exclusions: BTreeSet::new(),
             refresh: None,
+            allow_preview_downgrade: false,
             check_lockfile_contents: false,
             settings,
             client_builder,
@@ -150,6 +152,13 @@ impl<'env> LockOperation<'env> {
     #[must_use]
     pub fn with_refresh(mut self, refresh: &'env Refresh) -> Self {
         self.refresh = Some(refresh);
+        self.with_preview_downgrade(matches!(refresh, Refresh::All(_)))
+    }
+
+    /// Only an explicit, full refresh can discard a lockfile that requires disabled previews.
+    #[must_use]
+    pub fn with_preview_downgrade(mut self, enabled: bool) -> Self {
+        self.allow_preview_downgrade = enabled;
         self
     }
 
@@ -174,7 +183,8 @@ impl<'env> LockOperation<'env> {
             LockMode::Locked(interpreter, lock_source) => {
                 // Read the existing lockfile.
                 let lock_filename = target.lock_filename();
-                let Some((existing, existing_contents)) = target.read_with_contents().await? else {
+                let Some((existing, existing_contents)) = target.read_with_contents(false).await?
+                else {
                     return Err(LockError::MissingLockfile(
                         lock_source.into(),
                         lock_filename,
@@ -229,11 +239,20 @@ impl<'env> LockOperation<'env> {
             }
             LockMode::Write(interpreter) | LockMode::DryRun(interpreter) => {
                 // Read the existing lockfile.
-                let (existing, existing_contents) = match target.read_with_contents().await {
+                let (existing, existing_contents) = match target
+                    .read_with_contents(self.allow_preview_downgrade)
+                    .await
+                {
                     Ok(Some((existing, existing_contents))) => {
                         (Some(existing), Some(existing_contents))
                     }
                     Ok(None) => (None, None),
+                    Err(LockError::Preview(err))
+                        if self.allow_preview_downgrade && self.settings.upgrade.is_all() =>
+                    {
+                        warn_user!("{err}. Regenerating the lockfile without locked hashes.");
+                        (None, None)
+                    }
                     Err(LockError::Lock(err)) => {
                         warn_user!(
                             "Failed to read existing lockfile; ignoring locked requirements: {err}"

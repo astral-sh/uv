@@ -56,6 +56,7 @@ pub async fn sync(
     lock_check: LockCheck,
     frozen: Option<FrozenSource>,
     dry_run: DryRun,
+    allow_preview_downgrade: bool,
     active: ActiveEnvironment,
     all_packages: bool,
     package: Vec<PackageName>,
@@ -468,6 +469,7 @@ pub async fn sync(
                         preview,
                     )
                     .with_first_party_exclusions(first_party_exclusions)
+                    .with_preview_downgrade(allow_preview_downgrade)
                     .execute(lock_target),
                 )
                 .await

@@ -38,6 +38,11 @@ fn write_lock(writer: &mut LockWriter, lock: &Lock) -> Result<(), WriteError> {
         writer.key_value("revision", lock.revision)?;
     }
     writer.key_value("requires-python", lock.requires_python.to_string())?;
+    write_serialized_non_empty_array(
+        writer,
+        "requires-preview-features",
+        &lock.requires_preview_features,
+    )?;
 
     if !lock.fork_markers.is_empty() {
         let markers = simplified_universal_markers(&lock.fork_markers, &lock.requires_python);

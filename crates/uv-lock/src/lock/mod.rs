@@ -100,9 +100,51 @@ mod windows_emulation_tests;
 /// The current version of the lockfile format.
 const VERSION: u32 = 1;
 
+/// A lockfile requires a preview that is unavailable in the current configuration.
+#[derive(Debug, thiserror::Error)]
+#[error("{reason}")]
+pub struct LockPreviewError {
+    reason: PreviewRequirement,
+    unreadable: bool,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum PreviewRequirement {
+    #[error(
+        "The lockfile requires {}: `{}`",
+        if .0.len() == 1 { "an unknown preview feature" } else { "unknown preview features" },
+        .0.join("`, `")
+    )]
+    Unknown(Vec<String>),
+    #[error("The lockfile requires preview features that are not enabled: `{}`", .0.join("`, `"))]
+    Disabled(Vec<String>),
+}
+
+impl uv_errors::Hinted for LockPreviewError {
+    fn hints(&self) -> uv_errors::Hints<'_> {
+        let regenerate = if self.unreadable {
+            "run `uv sync --refresh --upgrade` to regenerate the lockfile without the locked hashes"
+        } else {
+            "run `uv sync --refresh` to regenerate the lockfile"
+        };
+        uv_errors::Hints::from(match &self.reason {
+            PreviewRequirement::Unknown(_) => format!(
+                "Upgrade to a version of uv that supports the required preview features, or {regenerate}."
+            ),
+            PreviewRequirement::Disabled(features) => format!(
+                "Pass `--preview-features {}` to use this lockfile, or {regenerate}.",
+                features.join(",")
+            ),
+        })
+    }
+}
+
 /// An error returned when parsing a lockfile.
 #[derive(Debug, thiserror::Error)]
 pub enum LockParseError {
+    #[error(transparent)]
+    Preview(#[from] LockPreviewError),
+
     /// The lockfile uses an unsupported schema version.
     #[error("unsupported lockfile schema version (v{version}, but only v{supported} is supported)")]
     UnsupportedVersion { supported: u32, version: u32 },
@@ -328,6 +370,8 @@ pub struct Lock {
     /// In other words, versions of uv that only support revision 1 _will_ be able to read lockfiles
     /// with a revision greater than 1 (though they may ignore newer fields).
     revision: u32,
+    /// Names, rather than enum values, so an unknown feature also prevents reuse.
+    requires_preview_features: BTreeSet<String>,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
     fork_markers: Vec<UniversalMarker>,
@@ -2835,9 +2879,11 @@ impl Lock {
                 }
             }
         }
+
         let lock = Self {
             version,
             revision,
+            requires_preview_features: BTreeSet::new(),
             fork_markers,
             conflicts,
             supported_environments,
@@ -3788,18 +3834,22 @@ impl Lock {
 
     /// Parses a canonical lockfile without falling back to the general TOML parser.
     ///
-    /// Use [`Self::from_toml`] when reading lockfiles that might not use uv's
-    /// canonical format.
+    /// Use [`Self::from_toml`] before using the resolution: it also checks schema
+    /// compatibility and required previews, and accepts noncanonical TOML.
     pub fn from_canonical_toml(input: &str) -> Result<Self, CanonicalLockError> {
         deserialize::from_str(input)
     }
 
-    /// Parses a lockfile, using the canonical fast path when possible.
-    ///
-    /// Lockfiles not written in uv's canonical layout fall back to the general
-    /// TOML parser, preserving its compatibility and error reporting. Lockfiles
-    /// that use an unsupported schema version are rejected.
+    /// Parse a lockfile, rejecting unsupported schema versions and inactive previews.
     pub fn from_toml(input: &str) -> Result<Self, LockParseError> {
+        let lock = Self::from_toml_for_inspection(input)?;
+        lock.check_preview_features()?;
+        Ok(lock)
+    }
+
+    /// Inspect workspace membership or recorded hashes even if a required preview is disabled.
+    /// Call [`Self::check_preview_features`] before using the locked resolution.
+    pub fn from_toml_for_inspection(input: &str) -> Result<Self, LockParseError> {
         let lock = match Self::from_canonical_toml(input) {
             Ok(lock) => lock,
             Err(_) => deserialize::from_general_toml(input)?,
@@ -3813,6 +3863,11 @@ impl Lock {
         }
 
         Ok(lock)
+    }
+
+    /// Check that the required previews are active before using the locked resolution.
+    pub fn check_preview_features(&self) -> Result<(), LockPreviewError> {
+        check_preview_features(&self.requires_preview_features)
     }
 
     /// Returns the TOML representation of this lockfile.
@@ -6916,6 +6971,8 @@ impl ResolverManifest {
 struct LockWire {
     version: u32,
     revision: Option<u32>,
+    #[serde(default)]
+    requires_preview_features: BTreeSet<String>,
     requires_python: RequiresPython,
     /// If this lockfile was built from a forking resolution with non-identical forks, store the
     /// forks in the lockfile so we can recreate them in subsequent resolutions.
@@ -6990,7 +7047,7 @@ impl TryFrom<LockWire> for Lock {
             minimum_libc_version: options_wire.minimum_libc_version,
             exclude_newer: options_wire.exclude_newer.into(),
         };
-        let lock = Self::new(
+        let mut lock = Self::new(
             wire.version,
             wire.revision.unwrap_or(0),
             packages,
@@ -7002,9 +7059,34 @@ impl TryFrom<LockWire> for Lock {
             required_environments,
             fork_markers,
         )?;
-
+        lock.requires_preview_features = wire.requires_preview_features;
         Ok(lock)
     }
+}
+
+/// Check the active preview configuration against the features required by a lockfile header.
+fn check_preview_features(features: &BTreeSet<String>) -> Result<(), LockPreviewError> {
+    let mut unknown = Vec::new();
+    let mut disabled = Vec::new();
+    for name in features {
+        match name.parse() {
+            Ok(feature) if uv_preview::is_enabled(feature) => {}
+            Ok(_) => disabled.push(name.clone()),
+            Err(_) => unknown.push(name.clone()),
+        }
+    }
+    // Enabling known features cannot make this lock usable if any requirement is unknown.
+    let reason = if !unknown.is_empty() {
+        PreviewRequirement::Unknown(unknown)
+    } else if !disabled.is_empty() {
+        PreviewRequirement::Disabled(disabled)
+    } else {
+        return Ok(());
+    };
+    Err(LockPreviewError {
+        reason,
+        unreadable: false,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
